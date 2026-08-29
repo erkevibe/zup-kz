@@ -14,19 +14,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout ZUP Kazakhstan
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: zup-kz
 
       - name: Checkout platform fork
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: erkevibe/platform
           ref: develop
           path: platform
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
