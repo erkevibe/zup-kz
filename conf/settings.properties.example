@@ -1,0 +1,9 @@
+db.server=localhost
+db.name=zup_kz
+db.user=zup_kz_app
+db.password=CHANGE_ME
+logics.topModule=ZUPKZ
+user.setLanguage=ru
+user.setCountry=KZ
+user.setTimezone=Asia/Almaty
+

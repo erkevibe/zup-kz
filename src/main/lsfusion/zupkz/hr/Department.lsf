@@ -1,0 +1,16 @@
+MODULE HRDepartment;
+
+REQUIRE KZOrganization;
+NAMESPACE ZUPKZ;
+
+CLASS Department 'Подразделение';
+
+name 'Наименование' = DATA STRING[200] (Department);
+code 'Код' = DATA STRING[30] (Department);
+organization 'Организация' = DATA Organization (Department);
+
+FORM departments 'Подразделения'
+    OBJECTS d = Department
+    PROPERTIES(d) organization, code, name
+;
+

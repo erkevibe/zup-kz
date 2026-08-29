@@ -1,0 +1,17 @@
+MODULE HREmployee;
+
+NAMESPACE ZUPKZ;
+
+CLASS Employee 'Сотрудник';
+
+iin 'ИИН' = DATA STRING[12] (Employee);
+lastName 'Фамилия' = DATA STRING[100] (Employee);
+firstName 'Имя' = DATA STRING[100] (Employee);
+middleName 'Отчество' = DATA STRING[100] (Employee);
+birthDate 'Дата рождения' = DATA DATE (Employee);
+
+FORM employees 'Сотрудники'
+    OBJECTS e = Employee
+    PROPERTIES(e) iin, lastName, firstName, middleName, birthDate
+;
+

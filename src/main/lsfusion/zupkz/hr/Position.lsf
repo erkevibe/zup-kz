@@ -1,0 +1,16 @@
+MODULE HRPosition;
+
+REQUIRE KZOrganization;
+NAMESPACE ZUPKZ;
+
+CLASS Position 'Должность';
+
+name 'Наименование' = DATA STRING[200] (Position);
+code 'Код' = DATA STRING[30] (Position);
+organization 'Организация' = DATA Organization (Position);
+
+FORM positions 'Должности'
+    OBJECTS p = Position
+    PROPERTIES(p) organization, code, name
+;
+

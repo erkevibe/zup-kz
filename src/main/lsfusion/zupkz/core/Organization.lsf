@@ -1,0 +1,15 @@
+MODULE KZOrganization;
+
+NAMESPACE ZUPKZ;
+
+CLASS Organization 'Организация';
+
+name 'Наименование' = DATA STRING[200] (Organization);
+shortName 'Краткое наименование' = DATA STRING[100] (Organization);
+bin 'БИН' = DATA STRING[12] (Organization);
+
+FORM organizations 'Организации'
+    OBJECTS o = Organization
+    PROPERTIES(o) name, shortName, bin
+;
+

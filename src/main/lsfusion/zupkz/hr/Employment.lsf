@@ -1,0 +1,23 @@
+MODULE HREmployment;
+
+REQUIRE KZOrganization, HRDepartment, HRPosition, HREmployee;
+NAMESPACE ZUPKZ;
+
+CLASS Employment 'Приём на работу';
+
+employee 'Сотрудник' = DATA Employee (Employment);
+organization 'Организация' = DATA Organization (Employment);
+department 'Подразделение' = DATA Department (Employment);
+position 'Должность' = DATA Position (Employment);
+hireDate 'Дата приёма' = DATA DATE (Employment);
+contractNumber 'Номер договора' = DATA STRING[50] (Employment);
+contractDate 'Дата договора' = DATA DATE (Employment);
+employmentKind 'Вид занятости' = DATA STRING[50] (Employment);
+salary 'Оклад' = DATA NUMERIC[16,2] (Employment);
+
+FORM employments 'Приёмы на работу'
+    OBJECTS e = Employment
+    PROPERTIES(e) employee, organization, department, position,
+                  hireDate, contractNumber, contractDate, employmentKind, salary
+;
+
