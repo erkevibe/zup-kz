@@ -12,6 +12,20 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: zup_kz
+          POSTGRES_USER: zup_kz_app
+          POSTGRES_PASSWORD: ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U zup_kz_app -d zup_kz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout ZUP Kazakhstan
         uses: actions/checkout@v5
@@ -32,5 +46,37 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Build
-        run: mvn --batch-mode --file zup-kz/pom.xml clean package
+      - name: Build runnable server
+        run: mvn --batch-mode --file zup-kz/pom.xml clean package -Passemble,embed-server
+
+      - name: Prepare CI settings
+        working-directory: zup-kz
+        run: |
+          cp conf/settings.properties.example conf/settings.properties
+          sed -i 's/CHANGE_ME/ci_password/' conf/settings.properties
+
+      - name: Smoke-test lsFusion startup
+        working-directory: zup-kz
+        run: |
+          java -Xms256m -Xmx2g -jar target/lsfusion-server-0.1.0-SNAPSHOT.jar > server.log 2>&1 &
+          server_pid=$!
+          trap 'kill -INT "$server_pid" 2>/dev/null || true' EXIT
+
+          for attempt in {1..90}; do
+            if grep -q 'Server has successfully started' server.log; then
+              kill -INT "$server_pid"
+              wait "$server_pid" || true
+              trap - EXIT
+              exit 0
+            fi
+
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat server.log
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          cat server.log
+          exit 1

@@ -4,15 +4,14 @@ REQUIRE KZOrganization, HRDepartment, HRPosition, HREmployee, HREmployment;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
-    NEW FOLDER masterData 'Справочники' {
+    NEW FOLDER masterData 'Справочники' WINDOW toolbar {
         NEW organizations;
         NEW departments;
         NEW positions;
         NEW employees;
     }
 
-    NEW FOLDER personnel 'Кадровый учёт' {
+    NEW FOLDER personnel 'Кадровый учёт' WINDOW toolbar {
         NEW employments;
     }
 }
-
