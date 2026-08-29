@@ -60,11 +60,11 @@ jobs:
         run: |
           java -Xms256m -Xmx2g -jar target/lsfusion-server-0.1.0-SNAPSHOT.jar > server.log 2>&1 &
           server_pid=$!
-          trap 'kill -INT "$server_pid" 2>/dev/null || true' EXIT
+          trap 'kill -TERM "$server_pid" 2>/dev/null || true' EXIT
 
           for attempt in {1..90}; do
             if grep -q 'Server has successfully started' server.log; then
-              kill -INT "$server_pid"
+              kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT
               exit 0
