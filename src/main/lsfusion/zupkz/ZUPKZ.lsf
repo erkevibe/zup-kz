@@ -2,7 +2,7 @@ MODULE ZUPKZ;
 
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
-        TimeWorkSchedule, TimeTimesheet;
+        TimeWorkSchedule, TimeTimesheet, PayrollCore;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -36,5 +36,13 @@ NAVIGATOR {
         NEW employeeScheduleAssignments;
         NEW timesheets;
         NEW timesheetLines;
+    }
+
+    NEW FOLDER payroll 'Расчёт зарплаты' WINDOW toolbar {
+        NEW calculationTypes;
+        NEW payrollRules;
+        NEW payrollRuns;
+        NEW payrollTimeSummaries;
+        NEW payrollLines;
     }
 }

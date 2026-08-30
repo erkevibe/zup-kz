@@ -1,5 +1,6 @@
 MODULE KZLegalFramework;
 
+REQUIRE SystemEvents;
 NAMESPACE ZUPKZ;
 
 // Нормативный источник: закон, кодекс, приказ или официальное разъяснение.
@@ -55,3 +56,90 @@ FORM statutoryParameterValues 'Значения параметров закон�
     PROPERTIES(v) parameter, validFrom, validTo, numericValue, textValue,
                   legalSource, note
 ;
+
+legalSourceByCode(STRING[50] sourceCode) =
+    GROUP AGGR LegalSource s BY code(s);
+statutoryParameterByCode(STRING[50] code) =
+    GROUP AGGR StatutoryParameter p BY parameterCode(p);
+statutoryValueByPeriod(StatutoryParameter parameter, DATE dateFrom) =
+    GROUP AGGR StatutoryParameterValue v BY parameter(v), validFrom(v);
+statutoryValueOn(StatutoryParameter p, DATE date) =
+    GROUP LAST StatutoryParameterValue v
+    IF parameter(v) == p AND validFrom(v) <= date AND
+       (NOT validTo(v) OR validTo(v) >= date)
+    ORDER validFrom(v), v;
+numericStatutoryValueOn(StatutoryParameter p, DATE date) =
+    numericValue(statutoryValueOn(p, date));
+
+ensureLegalSource(STRING[50] sourceCode, STRING[250] sourceTitle,
+                  STRING[500] url, DATE dateFrom, DATE checkedOn) {
+    IF NOT legalSourceByCode(sourceCode) THEN {
+        NEW s = LegalSource {
+            code(s) <- sourceCode;
+            title(s) <- sourceTitle;
+            sourceUrl(s) <- url;
+            effectiveFrom(s) <- dateFrom;
+            verifiedOn(s) <- checkedOn;
+        }
+    }
+}
+
+ensureStatutoryParameter(STRING[50] code, STRING[200] name,
+                         STRING[30] parameterUnit, STRING[500] parameterDescription) {
+    IF NOT statutoryParameterByCode(code) THEN {
+        NEW p = StatutoryParameter {
+            parameterCode(p) <- code;
+            parameterName(p) <- name;
+            unit(p) <- parameterUnit;
+            description(p) <- parameterDescription;
+        }
+    }
+}
+
+ensureStatutoryValue(StatutoryParameter p, DATE dateFrom, DATE dateTo,
+                     NUMERIC[18,6] value, LegalSource source, STRING[500] valueNote) {
+    IF NOT statutoryValueByPeriod(p, dateFrom) THEN {
+        NEW v = StatutoryParameterValue {
+            parameter(v) <- p;
+            validFrom(v) <- dateFrom;
+            validTo(v) <- dateTo;
+            numericValue(v) <- value;
+            legalSource(v) <- source;
+            note(v) <- valueNote;
+        }
+    }
+}
+
+loadBaselineLegalParameters() {
+    NEWSESSION {
+        ensureLegalSource('LABOR_CODE_KZ', 'Трудовой кодекс Республики Казахстан',
+            'https://adilet.zan.kz/rus/docs/K1500000414', 2016_01_01, 2026_08_31);
+        ensureLegalSource('BUDGET_2026_2028', 'О республиканском бюджете на 2026–2028 годы',
+            'https://www.adilet.zan.kz/rus/docs/Z2500000239', 2026_01_01, 2026_08_31);
+
+        ensureStatutoryParameter('MZP', 'Минимальная заработная плата', 'KZT',
+            'Минимальный размер заработной платы на соответствующий год');
+        ensureStatutoryParameter('MRP', 'Месячный расчётный показатель', 'KZT',
+            'МРП на соответствующий год');
+        ensureStatutoryParameter('MIN_OVERTIME_COEF', 'Минимальный коэффициент сверхурочных', 'coefficient',
+            'Статья 108 Трудового кодекса РК');
+        ensureStatutoryParameter('MIN_HOLIDAY_COEF', 'Минимальный коэффициент выходных и праздничных', 'coefficient',
+            'Статья 109 Трудового кодекса РК');
+        ensureStatutoryParameter('MIN_NIGHT_COEF', 'Минимальный коэффициент ночных часов', 'coefficient',
+            'Статья 110 Трудового кодекса РК');
+
+        ensureStatutoryValue(statutoryParameterByCode('MZP'), 2026_01_01, 2026_12_31,
+            85000.000000, legalSourceByCode('BUDGET_2026_2028'), 'Закон о республиканском бюджете');
+        ensureStatutoryValue(statutoryParameterByCode('MRP'), 2026_01_01, 2026_12_31,
+            4325.000000, legalSourceByCode('BUDGET_2026_2028'), 'Закон о республиканском бюджете');
+        ensureStatutoryValue(statutoryParameterByCode('MIN_OVERTIME_COEF'), 2016_01_01, NULL,
+            1.500000, legalSourceByCode('LABOR_CODE_KZ'), 'Не ниже полуторного размера');
+        ensureStatutoryValue(statutoryParameterByCode('MIN_HOLIDAY_COEF'), 2016_01_01, NULL,
+            1.500000, legalSourceByCode('LABOR_CODE_KZ'), 'Не ниже полуторного размера');
+        ensureStatutoryValue(statutoryParameterByCode('MIN_NIGHT_COEF'), 2016_01_01, NULL,
+            1.500000, legalSourceByCode('LABOR_CODE_KZ'), 'Не ниже полуторного размера');
+        APPLY;
+    }
+}
+
+onStarted() + { loadBaselineLegalParameters(); }

@@ -1,0 +1,194 @@
+MODULE PayrollCore;
+
+REQUIRE KZOrganization, KZLegalFramework, HREmployment, TimeTimesheet;
+NAMESPACE ZUPKZ;
+
+CLASS PayrollRunStatus 'Статус расчёта зарплаты' {
+    draft 'Черновик',
+    timeCollected 'Табель собран',
+    calculated 'Рассчитан',
+    approved 'Утверждён',
+    paid 'Выплачен'
+}
+
+CLASS CalculationCategory 'Категория расчёта' {
+    accrual 'Начисление',
+    deduction 'Удержание',
+    employerCharge 'Начисление работодателя',
+    information 'Информационный показатель'
+}
+
+CLASS FormulaKind 'Вид формулы' {
+    monthlySalaryByHours 'Оклад по часам',
+    hourlyRate 'Часовая ставка',
+    fixedAmount 'Фиксированная сумма',
+    percentage 'Процент от базы',
+    manual 'Ввод вручную'
+}
+
+CLASS CalculationType 'Вид начисления / удержания';
+
+calculationCode 'Код' = DATA STRING[50] (CalculationType);
+calculationName 'Наименование' = DATA STRING[200] (CalculationType);
+calculationCategory 'Категория' = DATA CalculationCategory (CalculationType);
+formulaKind 'Формула' = DATA FormulaKind (CalculationType);
+coefficientParameter 'Параметр коэффициента' = DATA StatutoryParameter (CalculationType);
+calculationDescription 'Описание' = DATA STRING[500] (CalculationType);
+
+CLASS PayrollRule 'Правило расчёта';
+
+ruleCalculationType 'Вид расчёта' = DATA CalculationType (PayrollRule);
+ruleValidFrom 'Действует с' = DATA DATE (PayrollRule);
+ruleValidTo 'Действует по' = DATA DATE (PayrollRule);
+ruleCoefficientParameter 'Коэффициент' = DATA StatutoryParameter (PayrollRule);
+rulePriority 'Приоритет' = DATA INTEGER (PayrollRule);
+ruleConditionDescription 'Условие применения' = DATA STRING[500] (PayrollRule);
+
+CONSTRAINT ruleValidTo(PayrollRule r) < ruleValidFrom(r)
+    MESSAGE 'Дата окончания правила не может быть раньше даты начала';
+
+CLASS PayrollRun 'Расчёт зарплаты';
+
+payrollOrganization 'Организация' = DATA Organization (PayrollRun);
+payrollNumber 'Номер' = DATA STRING[50] (PayrollRun);
+payrollPeriodFrom 'Период с' = DATA DATE (PayrollRun);
+payrollPeriodTo 'Период по' = DATA DATE (PayrollRun);
+payrollRunStatus 'Статус' = DATA PayrollRunStatus (PayrollRun);
+payrollCalculatedAt 'Рассчитан' = DATA DATETIME (PayrollRun);
+
+CONSTRAINT payrollPeriodTo(PayrollRun r) < payrollPeriodFrom(r)
+    MESSAGE 'Окончание расчётного периода не может быть раньше начала';
+
+// Снимок утверждённого табеля. После расчёта он сохраняет исходные показатели,
+// даже если следующий табель будет исправлен отдельным документом перерасчёта.
+CLASS PayrollTimeSummary 'Данные табеля для расчёта';
+
+summaryPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (PayrollTimeSummary);
+summaryAssignment 'Назначение сотрудника' = DATA EmploymentAssignment (PayrollTimeSummary);
+summaryPlannedHours 'Плановых часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+summaryWorkedHours 'Отработано часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+summaryNightHours 'Ночных часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+summaryOvertimeHours 'Сверхурочных часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+summaryHolidayHours 'Праздничных часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+summaryWeekendHours 'Часов в выходной' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+summaryBusinessTripHours 'Часов командировки' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+summaryAbsenceHours 'Часов отсутствия' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+
+CLASS PayrollLine 'Строка расчёта зарплаты';
+
+linePayrollRun 'Расчёт зарплаты' = DATA PayrollRun (PayrollLine);
+linePayrollAssignment 'Назначение сотрудника' = DATA EmploymentAssignment (PayrollLine);
+lineCalculationType 'Вид расчёта' = DATA CalculationType (PayrollLine);
+lineTimeSummary 'Данные табеля' = DATA PayrollTimeSummary (PayrollLine);
+calculationBase 'Расчётная база' = DATA NUMERIC[18,2] (PayrollLine);
+calculationQuantity 'Количество' = DATA NUMERIC[18,6] (PayrollLine);
+calculationRate 'Ставка' = DATA NUMERIC[18,6] (PayrollLine);
+calculationCoefficient 'Коэффициент' = DATA NUMERIC[18,6] (PayrollLine);
+calculationAmount 'Сумма' = DATA NUMERIC[18,2] (PayrollLine);
+calculationNote 'Комментарий' = DATA STRING[500] (PayrollLine);
+
+approvedTimeLineCount(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM 1 IF lineEmploymentAssignment(TimesheetLine l) == assignment AND
+                   lineDate(l) >= dateFrom AND lineDate(l) <= dateTo AND
+                   timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedPlannedHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM plannedHoursLine(TimesheetLine l)
+    IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
+       lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedWorkedHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM workedHours(TimesheetLine l)
+    IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
+       lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedNightHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM nightHours(TimesheetLine l)
+    IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
+       lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedOvertimeHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM overtimeHours(TimesheetLine l)
+    IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
+       lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedHolidayHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM holidayHours(TimesheetLine l)
+    IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
+       lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedWeekendHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM weekendHours(TimesheetLine l)
+    IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
+       lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedBusinessTripHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM businessTripHours(TimesheetLine l)
+    IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
+       lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedAbsenceHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM absenceHours(TimesheetLine l)
+    IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
+       lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+
+payrollTimeSummaryByKey(PayrollRun run, EmploymentAssignment assignment) =
+    GROUP AGGR PayrollTimeSummary s BY summaryPayrollRun(s), summaryAssignment(s);
+
+collectApprovedTime 'Собрать утверждённый табель' (PayrollRun r) {
+    IF payrollRunStatus(r) == PayrollRunStatus.timeCollected OR
+       payrollRunStatus(r) == PayrollRunStatus.calculated OR
+       payrollRunStatus(r) == PayrollRunStatus.approved OR
+       payrollRunStatus(r) == PayrollRunStatus.paid THEN
+        MESSAGE 'Табель уже собран. Для исправления создайте новый расчёт или документ перерасчёта';
+    ELSE {
+        FOR assignment IS EmploymentAssignment AND
+            organization(employment(assignment)) == payrollOrganization(r) AND
+            approvedTimeLineCount(assignment, payrollPeriodFrom(r), payrollPeriodTo(r))
+        DO {
+            IF NOT payrollTimeSummaryByKey(r, assignment) THEN {
+                NEW s = PayrollTimeSummary {
+                    summaryPayrollRun(s) <- r;
+                    summaryAssignment(s) <- assignment;
+                    summaryPlannedHours(s) <- approvedPlannedHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                    summaryWorkedHours(s) <- approvedWorkedHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                    summaryNightHours(s) <- approvedNightHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                    summaryOvertimeHours(s) <- approvedOvertimeHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                    summaryHolidayHours(s) <- approvedHolidayHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                    summaryWeekendHours(s) <- approvedWeekendHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                    summaryBusinessTripHours(s) <- approvedBusinessTripHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                    summaryAbsenceHours(s) <- approvedAbsenceHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                }
+            }
+        }
+        payrollRunStatus(r) <- PayrollRunStatus.timeCollected;
+        APPLY;
+    }
+}
+
+FORM calculationTypes 'Виды начислений и удержаний'
+    OBJECTS c = CalculationType
+    PROPERTIES(c) calculationCode, calculationName, calculationCategory,
+                  formulaKind, coefficientParameter, calculationDescription
+;
+
+FORM payrollRules 'Правила расчёта'
+    OBJECTS r = PayrollRule
+    PROPERTIES(r) ruleCalculationType, ruleValidFrom, ruleValidTo,
+                  ruleCoefficientParameter, rulePriority, ruleConditionDescription
+;
+
+FORM payrollRuns 'Расчёты зарплаты'
+    OBJECTS r = PayrollRun
+    PROPERTIES(r) payrollOrganization, payrollNumber, payrollPeriodFrom,
+                  payrollPeriodTo, payrollRunStatus, payrollCalculatedAt
+    PROPERTIES(r) collectApprovedTime
+;
+
+FORM payrollTimeSummaries 'Данные табеля для расчёта'
+    OBJECTS s = PayrollTimeSummary
+    PROPERTIES(s) summaryPayrollRun, summaryAssignment, summaryPlannedHours,
+                  summaryWorkedHours, summaryNightHours, summaryOvertimeHours,
+                  summaryHolidayHours, summaryWeekendHours,
+                  summaryBusinessTripHours, summaryAbsenceHours
+;
+
+FORM payrollLines 'Строки расчёта зарплаты'
+    OBJECTS l = PayrollLine
+    PROPERTIES(l) linePayrollRun, linePayrollAssignment, lineCalculationType,
+                  lineTimeSummary, calculationBase, calculationQuantity,
+                  calculationRate, calculationCoefficient, calculationAmount,
+                  calculationNote
+;

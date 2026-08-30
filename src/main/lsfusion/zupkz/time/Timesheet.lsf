@@ -42,6 +42,7 @@ lineDate 'Дата' = DATA DATE (TimesheetLine);
 attendanceKind 'Вид времени' = DATA AttendanceKind (TimesheetLine);
 actualStartTime 'Фактическое начало' = DATA TIME (TimesheetLine);
 actualEndTime 'Фактическое окончание' = DATA TIME (TimesheetLine);
+plannedHoursLine 'Плановых часов' = DATA NUMERIC[6,2] (TimesheetLine);
 workedHours 'Отработано часов' = DATA NUMERIC[6,2] (TimesheetLine);
 nightHours 'Ночных часов' = DATA NUMERIC[6,2] (TimesheetLine);
 overtimeHours 'Сверхурочных часов' = DATA NUMERIC[6,2] (TimesheetLine);
@@ -52,6 +53,7 @@ absenceHours 'Часов отсутствия' = DATA NUMERIC[6,2] (TimesheetLin
 overtimeConsentDocument 'Согласие / основание сверхурочной работы' = DATA STRING[250] (TimesheetLine);
 employerAct 'Акт работодателя' = DATA STRING[250] (TimesheetLine);
 lineComment 'Комментарий' = DATA STRING[500] (TimesheetLine);
+generatedLine 'Заполнено автоматически' = DATA BOOLEAN (TimesheetLine);
 
 CONSTRAINT lineDate(TimesheetLine l) < timesheetPeriodFrom(lineTimesheet(l)) OR
            lineDate(l) > timesheetPeriodTo(lineTimesheet(l))
@@ -64,16 +66,91 @@ CONSTRAINT nightHours(TimesheetLine l) > workedHours(l) OR
            holidayHours(l) > workedHours(l) OR weekendHours(l) > workedHours(l)
     MESSAGE 'Выделенные часы не могут превышать общее отработанное время';
 
+plannedHoursForAssignment(EmploymentAssignment assignment, DATE date) = CASE
+    WHEN scheduleType(workScheduleOn(assignment, date)) == WorkScheduleType.fiveDay THEN
+        IF weeklyHours(workScheduleOn(assignment, date)) <= 36.00 THEN
+            hoursFiveDay36(calendarDayByDate(calendarByYear(extractYear(date)), date))
+        ELSE
+            hoursFiveDay40(calendarDayByDate(calendarByYear(extractYear(date)), date))
+    WHEN scheduleType(workScheduleOn(assignment, date)) == WorkScheduleType.sixDay THEN
+        IF weeklyHours(workScheduleOn(assignment, date)) <= 36.00 THEN
+            hoursSixDay36(calendarDayByDate(calendarByYear(extractYear(date)), date))
+        ELSE
+            hoursSixDay40(calendarDayByDate(calendarByYear(extractYear(date)), date))
+    WHEN scheduleType(workScheduleOn(assignment, date)) == WorkScheduleType.shift OR
+         scheduleType(workScheduleOn(assignment, date)) == WorkScheduleType.summarized THEN
+        plannedHours(shiftOn(employeeScheduleAssignmentOn(assignment, date), date));
+
+plannedNightHoursForAssignment(EmploymentAssignment assignment, DATE date) =
+    plannedNightHours(shiftOn(employeeScheduleAssignmentOn(assignment, date), date));
+
+holidayForAssignment(EmploymentAssignment assignment, DATE date) =
+    dayKindFiveDay(calendarDayByDate(calendarByYear(extractYear(date)), date)) ==
+        CalendarDayKind.holiday;
+
+timesheetLineByKey(Timesheet timesheet, EmploymentAssignment assignment, DATE date) =
+    GROUP AGGR TimesheetLine l
+    BY lineTimesheet(l), lineEmploymentAssignment(l), lineDate(l);
+
+fillTimesheet 'Заполнить по графику' (Timesheet t) {
+    IF timesheetStatus(t) == TimesheetStatus.approved OR
+       timesheetStatus(t) == TimesheetStatus.closed THEN
+        MESSAGE 'Утверждённый или закрытый табель нельзя перезаполнять';
+    ELSE {
+        FOR assignment IS EmploymentAssignment AND
+            organization(employment(assignment)) == timesheetOrganization(t) AND
+            assignmentFrom(assignment) <= timesheetPeriodTo(t) AND
+            (NOT assignmentTo(assignment) OR assignmentTo(assignment) >= timesheetPeriodFrom(t))
+        DO {
+            FOR iterate(DATE date, timesheetPeriodFrom(t), timesheetPeriodTo(t)) AND
+                date >= assignmentFrom(assignment) AND
+                (NOT assignmentTo(assignment) OR date <= assignmentTo(assignment)) AND
+                workScheduleOn(assignment, date)
+            ORDER date
+            DO {
+                IF NOT timesheetLineByKey(t, assignment, date) THEN {
+                    NEW l = TimesheetLine {
+                        lineTimesheet(l) <- t;
+                        lineEmploymentAssignment(l) <- assignment;
+                        lineDate(l) <- date;
+                        plannedHoursLine(l) <- plannedHoursForAssignment(assignment, date);
+                        generatedLine(l) <- TRUE;
+
+                        IF plannedHoursForAssignment(assignment, date) > 0.00 THEN {
+                            attendanceKind(l) <- AttendanceKind.worked;
+                            workedHours(l) <- plannedHoursForAssignment(assignment, date);
+                            nightHours(l) <- plannedNightHoursForAssignment(assignment, date);
+                            IF holidayForAssignment(assignment, date) THEN
+                                holidayHours(l) <- plannedHoursForAssignment(assignment, date);
+                        } ELSE
+                            attendanceKind(l) <- AttendanceKind.dayOff;
+                    }
+                }
+            }
+        }
+        timesheetStatus(t) <- TimesheetStatus.draft;
+        APPLY;
+    }
+}
+
+approveTimesheet 'Утвердить табель' (Timesheet t) {
+    timesheetStatus(t) <- TimesheetStatus.approved;
+    approvedAt(t) <- currentDateTime();
+    APPLY;
+}
+
 FORM timesheets 'Табели рабочего времени'
     OBJECTS t = Timesheet
     PROPERTIES(t) timesheetOrganization, timesheetNumber, timesheetPeriodFrom,
                   timesheetPeriodTo, timesheetStatus, approvedAt, approvedBy
+    PROPERTIES(t) fillTimesheet, approveTimesheet
 ;
 
 FORM timesheetLines 'Строки табелей'
     OBJECTS l = TimesheetLine
     PROPERTIES(l) lineTimesheet, lineEmploymentAssignment, lineDate, attendanceKind,
-                  actualStartTime, actualEndTime, workedHours, nightHours,
+                  actualStartTime, actualEndTime, plannedHoursLine, workedHours, nightHours,
                   overtimeHours, holidayHours, weekendHours, businessTripHours,
-                  absenceHours, overtimeConsentDocument, employerAct, lineComment
+                  absenceHours, overtimeConsentDocument, employerAct, lineComment,
+                  generatedLine
 ;

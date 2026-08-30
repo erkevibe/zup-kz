@@ -72,6 +72,98 @@ FORM workTimeNorms 'Нормы рабочего времени'
 
 calendarByYear(INTEGER year) = GROUP AGGR ProductionCalendar c BY calendarYear(c);
 normCount(ProductionCalendar c) = GROUP SUM 1 BY normCalendar(WorkTimeNorm n);
+calendarDayCount(ProductionCalendar c) = GROUP SUM 1 BY productionCalendar(CalendarDay d);
+calendarDayByDate(ProductionCalendar c, DATE date) =
+    GROUP AGGR CalendarDay d BY productionCalendar(d), calendarDate(d);
+
+createDefaultCalendarDay2026(ProductionCalendar c, DATE date) {
+    IF NOT calendarDayByDate(c, date) THEN {
+        NEW d = CalendarDay {
+            productionCalendar(d) <- c;
+            calendarDate(d) <- date;
+
+            IF extractDOWNumber(date) == 0 OR extractDOWNumber(date) == 6 THEN {
+                dayKindFiveDay(d) <- CalendarDayKind.weekend;
+                hoursFiveDay40(d) <- 0.00;
+                hoursFiveDay36(d) <- 0.00;
+            } ELSE {
+                dayKindFiveDay(d) <- CalendarDayKind.workDay;
+                hoursFiveDay40(d) <- 8.00;
+                hoursFiveDay36(d) <- 7.20;
+            }
+
+            IF extractDOWNumber(date) == 0 THEN {
+                dayKindSixDay(d) <- CalendarDayKind.weekend;
+                hoursSixDay40(d) <- 0.00;
+                hoursSixDay36(d) <- 0.00;
+            } ELSE {
+                dayKindSixDay(d) <- CalendarDayKind.workDay;
+                IF extractDOWNumber(date) == 6 THEN
+                    hoursSixDay40(d) <- 5.00;
+                ELSE
+                    hoursSixDay40(d) <- 7.00;
+                hoursSixDay36(d) <- 6.00;
+            }
+        }
+    }
+}
+
+setHoliday2026(ProductionCalendar c, DATE date, STRING[200] holidayCaption) {
+    dayKindFiveDay(calendarDayByDate(c, date)) <- CalendarDayKind.holiday;
+    dayKindSixDay(calendarDayByDate(c, date)) <- CalendarDayKind.holiday;
+    holidayName(calendarDayByDate(c, date)) <- holidayCaption;
+    hoursFiveDay40(calendarDayByDate(c, date)) <- 0.00;
+    hoursFiveDay36(calendarDayByDate(c, date)) <- 0.00;
+    hoursSixDay40(calendarDayByDate(c, date)) <- 0.00;
+    hoursSixDay36(calendarDayByDate(c, date)) <- 0.00;
+}
+
+setTransferredWeekendBoth2026(ProductionCalendar c, DATE date, STRING[200] reason) {
+    dayKindFiveDay(calendarDayByDate(c, date)) <- CalendarDayKind.transferredWeekend;
+    dayKindSixDay(calendarDayByDate(c, date)) <- CalendarDayKind.transferredWeekend;
+    holidayName(calendarDayByDate(c, date)) <- reason;
+    hoursFiveDay40(calendarDayByDate(c, date)) <- 0.00;
+    hoursFiveDay36(calendarDayByDate(c, date)) <- 0.00;
+    hoursSixDay40(calendarDayByDate(c, date)) <- 0.00;
+    hoursSixDay36(calendarDayByDate(c, date)) <- 0.00;
+}
+
+setTransferredWeekendFiveDay2026(ProductionCalendar c, DATE date, STRING[200] reason) {
+    dayKindFiveDay(calendarDayByDate(c, date)) <- CalendarDayKind.transferredWeekend;
+    holidayName(calendarDayByDate(c, date)) <- reason;
+    hoursFiveDay40(calendarDayByDate(c, date)) <- 0.00;
+    hoursFiveDay36(calendarDayByDate(c, date)) <- 0.00;
+}
+
+generateOfficialCalendarDays2026(ProductionCalendar c) {
+    FOR iterate(DATE date, 2026_01_01, 2026_12_31) ORDER date DO
+        createDefaultCalendarDay2026(c, date);
+
+    setHoliday2026(c, 2026_01_01, 'Новый год');
+    setHoliday2026(c, 2026_01_02, 'Новый год');
+    setHoliday2026(c, 2026_01_07, 'Православное Рождество');
+    setHoliday2026(c, 2026_03_08, 'Международный женский день');
+    setHoliday2026(c, 2026_03_15, 'День Конституции Республики Казахстан');
+    setHoliday2026(c, 2026_03_21, 'Наурыз мейрамы');
+    setHoliday2026(c, 2026_03_22, 'Наурыз мейрамы');
+    setHoliday2026(c, 2026_03_23, 'Наурыз мейрамы');
+    setHoliday2026(c, 2026_05_01, 'Праздник единства народа Казахстана');
+    setHoliday2026(c, 2026_05_07, 'День защитника Отечества');
+    setHoliday2026(c, 2026_05_09, 'День Победы');
+    setHoliday2026(c, 2026_05_27, 'Первый день Курбан-айта');
+    setHoliday2026(c, 2026_07_06, 'День Столицы');
+    setHoliday2026(c, 2026_10_25, 'День Республики');
+    setHoliday2026(c, 2026_12_16, 'День Независимости');
+
+    // Перенос 15 марта следует из статьи 3 Закона о праздниках и подтверждается
+    // опубликованной годовой нормой. Остальные переносы перечислены календарём.
+    setTransferredWeekendBoth2026(c, 2026_03_09, 'Перенос выходного с 8 марта');
+    setTransferredWeekendBoth2026(c, 2026_03_16, 'Перенос выходного с 15 марта');
+    setTransferredWeekendBoth2026(c, 2026_03_24, 'Перенос выходного Наурыз мейрамы');
+    setTransferredWeekendFiveDay2026(c, 2026_03_25, 'Перенос выходного Наурыз мейрамы');
+    setTransferredWeekendFiveDay2026(c, 2026_05_11, 'Перенос выходного с 9 мая');
+    setTransferredWeekendBoth2026(c, 2026_10_26, 'Перенос выходного с 25 октября');
+}
 
 // Официальная годовая норма загружается идемпотентно. Детальные дни календаря
 // остаются редактируемыми: переносы выходных могут меняться отдельным актом.
@@ -99,6 +191,9 @@ loadOfficialCalendar2026() {
                 normHoursSixDay36(n) <- 1788.00;
             }
         }
+
+        IF NOT calendarDayCount(calendarByYear(2026)) THEN
+            generateOfficialCalendarDays2026(calendarByYear(2026));
         APPLY;
     }
 }

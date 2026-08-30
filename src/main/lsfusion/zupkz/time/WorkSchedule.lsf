@@ -1,6 +1,6 @@
 MODULE TimeWorkSchedule;
 
-REQUIRE KZOrganization, HREmployment;
+REQUIRE KZOrganization, HREmployment, Time;
 NAMESPACE ZUPKZ;
 
 CLASS WorkScheduleType 'Вид графика работы' {
@@ -68,6 +68,7 @@ scheduleEmploymentAssignment 'Назначение сотрудника' = DATA 
 employeeWorkSchedule 'График' = DATA WorkSchedule (EmployeeScheduleAssignment);
 employeeScheduleFrom 'Действует с' = DATA DATE (EmployeeScheduleAssignment);
 employeeScheduleTo 'Действует по' = DATA DATE (EmployeeScheduleAssignment);
+cycleStartDate 'Начало цикла' = DATA DATE (EmployeeScheduleAssignment);
 
 CONSTRAINT employeeScheduleTo(EmployeeScheduleAssignment a) < employeeScheduleFrom(a)
     MESSAGE 'Дата окончания назначения графика не может быть раньше даты начала';
@@ -92,5 +93,31 @@ FORM scheduleCycleDays 'Циклы графиков'
 FORM employeeScheduleAssignments 'Графики сотрудников'
     OBJECTS a = EmployeeScheduleAssignment
     PROPERTIES(a) scheduleEmploymentAssignment, employeeWorkSchedule,
-                  employeeScheduleFrom, employeeScheduleTo
+                  employeeScheduleFrom, employeeScheduleTo, cycleStartDate
 ;
+
+employeeScheduleAssignmentOn(EmploymentAssignment assignment, DATE date) =
+    GROUP LAST EmployeeScheduleAssignment a
+    IF scheduleEmploymentAssignment(a) == assignment AND
+       employeeScheduleFrom(a) <= date AND
+       (NOT employeeScheduleTo(a) OR employeeScheduleTo(a) >= date)
+    ORDER employeeScheduleFrom(a), a;
+
+workScheduleOn(EmploymentAssignment assignment, DATE date) =
+    employeeWorkSchedule(employeeScheduleAssignmentOn(assignment, date));
+
+cycleLength(WorkSchedule schedule) =
+    GROUP MAX cycleDayNumber(ScheduleCycleDay d) BY cycleSchedule(d);
+
+cycleDayByNumber(WorkSchedule schedule, INTEGER number) =
+    GROUP AGGR ScheduleCycleDay d BY cycleSchedule(d), cycleDayNumber(d);
+
+cycleNumberOn(EmployeeScheduleAssignment assignment, DATE date) =
+    [FORMULA INTEGER 'MOD($1, $2) + 1'](
+        daysBetweenDates(cycleStartDate(assignment), date),
+        cycleLength(employeeWorkSchedule(assignment))
+    ) IF cycleStartDate(assignment) <= date AND cycleLength(employeeWorkSchedule(assignment));
+
+shiftOn(EmployeeScheduleAssignment assignment, DATE date) =
+    cycleShift(cycleDayByNumber(employeeWorkSchedule(assignment),
+                                cycleNumberOn(assignment, date)));
