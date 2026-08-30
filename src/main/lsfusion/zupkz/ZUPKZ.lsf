@@ -1,7 +1,8 @@
 MODULE ZUPKZ;
 
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
-        HREmployee, HRStaffSchedule, HREmployment;
+        HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
+        TimeWorkSchedule, TimeTimesheet;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -23,5 +24,17 @@ NAVIGATOR {
         NEW employments;
         NEW employmentAssignments;
         NEW personnelEvents;
+    }
+
+    NEW FOLDER workingTime 'Рабочее время' WINDOW toolbar {
+        NEW productionCalendars;
+        NEW calendarDays;
+        NEW workTimeNorms;
+        NEW workSchedules;
+        NEW shiftTemplates;
+        NEW scheduleCycleDays;
+        NEW employeeScheduleAssignments;
+        NEW timesheets;
+        NEW timesheetLines;
     }
 }

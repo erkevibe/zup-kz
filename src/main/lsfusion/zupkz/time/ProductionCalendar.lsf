@@ -1,0 +1,106 @@
+MODULE TimeProductionCalendar;
+
+REQUIRE SystemEvents;
+NAMESPACE ZUPKZ;
+
+CLASS CalendarDayKind 'Вид календарного дня' {
+    workDay 'Рабочий день',
+    weekend 'Выходной день',
+    holiday 'Праздничный день',
+    transferredWeekend 'Перенесённый выходной',
+    transferredWorkDay 'Перенесённый рабочий день'
+}
+
+// Календарь хранится отдельной версией на каждый год и официальный источник.
+CLASS ProductionCalendar 'Производственный календарь';
+
+calendarYear 'Год' = DATA INTEGER (ProductionCalendar);
+calendarName 'Наименование' = DATA STRING[150] (ProductionCalendar);
+calendarSourceUrl 'Официальный источник' = DATA STRING[500] (ProductionCalendar);
+calendarVerifiedOn 'Проверено на дату' = DATA DATE (ProductionCalendar);
+
+CLASS CalendarDay 'День производственного календаря';
+
+productionCalendar 'Календарь' = DATA ProductionCalendar (CalendarDay);
+calendarDate 'Дата' = DATA DATE (CalendarDay);
+dayKindFiveDay 'Вид дня, пятидневка' = DATA CalendarDayKind (CalendarDay);
+dayKindSixDay 'Вид дня, шестидневка' = DATA CalendarDayKind (CalendarDay);
+holidayName 'Праздник / основание переноса' = DATA STRING[200] (CalendarDay);
+shortenedDay 'Сокращённый день' = DATA BOOLEAN (CalendarDay);
+hoursFiveDay40 '5 дней / 40 часов' = DATA NUMERIC[6,2] (CalendarDay);
+hoursSixDay40 '6 дней / 40 часов' = DATA NUMERIC[6,2] (CalendarDay);
+hoursFiveDay36 '5 дней / 36 часов' = DATA NUMERIC[6,2] (CalendarDay);
+hoursSixDay36 '6 дней / 36 часов' = DATA NUMERIC[6,2] (CalendarDay);
+
+CONSTRAINT hoursFiveDay40(CalendarDay d) < 0 OR hoursSixDay40(d) < 0 OR
+           hoursFiveDay36(d) < 0 OR hoursSixDay36(d) < 0
+    MESSAGE 'Норма часов календарного дня не может быть отрицательной';
+
+CLASS WorkTimeNorm 'Норма рабочего времени';
+
+normCalendar 'Календарь' = DATA ProductionCalendar (WorkTimeNorm);
+normPeriodFrom 'Период с' = DATA DATE (WorkTimeNorm);
+normPeriodTo 'Период по' = DATA DATE (WorkTimeNorm);
+normDaysFiveDay 'Рабочих дней, пятидневка' = DATA INTEGER (WorkTimeNorm);
+normDaysSixDay 'Рабочих дней, шестидневка' = DATA INTEGER (WorkTimeNorm);
+normHoursFiveDay40 'Часов, 5/40' = DATA NUMERIC[10,2] (WorkTimeNorm);
+normHoursSixDay40 'Часов, 6/40' = DATA NUMERIC[10,2] (WorkTimeNorm);
+normHoursFiveDay36 'Часов, 5/36' = DATA NUMERIC[10,2] (WorkTimeNorm);
+normHoursSixDay36 'Часов, 6/36' = DATA NUMERIC[10,2] (WorkTimeNorm);
+
+CONSTRAINT normPeriodTo(WorkTimeNorm n) < normPeriodFrom(n)
+    MESSAGE 'Окончание периода нормы не может быть раньше начала';
+
+FORM productionCalendars 'Производственные календари'
+    OBJECTS c = ProductionCalendar
+    PROPERTIES(c) calendarYear, calendarName, calendarSourceUrl, calendarVerifiedOn
+;
+
+FORM calendarDays 'Дни производственного календаря'
+    OBJECTS d = CalendarDay
+    PROPERTIES(d) productionCalendar, calendarDate, dayKindFiveDay, dayKindSixDay, holidayName,
+                  shortenedDay, hoursFiveDay40, hoursSixDay40,
+                  hoursFiveDay36, hoursSixDay36
+;
+
+FORM workTimeNorms 'Нормы рабочего времени'
+    OBJECTS n = WorkTimeNorm
+    PROPERTIES(n) normCalendar, normPeriodFrom, normPeriodTo,
+                  normDaysFiveDay, normDaysSixDay, normHoursFiveDay40,
+                  normHoursSixDay40, normHoursFiveDay36, normHoursSixDay36
+;
+
+calendarByYear(INTEGER year) = GROUP AGGR ProductionCalendar c BY calendarYear(c);
+normCount(ProductionCalendar c) = GROUP SUM 1 BY normCalendar(WorkTimeNorm n);
+
+// Официальная годовая норма загружается идемпотентно. Детальные дни календаря
+// остаются редактируемыми: переносы выходных могут меняться отдельным актом.
+loadOfficialCalendar2026() {
+    NEWSESSION {
+        IF NOT calendarByYear(2026) THEN {
+            NEW c = ProductionCalendar {
+                calendarYear(c) <- 2026;
+                calendarName(c) <- 'Производственный календарь РК на 2026 год';
+                calendarSourceUrl(c) <- 'https://www.gov.kz/article/16887';
+                calendarVerifiedOn(c) <- 2026_08_30;
+            }
+        }
+
+        IF NOT normCount(calendarByYear(2026)) THEN {
+            NEW n = WorkTimeNorm {
+                normCalendar(n) <- calendarByYear(2026);
+                normPeriodFrom(n) <- 2026_01_01;
+                normPeriodTo(n) <- 2026_12_31;
+                normDaysFiveDay(n) <- 246;
+                normDaysSixDay(n) <- 298;
+                normHoursFiveDay40(n) <- 1968.00;
+                normHoursSixDay40(n) <- 1986.00;
+                normHoursFiveDay36(n) <- 1771.20;
+                normHoursSixDay36(n) <- 1788.00;
+            }
+        }
+        APPLY;
+    }
+}
+
+onStarted() + { loadOfficialCalendar2026(); }

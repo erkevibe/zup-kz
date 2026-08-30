@@ -3,4 +3,4 @@ target/
 *.iml
 conf/settings.properties
 *.log
-
+logs/

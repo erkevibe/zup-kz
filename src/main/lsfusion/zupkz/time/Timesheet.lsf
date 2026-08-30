@@ -1,0 +1,79 @@
+MODULE TimeTimesheet;
+
+REQUIRE KZOrganization, HREmployment, TimeProductionCalendar, TimeWorkSchedule;
+NAMESPACE ZUPKZ;
+
+CLASS TimesheetStatus 'Статус табеля' {
+    draft 'Черновик',
+    approved 'Утверждён',
+    closed 'Закрыт для изменений'
+}
+
+CLASS AttendanceKind 'Основной вид времени' {
+    worked 'Явка',
+    annualLeave 'Трудовой отпуск',
+    unpaidLeave 'Отпуск без содержания',
+    sickLeave 'Временная нетрудоспособность',
+    maternityLeave 'Отпуск по беременности и родам',
+    studyLeave 'Учебный отпуск',
+    businessTrip 'Командировка',
+    absence 'Неявка',
+    dayOff 'Выходной'
+}
+
+CLASS Timesheet 'Табель рабочего времени';
+
+timesheetOrganization 'Организация' = DATA Organization (Timesheet);
+timesheetNumber 'Номер' = DATA STRING[50] (Timesheet);
+timesheetPeriodFrom 'Период с' = DATA DATE (Timesheet);
+timesheetPeriodTo 'Период по' = DATA DATE (Timesheet);
+timesheetStatus 'Статус' = DATA TimesheetStatus (Timesheet);
+approvedAt 'Утверждён' = DATA DATETIME (Timesheet);
+approvedBy 'Кем утверждён' = DATA STRING[150] (Timesheet);
+
+CONSTRAINT timesheetPeriodTo(Timesheet t) < timesheetPeriodFrom(t)
+    MESSAGE 'Окончание периода табеля не может быть раньше начала';
+
+CLASS TimesheetLine 'Строка табеля';
+
+lineTimesheet 'Табель' = DATA Timesheet (TimesheetLine);
+lineEmploymentAssignment 'Назначение сотрудника' = DATA EmploymentAssignment (TimesheetLine);
+lineDate 'Дата' = DATA DATE (TimesheetLine);
+attendanceKind 'Вид времени' = DATA AttendanceKind (TimesheetLine);
+actualStartTime 'Фактическое начало' = DATA TIME (TimesheetLine);
+actualEndTime 'Фактическое окончание' = DATA TIME (TimesheetLine);
+workedHours 'Отработано часов' = DATA NUMERIC[6,2] (TimesheetLine);
+nightHours 'Ночных часов' = DATA NUMERIC[6,2] (TimesheetLine);
+overtimeHours 'Сверхурочных часов' = DATA NUMERIC[6,2] (TimesheetLine);
+holidayHours 'Праздничных часов' = DATA NUMERIC[6,2] (TimesheetLine);
+weekendHours 'Часов в выходной' = DATA NUMERIC[6,2] (TimesheetLine);
+businessTripHours 'Часов командировки' = DATA NUMERIC[6,2] (TimesheetLine);
+absenceHours 'Часов отсутствия' = DATA NUMERIC[6,2] (TimesheetLine);
+overtimeConsentDocument 'Согласие / основание сверхурочной работы' = DATA STRING[250] (TimesheetLine);
+employerAct 'Акт работодателя' = DATA STRING[250] (TimesheetLine);
+lineComment 'Комментарий' = DATA STRING[500] (TimesheetLine);
+
+CONSTRAINT lineDate(TimesheetLine l) < timesheetPeriodFrom(lineTimesheet(l)) OR
+           lineDate(l) > timesheetPeriodTo(lineTimesheet(l))
+    MESSAGE 'Дата строки должна входить в период табеля';
+CONSTRAINT workedHours(TimesheetLine l) < 0 OR nightHours(l) < 0 OR
+           overtimeHours(l) < 0 OR holidayHours(l) < 0 OR weekendHours(l) < 0 OR
+           businessTripHours(l) < 0 OR absenceHours(l) < 0
+    MESSAGE 'Количество часов не может быть отрицательным';
+CONSTRAINT nightHours(TimesheetLine l) > workedHours(l) OR
+           holidayHours(l) > workedHours(l) OR weekendHours(l) > workedHours(l)
+    MESSAGE 'Выделенные часы не могут превышать общее отработанное время';
+
+FORM timesheets 'Табели рабочего времени'
+    OBJECTS t = Timesheet
+    PROPERTIES(t) timesheetOrganization, timesheetNumber, timesheetPeriodFrom,
+                  timesheetPeriodTo, timesheetStatus, approvedAt, approvedBy
+;
+
+FORM timesheetLines 'Строки табелей'
+    OBJECTS l = TimesheetLine
+    PROPERTIES(l) lineTimesheet, lineEmploymentAssignment, lineDate, attendanceKind,
+                  actualStartTime, actualEndTime, workedHours, nightHours,
+                  overtimeHours, holidayHours, weekendHours, businessTripHours,
+                  absenceHours, overtimeConsentDocument, employerAct, lineComment
+;

@@ -1,0 +1,96 @@
+MODULE TimeWorkSchedule;
+
+REQUIRE KZOrganization, HREmployment;
+NAMESPACE ZUPKZ;
+
+CLASS WorkScheduleType 'Вид графика работы' {
+    fiveDay 'Пятидневная неделя',
+    sixDay 'Шестидневная неделя',
+    shift 'Сменный график',
+    summarized 'Суммированный учёт'
+}
+
+CLASS AccountingPeriodKind 'Учётный период' {
+    month 'Месяц',
+    quarter 'Квартал',
+    halfYear 'Полугодие',
+    year 'Год',
+    workPeriod 'Период выполнения работы'
+}
+
+CLASS WorkSchedule 'График работы';
+
+scheduleOrganization 'Организация' = DATA Organization (WorkSchedule);
+scheduleCode 'Код' = DATA STRING[50] (WorkSchedule);
+scheduleName 'Наименование' = DATA STRING[150] (WorkSchedule);
+scheduleType 'Вид графика' = DATA WorkScheduleType (WorkSchedule);
+weeklyHours 'Недельная норма часов' = DATA NUMERIC[6,2] (WorkSchedule);
+accountingPeriodKind 'Учётный период' = DATA AccountingPeriodKind (WorkSchedule);
+scheduleValidFrom 'Действует с' = DATA DATE (WorkSchedule);
+scheduleValidTo 'Действует по' = DATA DATE (WorkSchedule);
+
+CONSTRAINT scheduleValidTo(WorkSchedule s) < scheduleValidFrom(s)
+    MESSAGE 'Дата окончания графика не может быть раньше даты начала';
+CONSTRAINT weeklyHours(WorkSchedule s) < 0
+    MESSAGE 'Недельная норма часов не может быть отрицательной';
+
+// Шаблоны смен позволяют описать циклы 2/2, сутки через трое и другие режимы.
+CLASS ShiftTemplate 'Шаблон смены';
+
+shiftSchedule 'График' = DATA WorkSchedule (ShiftTemplate);
+shiftCode 'Код смены' = DATA STRING[30] (ShiftTemplate);
+shiftName 'Наименование' = DATA STRING[100] (ShiftTemplate);
+shiftStartTime 'Начало' = DATA TIME (ShiftTemplate);
+shiftEndTime 'Окончание' = DATA TIME (ShiftTemplate);
+breakMinutes 'Перерыв, минут' = DATA INTEGER (ShiftTemplate);
+plannedHours 'Плановых часов' = DATA NUMERIC[6,2] (ShiftTemplate);
+plannedNightHours 'Плановых ночных часов' = DATA NUMERIC[6,2] (ShiftTemplate);
+
+CONSTRAINT breakMinutes(ShiftTemplate s) < 0 OR plannedHours(s) < 0 OR
+           plannedNightHours(s) < 0
+    MESSAGE 'Продолжительность смены и перерыва не может быть отрицательной';
+CONSTRAINT plannedNightHours(ShiftTemplate s) > plannedHours(s)
+    MESSAGE 'Ночные часы не могут превышать продолжительность смены';
+
+CLASS ScheduleCycleDay 'День цикла графика';
+
+cycleSchedule 'График' = DATA WorkSchedule (ScheduleCycleDay);
+cycleDayNumber 'Номер дня цикла' = DATA INTEGER (ScheduleCycleDay);
+cycleShift 'Смена' = DATA ShiftTemplate (ScheduleCycleDay);
+cycleDayOff 'Выходной' = DATA BOOLEAN (ScheduleCycleDay);
+
+CONSTRAINT cycleDayNumber(ScheduleCycleDay d) <= 0
+    MESSAGE 'Номер дня цикла должен быть больше нуля';
+
+CLASS EmployeeScheduleAssignment 'Назначение графика сотруднику';
+
+scheduleEmploymentAssignment 'Назначение сотрудника' = DATA EmploymentAssignment (EmployeeScheduleAssignment);
+employeeWorkSchedule 'График' = DATA WorkSchedule (EmployeeScheduleAssignment);
+employeeScheduleFrom 'Действует с' = DATA DATE (EmployeeScheduleAssignment);
+employeeScheduleTo 'Действует по' = DATA DATE (EmployeeScheduleAssignment);
+
+CONSTRAINT employeeScheduleTo(EmployeeScheduleAssignment a) < employeeScheduleFrom(a)
+    MESSAGE 'Дата окончания назначения графика не может быть раньше даты начала';
+
+FORM workSchedules 'Графики работы'
+    OBJECTS s = WorkSchedule
+    PROPERTIES(s) scheduleOrganization, scheduleCode, scheduleName, scheduleType,
+                  weeklyHours, accountingPeriodKind, scheduleValidFrom, scheduleValidTo
+;
+
+FORM shiftTemplates 'Шаблоны смен'
+    OBJECTS s = ShiftTemplate
+    PROPERTIES(s) shiftSchedule, shiftCode, shiftName, shiftStartTime, shiftEndTime,
+                  breakMinutes, plannedHours, plannedNightHours
+;
+
+FORM scheduleCycleDays 'Циклы графиков'
+    OBJECTS d = ScheduleCycleDay
+    PROPERTIES(d) cycleSchedule, cycleDayNumber, cycleShift, cycleDayOff
+;
+
+FORM employeeScheduleAssignments 'Графики сотрудников'
+    OBJECTS a = EmployeeScheduleAssignment
+    PROPERTIES(a) scheduleEmploymentAssignment, employeeWorkSchedule,
+                  employeeScheduleFrom, employeeScheduleTo
+;
