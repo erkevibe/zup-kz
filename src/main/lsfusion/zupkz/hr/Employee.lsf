@@ -4,14 +4,23 @@ NAMESPACE ZUPKZ;
 
 CLASS Employee 'Сотрудник';
 
+CLASS Gender 'Пол' {
+    male 'Мужской',
+    female 'Женский'
+}
+
 iin 'ИИН' = DATA STRING[12] (Employee);
 lastName 'Фамилия' = DATA STRING[100] (Employee);
 firstName 'Имя' = DATA STRING[100] (Employee);
 middleName 'Отчество' = DATA STRING[100] (Employee);
 birthDate 'Дата рождения' = DATA DATE (Employee);
+gender 'Пол' = DATA Gender (Employee);
+citizenshipCode 'Код страны гражданства' = DATA STRING[3] (Employee);
+personalDataConsentDate 'Дата согласия на обработку ПД' = DATA DATE (Employee);
+personalDataPurpose 'Цель обработки ПД' = DATA STRING[250] (Employee);
 
 FORM employees 'Сотрудники'
     OBJECTS e = Employee
-    PROPERTIES(e) iin, lastName, firstName, middleName, birthDate
+    PROPERTIES(e) iin, lastName, firstName, middleName, birthDate, gender,
+                  citizenshipCode, personalDataConsentDate, personalDataPurpose
 ;
-

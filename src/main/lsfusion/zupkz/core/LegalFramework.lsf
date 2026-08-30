@@ -1,0 +1,57 @@
+MODULE KZLegalFramework;
+
+NAMESPACE ZUPKZ;
+
+// Нормативный источник: закон, кодекс, приказ или официальное разъяснение.
+CLASS LegalSource 'Нормативный источник';
+
+code 'Код' = DATA STRING[50] (LegalSource);
+title 'Наименование' = DATA STRING[250] (LegalSource);
+documentNumber 'Номер документа' = DATA STRING[80] (LegalSource);
+sourceUrl 'Официальная ссылка' = DATA STRING[500] (LegalSource);
+adoptedDate 'Дата принятия' = DATA DATE (LegalSource);
+effectiveFrom 'Действует с' = DATA DATE (LegalSource);
+effectiveTo 'Действует по' = DATA DATE (LegalSource);
+verifiedOn 'Проверено на дату' = DATA DATE (LegalSource);
+
+CONSTRAINT effectiveTo(LegalSource s) < effectiveFrom(s)
+    MESSAGE 'Дата окончания действия источника не может быть раньше даты начала';
+
+// Параметр расчёта отделён от его значений во времени.
+// Это позволяет обновлять ставки без изменения формул и исходного кода.
+CLASS StatutoryParameter 'Параметр законодательства';
+
+parameterCode 'Код' = DATA STRING[50] (StatutoryParameter);
+parameterName 'Наименование' = DATA STRING[200] (StatutoryParameter);
+unit 'Единица измерения' = DATA STRING[30] (StatutoryParameter);
+description 'Описание' = DATA STRING[500] (StatutoryParameter);
+
+CLASS StatutoryParameterValue 'Значение параметра законодательства';
+
+parameter 'Параметр' = DATA StatutoryParameter (StatutoryParameterValue);
+validFrom 'Действует с' = DATA DATE (StatutoryParameterValue);
+validTo 'Действует по' = DATA DATE (StatutoryParameterValue);
+numericValue 'Числовое значение' = DATA NUMERIC[18,6] (StatutoryParameterValue);
+textValue 'Текстовое значение' = DATA STRING[250] (StatutoryParameterValue);
+legalSource 'Основание' = DATA LegalSource (StatutoryParameterValue);
+note 'Примечание' = DATA STRING[500] (StatutoryParameterValue);
+
+CONSTRAINT validTo(StatutoryParameterValue v) < validFrom(v)
+    MESSAGE 'Дата окончания значения не может быть раньше даты начала';
+
+FORM legalSources 'Нормативные источники'
+    OBJECTS s = LegalSource
+    PROPERTIES(s) code, title, documentNumber, sourceUrl, adoptedDate,
+                  effectiveFrom, effectiveTo, verifiedOn
+;
+
+FORM statutoryParameters 'Параметры законодательства'
+    OBJECTS p = StatutoryParameter
+    PROPERTIES(p) parameterCode, parameterName, unit, description
+;
+
+FORM statutoryParameterValues 'Значения параметров законодательства'
+    OBJECTS v = StatutoryParameterValue
+    PROPERTIES(v) parameter, validFrom, validTo, numericValue, textValue,
+                  legalSource, note
+;

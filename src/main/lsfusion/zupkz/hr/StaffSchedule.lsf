@@ -1,0 +1,31 @@
+MODULE HRStaffSchedule;
+
+REQUIRE KZOrganization, HRDepartment, HRPosition;
+NAMESPACE ZUPKZ;
+
+// Должность является справочником, а штатная единица — её место
+// в конкретной организации/подразделении в определённый период.
+CLASS StaffPosition 'Штатная единица';
+
+staffCode 'Код' = DATA STRING[50] (StaffPosition);
+organization 'Организация' = DATA Organization (StaffPosition);
+department 'Подразделение' = DATA Department (StaffPosition);
+position 'Должность' = DATA Position (StaffPosition);
+validFrom 'Действует с' = DATA DATE (StaffPosition);
+validTo 'Действует по' = DATA DATE (StaffPosition);
+plannedFTE 'Количество ставок' = DATA NUMERIC[8,4] (StaffPosition);
+salaryMin 'Оклад от' = DATA NUMERIC[16,2] (StaffPosition);
+salaryMax 'Оклад до' = DATA NUMERIC[16,2] (StaffPosition);
+
+CONSTRAINT validTo(StaffPosition s) < validFrom(s)
+    MESSAGE 'Дата окончания штатной единицы не может быть раньше даты начала';
+CONSTRAINT salaryMax(StaffPosition s) < salaryMin(s)
+    MESSAGE 'Верхняя граница оклада не может быть меньше нижней';
+CONSTRAINT organization(department(StaffPosition s)) != organization(s)
+    MESSAGE 'Подразделение должно относиться к организации штатной единицы';
+
+FORM staffPositions 'Штатное расписание'
+    OBJECTS s = StaffPosition
+    PROPERTIES(s) organization, department, position, staffCode,
+                  validFrom, validTo, plannedFTE, salaryMin, salaryMax
+;

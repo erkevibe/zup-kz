@@ -1,9 +1,22 @@
 MODULE HREmployment;
 
-REQUIRE KZOrganization, HRDepartment, HRPosition, HREmployee;
+REQUIRE KZOrganization, HRDepartment, HRPosition, HREmployee, HRStaffSchedule;
 NAMESPACE ZUPKZ;
 
-CLASS Employment 'Приём на работу';
+CLASS EmploymentKind 'Вид занятости' {
+    primary 'Основное место работы',
+    internalPartTime 'Внутреннее совместительство',
+    externalPartTime 'Внешнее совместительство'
+}
+
+CLASS ContractTermKind 'Срок трудового договора' {
+    indefinite 'Неопределённый срок',
+    fixedTerm 'Определённый срок',
+    replacement 'На время замещения',
+    seasonal 'Сезонная работа'
+}
+
+CLASS Employment 'Трудовой договор';
 
 employee 'Сотрудник' = DATA Employee (Employment);
 organization 'Организация' = DATA Organization (Employment);
@@ -12,12 +25,70 @@ position 'Должность' = DATA Position (Employment);
 hireDate 'Дата приёма' = DATA DATE (Employment);
 contractNumber 'Номер договора' = DATA STRING[50] (Employment);
 contractDate 'Дата договора' = DATA DATE (Employment);
-employmentKind 'Вид занятости' = DATA STRING[50] (Employment);
+employmentKind 'Вид занятости' = DATA EmploymentKind (Employment);
+contractTermKind 'Срок договора' = DATA ContractTermKind (Employment);
+contractEndDate 'Дата окончания' = DATA DATE (Employment);
+workPlace 'Место работы' = DATA STRING[250] (Employment);
+workConditions 'Условия труда' = DATA STRING[500] (Employment);
 salary 'Оклад' = DATA NUMERIC[16,2] (Employment);
 
-FORM employments 'Приёмы на работу'
+CONSTRAINT contractEndDate(Employment e) < hireDate(e)
+    MESSAGE 'Дата окончания договора не может быть раньше даты приёма';
+
+CLASS EmploymentAssignment 'Назначение';
+
+employment 'Трудовой договор' = DATA Employment (EmploymentAssignment);
+staffPosition 'Штатная единица' = DATA StaffPosition (EmploymentAssignment);
+assignmentFrom 'Действует с' = DATA DATE (EmploymentAssignment);
+assignmentTo 'Действует по' = DATA DATE (EmploymentAssignment);
+fte 'Доля ставки' = DATA NUMERIC[8,4] (EmploymentAssignment);
+assignmentSalary 'Оклад' = DATA NUMERIC[16,2] (EmploymentAssignment);
+
+CONSTRAINT assignmentTo(EmploymentAssignment a) < assignmentFrom(a)
+    MESSAGE 'Дата окончания назначения не может быть раньше даты начала';
+
+CLASS PersonnelEventKind 'Вид кадрового события' {
+    hire 'Приём',
+    transfer 'Перевод',
+    termination 'Увольнение'
+}
+
+CLASS EsutdStatus 'Статус ЕСУТД' {
+    notSubmitted 'Не передано',
+    submitted 'Передано',
+    accepted 'Принято',
+    rejected 'Отклонено'
+}
+
+CLASS PersonnelEvent 'Кадровое событие';
+
+eventKind 'Вид события' = DATA PersonnelEventKind (PersonnelEvent);
+eventEmployment 'Трудовой договор' = DATA Employment (PersonnelEvent);
+eventAssignment 'Назначение' = DATA EmploymentAssignment (PersonnelEvent);
+effectiveDate 'Дата вступления в силу' = DATA DATE (PersonnelEvent);
+orderNumber 'Номер акта работодателя' = DATA STRING[50] (PersonnelEvent);
+orderDate 'Дата акта' = DATA DATE (PersonnelEvent);
+basis 'Основание' = DATA STRING[500] (PersonnelEvent);
+esutdStatus 'Статус ЕСУТД' = DATA EsutdStatus (PersonnelEvent);
+esutdSubmittedAt 'Передано в ЕСУТД' = DATA DATETIME (PersonnelEvent);
+esutdExternalId 'Идентификатор ЕСУТД' = DATA STRING[100] (PersonnelEvent);
+
+FORM employments 'Трудовые договоры'
     OBJECTS e = Employment
     PROPERTIES(e) employee, organization, department, position,
-                  hireDate, contractNumber, contractDate, employmentKind, salary
+                  hireDate, contractNumber, contractDate, employmentKind,
+                  contractTermKind, contractEndDate, workPlace, workConditions, salary
 ;
 
+FORM employmentAssignments 'Назначения'
+    OBJECTS a = EmploymentAssignment
+    PROPERTIES(a) employment, staffPosition, assignmentFrom, assignmentTo,
+                  fte, assignmentSalary
+;
+
+FORM personnelEvents 'Кадровые события'
+    OBJECTS e = PersonnelEvent
+    PROPERTIES(e) eventKind, eventEmployment, eventAssignment, effectiveDate,
+                  orderNumber, orderDate, basis, esutdStatus,
+                  esutdSubmittedAt, esutdExternalId
+;

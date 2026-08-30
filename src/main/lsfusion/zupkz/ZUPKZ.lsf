@@ -1,6 +1,7 @@
 MODULE ZUPKZ;
 
-REQUIRE KZOrganization, HRDepartment, HRPosition, HREmployee, HREmployment;
+REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
+        HREmployee, HRStaffSchedule, HREmployment;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -9,9 +10,18 @@ NAVIGATOR {
         NEW departments;
         NEW positions;
         NEW employees;
+        NEW staffPositions;
+    }
+
+    NEW FOLDER legislation 'Законодательство РК' WINDOW toolbar {
+        NEW legalSources;
+        NEW statutoryParameters;
+        NEW statutoryParameterValues;
     }
 
     NEW FOLDER personnel 'Кадровый учёт' WINDOW toolbar {
         NEW employments;
+        NEW employmentAssignments;
+        NEW personnelEvents;
     }
 }
