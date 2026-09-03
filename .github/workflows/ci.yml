@@ -54,6 +54,8 @@ jobs:
         run: |
           cp conf/settings.properties.example conf/settings.properties
           sed -i 's/CHANGE_ME/ci_password/' conf/settings.properties
+          sed -i 's/logics.topModule=ZUPKZ/logics.topModule=PayrollFormulaTest/' conf/settings.properties
+          printf '\nsettings.enableAPI=2\n' >> conf/settings.properties
 
       - name: Smoke-test lsFusion startup
         working-directory: zup-kz
@@ -64,6 +66,12 @@ jobs:
 
           for attempt in {1..90}; do
             if grep -q 'Server has successfully started' server.log; then
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollFormulaTest' \
+                --output payroll-result.json
+
+              python3 tests/assert_payroll.py payroll-result.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT

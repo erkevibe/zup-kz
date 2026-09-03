@@ -1,0 +1,50 @@
+MODULE PayrollFormulaTest;
+
+REQUIRE ZUPKZ;
+NAMESPACE ZUPKZ;
+
+// Headless smoke-test endpoint. The production top module does not require this module.
+payrollFormulaTest() {
+    NEW org = Organization {
+        NEW worker = Employee {
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                salary(contract) <- 100000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    assignmentSalary(assignment) <- 100000.00;
+                    NEW run = PayrollRun {
+                        payrollOrganization(run) <- org;
+                        payrollPeriodFrom(run) <- 2026_01_01;
+                        payrollPeriodTo(run) <- 2026_01_31;
+                        payrollRunStatus(run) <- PayrollRunStatus.timeCollected;
+                        NEW summary = PayrollTimeSummary {
+                            summaryPayrollRun(summary) <- run;
+                            summaryAssignment(summary) <- assignment;
+                            summaryPlannedHours(summary) <- 168.00;
+                            summaryWorkedHours(summary) <- 186.00;
+                            summaryNightHours(summary) <- 8.00;
+                            summaryOvertimeHours(summary) <- 10.00;
+                            summaryHolidayHours(summary) <- 8.00;
+                            calculatePayroll(run);
+
+                            EXPORT JSON FROM
+                                fullMonth = salaryForWorkedHours(100000.00, 168.00, 168.00),
+                                halfMonth = salaryForWorkedHours(100000.00, 168.00, 84.00),
+                                nightAdditional = specialHoursAdditionalPay(100000.00, 168.00, 8.00, 1.500000),
+                                overtimeAdditional = specialHoursAdditionalPay(100000.00, 168.00, 10.00, 1.500000),
+                                holidayAdditional = specialHoursAdditionalPay(100000.00, 168.00, 8.00, 1.500000),
+                                overtimeTotal = salaryForWorkedHours(100000.00, 168.00, 178.00) +
+                                                specialHoursAdditionalPay(100000.00, 168.00, 10.00, 1.500000),
+                                documentLineCount = payrollLineCount(run),
+                                documentAccrued = totalAccrued(run),
+                                documentPayable = totalPayable(run);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

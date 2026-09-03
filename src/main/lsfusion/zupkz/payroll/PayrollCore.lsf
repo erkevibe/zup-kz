@@ -1,6 +1,6 @@
 MODULE PayrollCore;
 
-REQUIRE KZOrganization, KZLegalFramework, HREmployment, TimeTimesheet;
+REQUIRE SystemEvents, KZOrganization, KZLegalFramework, HREmployment, TimeTimesheet;
 NAMESPACE ZUPKZ;
 
 CLASS PayrollRunStatus 'Статус расчёта зарплаты' {
@@ -87,6 +87,76 @@ calculationCoefficient 'Коэффициент' = DATA NUMERIC[18,6] (PayrollLin
 calculationAmount 'Сумма' = DATA NUMERIC[18,2] (PayrollLine);
 calculationNote 'Комментарий' = DATA STRING[500] (PayrollLine);
 
+// Оклад покрывает каждый фактически отработанный час по одинарной ставке.
+// Доплата за особые часы доводит полную оплату часа до нормативного коэффициента.
+payrollHourlyRate(NUMERIC[18,2] monthlySalary, NUMERIC[10,2] plannedHours) =
+    ROUND(monthlySalary / plannedHours, 6)
+    IF monthlySalary > 0.00 AND plannedHours > 0.00;
+salaryForWorkedHours(NUMERIC[18,2] monthlySalary, NUMERIC[10,2] plannedHours,
+                     NUMERIC[10,2] workedHours) =
+    ROUND(monthlySalary * workedHours / plannedHours, 2)
+    IF monthlySalary > 0.00 AND plannedHours > 0.00 AND workedHours >= 0.00;
+specialHoursAdditionalPay(NUMERIC[18,2] monthlySalary, NUMERIC[10,2] plannedHours,
+                          NUMERIC[10,2] specialHours, NUMERIC[18,6] totalCoefficient) =
+    ROUND(payrollHourlyRate(monthlySalary, plannedHours) * specialHours *
+          (totalCoefficient - 1.000000), 2)
+    IF specialHours > 0.00 AND totalCoefficient >= 1.000000;
+
+effectiveSalary(EmploymentAssignment assignment) =
+    IF assignmentSalary(assignment) THEN assignmentSalary(assignment)
+    ELSE salary(employment(assignment));
+hourlyRate(PayrollTimeSummary summary) =
+    payrollHourlyRate(effectiveSalary(summaryAssignment(summary)), summaryPlannedHours(summary));
+baseSalaryAmount(PayrollTimeSummary summary) =
+    salaryForWorkedHours(effectiveSalary(summaryAssignment(summary)),
+                         summaryPlannedHours(summary), summaryWorkedHours(summary));
+nightAdditionalAmount(PayrollTimeSummary summary, PayrollRun run) =
+    specialHoursAdditionalPay(effectiveSalary(summaryAssignment(summary)),
+        summaryPlannedHours(summary), summaryNightHours(summary),
+        numericStatutoryValueOn(statutoryParameterByCode('MIN_NIGHT_COEF'), payrollPeriodTo(run)));
+overtimeAdditionalAmount(PayrollTimeSummary summary, PayrollRun run) =
+    specialHoursAdditionalPay(effectiveSalary(summaryAssignment(summary)),
+        summaryPlannedHours(summary), summaryOvertimeHours(summary),
+        numericStatutoryValueOn(statutoryParameterByCode('MIN_OVERTIME_COEF'), payrollPeriodTo(run)));
+holidayWeekendHours(PayrollTimeSummary summary) =
+    (IF summaryHolidayHours(summary) THEN summaryHolidayHours(summary) ELSE 0.00) +
+    (IF summaryWeekendHours(summary) THEN summaryWeekendHours(summary) ELSE 0.00);
+holidayAdditionalAmount(PayrollTimeSummary summary, PayrollRun run) =
+    specialHoursAdditionalPay(effectiveSalary(summaryAssignment(summary)),
+        summaryPlannedHours(summary), holidayWeekendHours(summary),
+        numericStatutoryValueOn(statutoryParameterByCode('MIN_HOLIDAY_COEF'), payrollPeriodTo(run)));
+
+calculationTypeByCode(STRING[50] code) =
+    GROUP AGGR CalculationType t BY calculationCode(t);
+
+ensureCalculationType(STRING[50] code, STRING[200] name, FormulaKind formula,
+                      StatutoryParameter coefficient, STRING[500] typeDescription) {
+    IF NOT calculationTypeByCode(code) THEN {
+        NEW t = CalculationType {
+            calculationCode(t) <- code;
+            calculationName(t) <- name;
+            calculationCategory(t) <- CalculationCategory.accrual;
+            formulaKind(t) <- formula;
+            coefficientParameter(t) <- coefficient;
+            calculationDescription(t) <- typeDescription;
+        }
+    }
+}
+
+loadBaselineCalculationTypes() {
+    NEWSESSION {
+        ensureCalculationType('BASE_SALARY', 'Оплата по окладу', FormulaKind.monthlySalaryByHours,
+            NULL, 'Оклад пропорционально фактически отработанным часам');
+        ensureCalculationType('NIGHT_ADDITIONAL', 'Доплата за ночные часы', FormulaKind.hourlyRate,
+            statutoryParameterByCode('MIN_NIGHT_COEF'), 'Доплата к одинарной ставке до установленного коэффициента');
+        ensureCalculationType('OVERTIME_ADDITIONAL', 'Доплата за сверхурочные часы', FormulaKind.hourlyRate,
+            statutoryParameterByCode('MIN_OVERTIME_COEF'), 'Доплата к одинарной ставке до установленного коэффициента');
+        ensureCalculationType('HOLIDAY_ADDITIONAL', 'Доплата за праздничные и выходные часы', FormulaKind.hourlyRate,
+            statutoryParameterByCode('MIN_HOLIDAY_COEF'), 'Доплата к одинарной ставке до установленного коэффициента');
+        APPLY;
+    }
+}
+
 approvedTimeLineCount(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
     GROUP SUM 1 IF lineEmploymentAssignment(TimesheetLine l) == assignment AND
                    lineDate(l) >= dateFrom AND lineDate(l) <= dateTo AND
@@ -158,6 +228,95 @@ collectApprovedTime 'Собрать утверждённый табель' (Payr
     }
 }
 
+createPayrollLine(PayrollRun run, PayrollTimeSummary summary, CalculationType type,
+                  NUMERIC[18,2] base, NUMERIC[18,6] quantity,
+                  NUMERIC[18,6] rate, NUMERIC[18,6] coefficient,
+                  NUMERIC[18,2] amount, STRING[500] lineNote) {
+    NEW l = PayrollLine {
+        linePayrollRun(l) <- run;
+        linePayrollAssignment(l) <- summaryAssignment(summary);
+        lineCalculationType(l) <- type;
+        lineTimeSummary(l) <- summary;
+        calculationBase(l) <- base;
+        calculationQuantity(l) <- quantity;
+        calculationRate(l) <- rate;
+        calculationCoefficient(l) <- coefficient;
+        calculationAmount(l) <- amount;
+        calculationNote(l) <- lineNote;
+    }
+}
+
+invalidPayrollSummaryCount(PayrollRun run) = GROUP SUM 1
+    IF summaryPayrollRun(PayrollTimeSummary s) == run AND
+       (NOT effectiveSalary(summaryAssignment(s)) OR effectiveSalary(summaryAssignment(s)) <= 0.00 OR
+        NOT summaryPlannedHours(s) OR summaryPlannedHours(s) <= 0.00 OR
+        NOT summaryWorkedHours(s) OR summaryWorkedHours(s) < 0.00);
+payrollSummaryCount(PayrollRun run) = GROUP SUM 1 IF summaryPayrollRun(PayrollTimeSummary s) == run;
+hasNightHours(PayrollRun run) = GROUP SUM 1
+    IF summaryPayrollRun(PayrollTimeSummary s) == run AND summaryNightHours(s) > 0.00;
+hasOvertimeHours(PayrollRun run) = GROUP SUM 1
+    IF summaryPayrollRun(PayrollTimeSummary s) == run AND summaryOvertimeHours(s) > 0.00;
+hasHolidayHours(PayrollRun run) = GROUP SUM 1
+    IF summaryPayrollRun(PayrollTimeSummary s) == run AND holidayWeekendHours(s) > 0.00;
+missingPayrollCoefficient(PayrollRun run) =
+    (hasNightHours(run) AND NOT numericStatutoryValueOn(
+        statutoryParameterByCode('MIN_NIGHT_COEF'), payrollPeriodTo(run))) OR
+    (hasOvertimeHours(run) AND NOT numericStatutoryValueOn(
+        statutoryParameterByCode('MIN_OVERTIME_COEF'), payrollPeriodTo(run))) OR
+    (hasHolidayHours(run) AND NOT numericStatutoryValueOn(
+        statutoryParameterByCode('MIN_HOLIDAY_COEF'), payrollPeriodTo(run)));
+
+calculatePayroll 'Рассчитать зарплату' (PayrollRun r) {
+    IF payrollRunStatus(r) != PayrollRunStatus.timeCollected THEN
+        MESSAGE 'Сначала соберите утверждённый табель';
+    ELSE IF NOT payrollSummaryCount(r) THEN
+        MESSAGE 'Нет данных утверждённого табеля для расчёта';
+    ELSE IF invalidPayrollSummaryCount(r) THEN
+        MESSAGE 'Не заполнен оклад, плановые или фактические часы';
+    ELSE IF missingPayrollCoefficient(r) THEN
+        MESSAGE 'Не задан нормативный коэффициент на дату расчёта';
+    ELSE {
+        FOR summaryPayrollRun(PayrollTimeSummary s) == r DO {
+            createPayrollLine(r, s, calculationTypeByCode('BASE_SALARY'),
+                effectiveSalary(summaryAssignment(s)), summaryWorkedHours(s), hourlyRate(s),
+                1.000000, baseSalaryAmount(s), 'Оплата фактически отработанных часов');
+
+            IF summaryNightHours(s) > 0.00 THEN
+                createPayrollLine(r, s, calculationTypeByCode('NIGHT_ADDITIONAL'),
+                    effectiveSalary(summaryAssignment(s)), summaryNightHours(s), hourlyRate(s),
+                    numericStatutoryValueOn(statutoryParameterByCode('MIN_NIGHT_COEF'), payrollPeriodTo(r)),
+                    nightAdditionalAmount(s, r), 'Доплата за ночные часы');
+
+            IF summaryOvertimeHours(s) > 0.00 THEN
+                createPayrollLine(r, s, calculationTypeByCode('OVERTIME_ADDITIONAL'),
+                    effectiveSalary(summaryAssignment(s)), summaryOvertimeHours(s), hourlyRate(s),
+                    numericStatutoryValueOn(statutoryParameterByCode('MIN_OVERTIME_COEF'), payrollPeriodTo(r)),
+                    overtimeAdditionalAmount(s, r), 'Доплата за сверхурочные часы');
+
+            IF holidayWeekendHours(s) > 0.00 THEN
+                createPayrollLine(r, s, calculationTypeByCode('HOLIDAY_ADDITIONAL'),
+                    effectiveSalary(summaryAssignment(s)), holidayWeekendHours(s),
+                    hourlyRate(s),
+                    numericStatutoryValueOn(statutoryParameterByCode('MIN_HOLIDAY_COEF'), payrollPeriodTo(r)),
+                    holidayAdditionalAmount(s, r), 'Доплата за праздничные и выходные часы');
+        }
+        payrollRunStatus(r) <- PayrollRunStatus.calculated;
+        payrollCalculatedAt(r) <- currentDateTime();
+        APPLY;
+    }
+}
+
+totalAccrued 'Начислено' (PayrollRun run) = GROUP SUM calculationAmount(PayrollLine l)
+    IF linePayrollRun(l) == run AND calculationCategory(lineCalculationType(l)) == CalculationCategory.accrual;
+totalDeducted 'Удержано' (PayrollRun run) = GROUP SUM calculationAmount(PayrollLine l)
+    IF linePayrollRun(l) == run AND calculationCategory(lineCalculationType(l)) == CalculationCategory.deduction;
+payrollLineCount(PayrollRun run) = GROUP SUM 1 IF linePayrollRun(PayrollLine l) == run;
+totalPayable 'К выплате до налогов' (PayrollRun run) =
+    (IF totalAccrued(run) THEN totalAccrued(run) ELSE 0.00) -
+    (IF totalDeducted(run) THEN totalDeducted(run) ELSE 0.00);
+
+onStarted() + { loadBaselineCalculationTypes(); }
+
 FORM calculationTypes 'Виды начислений и удержаний'
     OBJECTS c = CalculationType
     PROPERTIES(c) calculationCode, calculationName, calculationCategory,
@@ -173,8 +332,9 @@ FORM payrollRules 'Правила расчёта'
 FORM payrollRuns 'Расчёты зарплаты'
     OBJECTS r = PayrollRun
     PROPERTIES(r) payrollOrganization, payrollNumber, payrollPeriodFrom,
-                  payrollPeriodTo, payrollRunStatus, payrollCalculatedAt
-    PROPERTIES(r) collectApprovedTime
+                  payrollPeriodTo, payrollRunStatus, payrollCalculatedAt,
+                  totalAccrued, totalDeducted, totalPayable
+    PROPERTIES(r) collectApprovedTime, calculatePayroll
 ;
 
 FORM payrollTimeSummaries 'Данные табеля для расчёта'

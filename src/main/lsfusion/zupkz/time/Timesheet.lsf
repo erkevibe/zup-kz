@@ -65,6 +65,11 @@ CONSTRAINT workedHours(TimesheetLine l) < 0 OR nightHours(l) < 0 OR
 CONSTRAINT nightHours(TimesheetLine l) > workedHours(l) OR
            holidayHours(l) > workedHours(l) OR weekendHours(l) > workedHours(l)
     MESSAGE 'Выделенные часы не могут превышать общее отработанное время';
+CONSTRAINT overtimeHours(TimesheetLine l) > 0.00 AND
+           (holidayHours(l) > 0.00 OR weekendHours(l) > 0.00)
+    MESSAGE 'Праздничные и выходные часы не должны повторно отмечаться как сверхурочные';
+CONSTRAINT holidayHours(TimesheetLine l) > 0.00 AND weekendHours(l) > 0.00
+    MESSAGE 'Один час нельзя одновременно отметить праздничным и выходным';
 
 plannedHoursForAssignment(EmploymentAssignment assignment, DATE date) = CASE
     WHEN scheduleType(workScheduleOn(assignment, date)) == WorkScheduleType.fiveDay THEN
