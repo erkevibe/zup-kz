@@ -1,0 +1,201 @@
+MODULE ReportsKZForm20005;
+
+REQUIRE ReportsKZForm200;
+NAMESPACE ZUPKZ;
+
+// Форма 200.05 за 2026 год заполняется нарастающим итогом и представляется
+// с декларацией за IV квартал. Пока зарплатный контур создаёт статус дохода 1.
+CLASS Form20005Line 'Строка формы 200.05';
+
+form20005LineDeclaration 'Декларация' = DATA Form200Declaration (Form20005Line);
+form20005LineEmployee 'Сотрудник' = DATA Employee (Form20005Line);
+form20005LineNumber 'A №' = DATA INTEGER (Form20005Line);
+form20005LineName 'B Ф.И.О.' = DATA STRING[302] (Form20005Line);
+form20005LineIin 'C ИИН' = DATA STRING[12] (Form20005Line);
+form20005LineIncomeStatus 'D Статус физического лица' = DATA INTEGER (Form20005Line);
+form20005LineCategory 'E Категория физического лица' = DATA STRING[30] (Form20005Line);
+form20005LineAifc 'F Работник МФЦА' = DATA BOOLEAN (Form20005Line);
+form20005LineUnregisteredDivision 'G Структурное подразделение' = DATA BOOLEAN (Form20005Line);
+form20005LineAccruedIncome 'H Начислен доход' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineIncomeReduction 'J Сумма уменьшения дохода' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineOpvCalculated 'K Исчислено ОПВ' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineVosmsCalculated 'L Исчислено ВОСМС' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineTaxDeduction 'N Сумма налоговых вычетов' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineIpnCalculated 'O Исчислено ИПН' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineUnpaidIncome 'P Невыплаченный доход' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LinePaidIncome 'Q Выплачен доход' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineIpnPayable 'R ИПН к уплате' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineOpvPayable 'S ОПВ к перечислению' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineVosmsPayable 'T ВОСМС к перечислению' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineSocialTaxIncome 'U Доход, облагаемый СН' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineSocialTaxCalculated 'V Исчислено СН' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineSo 'W Социальные отчисления' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineSocialTaxPayable 'X СН к уплате' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineOppv 'Y ОППВ к уплате' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineOosms 'Z ООСМС к уплате' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineOpvr 'AA ОПВР к уплате' = DATA NUMERIC[18,2] (Form20005Line);
+form20005LineCountryCode 'AB Код страны гражданства' = DATA STRING[3] (Form20005Line);
+form20005GeneratedAt '200.05 сформирована' = DATA DATETIME (Form200Declaration);
+
+form20005YearStart(Form200Declaration d) = sumMonth(form200PeriodStart(d), -9);
+form20005AccruedInYear(PayrollSettlementLine line, Form200Declaration d) =
+    form200AccrualMonth(line) >= form20005YearStart(d) AND
+    form200AccrualMonth(line) <= form200PeriodEnd(d);
+form20005PaidInYear(PayrollSettlementLine line, Form200Declaration d) =
+    form200PaymentMonth(line) >= form20005YearStart(d) AND
+    form200PaymentMonth(line) <= form200PeriodEnd(d);
+form20005ClosedSettlement(PayrollSettlementLine line, Form200Declaration d) =
+    payrollOrganization(settlementPayrollRun(line)) == form200Organization(d) AND
+    (payrollRunStatus(settlementPayrollRun(line)) == PayrollRunStatus.approved OR
+     payrollRunStatus(settlementPayrollRun(line)) == PayrollRunStatus.paid);
+form20005ResidentSettlement(PayrollSettlementLine line) =
+    taxProfileResident(taxCalculationProfile(
+        approvedTaxLine(settlementPayrollRun(line), settlementEmployee(line))));
+form20005SourceSettlement(PayrollSettlementLine line, Form200Declaration d) =
+    form20005ClosedSettlement(line, d) AND form20005ResidentSettlement(line) AND
+    (form20005AccruedInYear(line, d) OR form20005PaidInYear(line, d));
+form20005EmployeeInYear(Employee worker, Form200Declaration d) = GROUP MAX 1 IF
+    settlementEmployee(PayrollSettlementLine line) == worker AND
+    form20005SourceSettlement(line, d);
+
+form20005AccruedSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementAccrued(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005OpvCalculatedSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementOpv(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005VosmsCalculatedSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementVosms(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005TaxDeductionSource(Form200Declaration d, Employee worker) = GROUP SUM
+    (ipnBasicDeduction(approvedTaxLine(settlementPayrollRun(PayrollSettlementLine line), worker)) +
+     ipnSocialDeduction(approvedTaxLine(settlementPayrollRun(line), worker))) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005IpnCalculatedSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementIpn(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005UnpaidIncomeSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementAccrued(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d) AND
+    NOT form20005PaidInYear(line, d);
+form20005PaidIncomeSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementAccrued(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005PaidInYear(line, d);
+form20005IpnPayableSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementIpn(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005PaidInYear(line, d);
+form20005OpvPayableSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementOpv(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005PaidInYear(line, d);
+form20005VosmsPayableSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementVosms(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005PaidInYear(line, d);
+form20005SocialTaxIncomeSource(Form200Declaration d, Employee worker) = GROUP SUM
+    socialTaxBase(approvedTaxLine(settlementPayrollRun(PayrollSettlementLine line), worker)) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005SocialTaxSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementSocialTax(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005SoSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementSo(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005OosmsSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementOosms(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+form20005OpvrSource(Form200Declaration d, Employee worker) = GROUP SUM
+    settlementOpvr(PayrollSettlementLine line) IF
+    settlementEmployee(line) == worker AND form20005ClosedSettlement(line, d) AND
+    form20005ResidentSettlement(line) AND form20005AccruedInYear(line, d);
+
+form20005LineCount(Form200Declaration d) = GROUP SUM 1 IF
+    form20005LineDeclaration(Form20005Line line) == d;
+form20005LineByEmployee(Form200Declaration d, Employee worker) = GROUP AGGR
+    Form20005Line line BY form20005LineDeclaration(line), form20005LineEmployee(line);
+invalidForm20005EmployeeCount(Form200Declaration d) = GROUP SUM 1 IF
+    form20005EmployeeInYear(Employee worker, d) AND
+    (NOT iin(worker) OR length(iin(worker)) != 12 OR NOT lastName(worker) OR NOT firstName(worker));
+
+generateForm20005 'Сформировать 200.05' (Form200Declaration d) {
+    IF form200Quarter(d) != 4 THEN
+        MESSAGE 'Форма 200.05 формируется только с декларацией за IV квартал';
+    ELSE IF form200Status(d) == Form200Status.approved OR
+            form200Status(d) == Form200Status.submitted OR
+            form200Status(d) == Form200Status.accepted THEN
+        MESSAGE 'Утверждённую декларацию изменять нельзя';
+    ELSE IF form20005LineCount(d) THEN
+        MESSAGE 'Форма 200.05 уже сформирована';
+    ELSE IF invalidForm20005EmployeeCount(d) THEN
+        MESSAGE 'Для формы 200.05 заполните Ф.И.О. и ИИН сотрудников';
+    ELSE {
+        FOR worker IS Employee AND form20005EmployeeInYear(worker, d) DO {
+            NEW line = Form20005Line {
+                form20005LineDeclaration(line) <- d;
+                form20005LineEmployee(line) <- worker;
+                form20005LineNumber(line) <- form20005LineCount(d) + 1;
+                form20005LineName(line) <- lastName(worker) + ' ' + firstName(worker) +
+                    (IF middleName(worker) THEN ' ' + middleName(worker) ELSE '');
+                form20005LineIin(line) <- iin(worker);
+                form20005LineIncomeStatus(line) <- 1;
+                form20005LineAccruedIncome(line) <- form20005AccruedSource(d, worker);
+                form20005LineIncomeReduction(line) <- 0.00;
+                form20005LineOpvCalculated(line) <- form20005OpvCalculatedSource(d, worker);
+                form20005LineVosmsCalculated(line) <- form20005VosmsCalculatedSource(d, worker);
+                form20005LineTaxDeduction(line) <- form20005TaxDeductionSource(d, worker);
+                form20005LineIpnCalculated(line) <- form20005IpnCalculatedSource(d, worker);
+                form20005LineUnpaidIncome(line) <- form20005UnpaidIncomeSource(d, worker);
+                form20005LinePaidIncome(line) <- form20005PaidIncomeSource(d, worker);
+                form20005LineIpnPayable(line) <- form20005IpnPayableSource(d, worker);
+                form20005LineOpvPayable(line) <- form20005OpvPayableSource(d, worker);
+                form20005LineVosmsPayable(line) <- form20005VosmsPayableSource(d, worker);
+                form20005LineSocialTaxIncome(line) <- form20005SocialTaxIncomeSource(d, worker);
+                form20005LineSocialTaxCalculated(line) <- form20005SocialTaxSource(d, worker);
+                form20005LineSo(line) <- form20005SoSource(d, worker);
+                form20005LineSocialTaxPayable(line) <- form20005SocialTaxSource(d, worker);
+                form20005LineOppv(line) <- 0.00;
+                form20005LineOosms(line) <- form20005OosmsSource(d, worker);
+                form20005LineOpvr(line) <- form20005OpvrSource(d, worker);
+                form20005LineCountryCode(line) <-
+                    IF citizenshipCode(worker) != 'KZ' THEN citizenshipCode(worker);
+            }
+        }
+        form20005GeneratedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM form20005Lines 'Исчисление налогов и социальных платежей 200.05'
+    OBJECTS line = Form20005Line
+    PROPERTIES(line) form20005LineDeclaration, form20005LineNumber,
+                     form20005LineName, form20005LineIin, form20005LineIncomeStatus,
+                     form20005LineCategory, form20005LineAifc,
+                     form20005LineUnregisteredDivision,
+                     form20005LineAccruedIncome, form20005LineIncomeReduction,
+                     form20005LineOpvCalculated, form20005LineVosmsCalculated,
+                     form20005LineTaxDeduction, form20005LineIpnCalculated,
+                     form20005LineUnpaidIncome, form20005LinePaidIncome,
+                     form20005LineIpnPayable, form20005LineOpvPayable,
+                     form20005LineVosmsPayable, form20005LineSocialTaxIncome,
+                     form20005LineSocialTaxCalculated, form20005LineSo,
+                     form20005LineSocialTaxPayable, form20005LineOppv,
+                     form20005LineOosms, form20005LineOpvr,
+                     form20005LineCountryCode
+;
+
+EXTEND FORM form200Declarations
+    PROPERTIES(d) form20005GeneratedAt, form20005LineCount
+    PROPERTIES(d) generateForm20005
+;

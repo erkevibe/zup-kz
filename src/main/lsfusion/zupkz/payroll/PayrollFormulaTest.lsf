@@ -169,6 +169,14 @@ payrollFormulaTest() {
                                                                                             form200ReceiptNumber(form200) <- 'NOTICE-200-1';
                                                                                             acceptForm200(form200);
 
+                                                                                            NEW form200Annual = Form200Declaration {
+                                                                                                form200Organization(form200Annual) <- org;
+                                                                                                form200PeriodStart(form200Annual) <- 2026_10_01;
+                                                                                                form200Kind(form200Annual) <- Form200Kind.initial;
+                                                                                                form200CorrectionNumber(form200Annual) <- 0;
+                                                                                                form200Version(form200Annual) <- '2026.1';
+                                                                                                generateForm20005(form200Annual);
+
                                                                                     liabilityPaymentDate(liabilities) <- 2026_03_25;
                                                                                     liabilityBankReference(liabilities) <- 'TAX-BANK-1';
                                                                                     markPayrollLiabilitiesPaid(liabilities);
@@ -378,6 +386,48 @@ payrollFormulaTest() {
                                 form200FebruaryPaidIncome2026 = form200LinePaidIncome(
                                     form200LineByMonth(form200, Form200QuarterMonth.second)),
                                 form200Accepted2026 = form200Status(form200) == Form200Status.accepted,
+                                form20005LineCount2026 = form20005LineCount(form200Annual),
+                                form20005Year2026 = form200Year(form200Annual),
+                                form20005EmployeeName2026 = form20005LineName(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005EmployeeIin2026 = form20005LineIin(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005IncomeStatus2026 = form20005LineIncomeStatus(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005AccruedIncome2026 = form20005LineAccruedIncome(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005OpvCalculated2026 = form20005LineOpvCalculated(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005VosmsCalculated2026 = form20005LineVosmsCalculated(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005TaxDeduction2026 = form20005LineTaxDeduction(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005IpnCalculated2026 = form20005LineIpnCalculated(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005UnpaidIncome2026 = form20005LineUnpaidIncome(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005PaidIncome2026 = form20005LinePaidIncome(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005IpnPayable2026 = form20005LineIpnPayable(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005OpvPayable2026 = form20005LineOpvPayable(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005VosmsPayable2026 = form20005LineVosmsPayable(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005SocialTaxIncome2026 = form20005LineSocialTaxIncome(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005SocialTaxCalculated2026 = form20005LineSocialTaxCalculated(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005So2026 = form20005LineSo(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005SocialTaxPayable2026 = form20005LineSocialTaxPayable(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005Oppv2026 = form20005LineOppv(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005Oosms2026 = form20005LineOosms(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005Opvr2026 = form20005LineOpvr(
+                                    form20005LineByEmployee(form200Annual, worker)),
                                 ordinaryLowIncomeEnforcementCap = taxMinimum(
                                     socialPaymentAmount(80000.00, 50.000000),
                                     taxPositive(80000.00 - 50851.00)),
@@ -417,6 +467,7 @@ payrollFormulaTest() {
                                 outsideSchedulePaymentDue = thirdNextWorkDate(calendarByYear(2026),
                                                                               LeaveWorkWeek.fiveDay,
                                                                               2026_07_13);
+                                                                                            }
                                                                                     }
                                                                                 }
                                                                             }
