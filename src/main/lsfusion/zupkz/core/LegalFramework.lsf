@@ -151,6 +151,15 @@ loadBaselineLegalParameters() {
         ensureStatutoryParameter('VOSMS_MAX_MZP', 'Максимальная база ВОСМС', 'MZP', 'Максимальная месячная база взносов ОСМС');
         ensureStatutoryParameter('OOSMS_RATE', 'Ставка отчислений ОСМС', 'percent', 'Отчисления работодателя на ОСМС');
         ensureStatutoryParameter('OOSMS_MAX_MZP', 'Максимальная база ООСМС', 'MZP', 'Максимальная месячная база отчислений ОСМС');
+        ensureStatutoryParameter('IPN_BASE_RATE', 'Базовая ставка ИПН', 'percent', 'Ставка ИПН до годового порога');
+        ensureStatutoryParameter('IPN_HIGH_RATE', 'Повышенная ставка ИПН', 'percent', 'Ставка ИПН с превышения годового порога');
+        ensureStatutoryParameter('IPN_THRESHOLD_MRP', 'Годовой порог ИПН', 'MRP', 'Порог применения повышенной ставки ИПН');
+        ensureStatutoryParameter('IPN_BASIC_MONTHLY_MRP', 'Базовый вычет ИПН за месяц', 'MRP', 'Базовый налоговый вычет за календарный месяц');
+        ensureStatutoryParameter('IPN_BASIC_ANNUAL_MRP', 'Базовый вычет ИПН за год', 'MRP', 'Предельный базовый налоговый вычет за год');
+        ensureStatutoryParameter('IPN_SOCIAL_STANDARD_MRP', 'Социальный вычет ИПН', 'MRP', 'Годовой социальный вычет для предусмотренных категорий');
+        ensureStatutoryParameter('IPN_SOCIAL_DISABILITY_MRP', 'Социальный вычет ИПН для инвалидности I–II групп', 'MRP', 'Годовой социальный вычет для лиц с инвалидностью I–II групп');
+        ensureStatutoryParameter('SOCIAL_TAX_RATE', 'Ставка социального налога', 'percent', 'Общая ставка социального налога');
+        ensureStatutoryParameter('SOCIAL_TAX_AGRI_RATE', 'Ставка социального налога для сельхозпроизводителей', 'percent', 'Льготная ставка по соответствующим объектам');
 
         ensureStatutoryValue(statutoryParameterByCode('MZP'), 2026_01_01, 2026_12_31,
             85000.000000, legalSourceByCode('BUDGET_2026_2028'), 'Закон о республиканском бюджете');
@@ -188,6 +197,24 @@ loadBaselineLegalParameters() {
             3.000000, legalSourceByCode('OSMS_LAW'), 'Ставка отчислений работодателя');
         ensureStatutoryValue(statutoryParameterByCode('OOSMS_MAX_MZP'), 2026_01_01, NULL,
             40.000000, legalSourceByCode('OSMS_LAW'), 'Максимум 40 МЗП в месяц');
+        ensureStatutoryValue(statutoryParameterByCode('IPN_BASE_RATE'), 2026_01_01, NULL,
+            10.000000, legalSourceByCode('TAX_CODE_2026'), 'До 8 500 МРП за календарный год включительно');
+        ensureStatutoryValue(statutoryParameterByCode('IPN_HIGH_RATE'), 2026_01_01, NULL,
+            15.000000, legalSourceByCode('TAX_CODE_2026'), 'С суммы превышения 8 500 МРП за календарный год');
+        ensureStatutoryValue(statutoryParameterByCode('IPN_THRESHOLD_MRP'), 2026_01_01, NULL,
+            8500.000000, legalSourceByCode('TAX_CODE_2026'), 'Годовой порог прогрессивной ставки');
+        ensureStatutoryValue(statutoryParameterByCode('IPN_BASIC_MONTHLY_MRP'), 2026_01_01, NULL,
+            30.000000, legalSourceByCode('TAX_CODE_2026'), 'Применяется по заявлению у одного налогового агента');
+        ensureStatutoryValue(statutoryParameterByCode('IPN_BASIC_ANNUAL_MRP'), 2026_01_01, NULL,
+            360.000000, legalSourceByCode('TAX_CODE_2026'), 'Предельный базовый вычет за календарный год');
+        ensureStatutoryValue(statutoryParameterByCode('IPN_SOCIAL_STANDARD_MRP'), 2026_01_01, NULL,
+            882.000000, legalSourceByCode('TAX_CODE_2026'), 'Социальный вычет для предусмотренных категорий');
+        ensureStatutoryValue(statutoryParameterByCode('IPN_SOCIAL_DISABILITY_MRP'), 2026_01_01, NULL,
+            5000.000000, legalSourceByCode('TAX_CODE_2026'), 'Социальный вычет для инвалидности I–II групп');
+        ensureStatutoryValue(statutoryParameterByCode('SOCIAL_TAX_RATE'), 2026_01_01, NULL,
+            6.000000, legalSourceByCode('TAX_CODE_2026'), 'Общая ставка без уменьшения на социальные отчисления');
+        ensureStatutoryValue(statutoryParameterByCode('SOCIAL_TAX_AGRI_RATE'), 2026_01_01, NULL,
+            1.800000, legalSourceByCode('TAX_CODE_2026'), 'По объектам сельскохозяйственного производства и переработки');
         APPLY;
     }
 }

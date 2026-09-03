@@ -1,0 +1,280 @@
+MODULE TaxesKZIncomeTax;
+
+REQUIRE TaxesKZSocialPayments;
+NAMESPACE ZUPKZ;
+
+CLASS IpnSocialDeductionKind 'Вид социального вычета ИПН' {
+    none 'Нет',
+    protectedCategory 'Льготная категория — 882 МРП',
+    disabilityOneTwo 'Инвалидность I–II группы — 5 000 МРП'
+}
+
+// Заявление на вычеты и подтверждающие документы действуют в заданном периоде.
+CLASS EmployeeTaxProfile 'Налоговый профиль сотрудника';
+
+taxProfileOrganization 'Организация' = DATA Organization (EmployeeTaxProfile);
+taxProfileEmployee 'Сотрудник' = DATA Employee (EmployeeTaxProfile);
+taxProfileValidFrom 'Действует с' = DATA DATE (EmployeeTaxProfile);
+taxProfileValidTo 'Действует по' = DATA DATE (EmployeeTaxProfile);
+taxProfileResident 'Налоговый резидент' = DATA BOOLEAN (EmployeeTaxProfile);
+taxProfileBasicDeduction 'Применять базовый вычет' = DATA BOOLEAN (EmployeeTaxProfile);
+taxProfileSocialDeduction 'Социальный вычет' = DATA IpnSocialDeductionKind (EmployeeTaxProfile);
+taxProfileBasis 'Заявление / основание' = DATA STRING[500] (EmployeeTaxProfile);
+taxProfileLegalSource 'Нормативное основание' = DATA LegalSource (EmployeeTaxProfile);
+
+CONSTRAINT taxProfileValidTo(EmployeeTaxProfile p) < taxProfileValidFrom(p)
+    MESSAGE 'Окончание налогового профиля не может быть раньше начала';
+
+employeeTaxProfileOn(Organization organization, Employee worker, DATE date) =
+    GROUP LAST EmployeeTaxProfile p
+    IF taxProfileOrganization(p) == organization AND taxProfileEmployee(p) == worker AND
+       taxProfileValidFrom(p) <= date AND
+       (NOT taxProfileValidTo(p) OR taxProfileValidTo(p) >= date)
+    ORDER taxProfileValidFrom(p), p;
+
+// По умолчанию применяется общая ставка. Профиль нужен только для льготы или освобождения.
+CLASS OrganizationTaxProfile 'Налоговый профиль организации';
+
+organizationTaxProfileOrganization 'Организация' = DATA Organization (OrganizationTaxProfile);
+organizationTaxProfileValidFrom 'Действует с' = DATA DATE (OrganizationTaxProfile);
+organizationTaxProfileValidTo 'Действует по' = DATA DATE (OrganizationTaxProfile);
+organizationTaxProfileSocialTaxExempt 'Освобождение от социального налога' = DATA BOOLEAN (OrganizationTaxProfile);
+organizationTaxProfileSocialTaxRate 'Ставка социального налога, %' = DATA NUMERIC[18,6] (OrganizationTaxProfile);
+organizationTaxProfileBasis 'Основание' = DATA STRING[500] (OrganizationTaxProfile);
+organizationTaxProfileLegalSource 'Нормативное основание' = DATA LegalSource (OrganizationTaxProfile);
+
+CONSTRAINT organizationTaxProfileValidTo(OrganizationTaxProfile p) < organizationTaxProfileValidFrom(p)
+    MESSAGE 'Окончание налогового профиля организации не может быть раньше начала';
+
+organizationTaxProfileOn(Organization organization, DATE date) =
+    GROUP LAST OrganizationTaxProfile p
+    IF organizationTaxProfileOrganization(p) == organization AND
+       organizationTaxProfileValidFrom(p) <= date AND
+       (NOT organizationTaxProfileValidTo(p) OR organizationTaxProfileValidTo(p) >= date)
+    ORDER organizationTaxProfileValidFrom(p), p;
+
+taxPositive(NUMERIC[18,2] amount) = IF amount > 0.00 THEN amount ELSE 0.00;
+taxMinimum(NUMERIC[18,2] first, NUMERIC[18,2] second) =
+    IF first < second THEN first ELSE second;
+progressiveIpn(NUMERIC[18,2] base, NUMERIC[18,2] threshold,
+               NUMERIC[18,6] baseRate, NUMERIC[18,6] highRate) =
+    IF base > threshold THEN
+        ROUND(threshold * baseRate / 100.000000 +
+              (base - threshold) * highRate / 100.000000, 2)
+    ELSE socialPaymentAmount(base, baseRate)
+    IF base > 0.00;
+
+CLASS TaxCalculationStatus 'Статус налогового расчёта' {
+    draft 'Черновик',
+    calculated 'Рассчитан',
+    approved 'Утверждён'
+}
+
+CLASS TaxCalculationDocument 'Расчёт ИПН и социального налога';
+
+taxCalculationPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (TaxCalculationDocument);
+taxCalculationSocialPayments 'Социальные платежи' = DATA SocialPaymentDocument (TaxCalculationDocument);
+taxCalculationStatus 'Статус' = DATA TaxCalculationStatus (TaxCalculationDocument);
+taxCalculationCalculatedAt 'Рассчитан' = DATA DATETIME (TaxCalculationDocument);
+
+calculatedTaxDocumentCount(PayrollRun run) = GROUP SUM 1 IF
+    taxCalculationPayrollRun(TaxCalculationDocument d) == run AND
+    (taxCalculationStatus(d) == TaxCalculationStatus.calculated OR
+     taxCalculationStatus(d) == TaxCalculationStatus.approved);
+CONSTRAINT calculatedTaxDocumentCount(PayrollRun run) > 1
+    MESSAGE 'Для расчёта зарплаты может быть только один рассчитанный налоговый документ';
+
+CLASS TaxCalculationLine 'Налоги сотрудника';
+
+taxCalculationDocument 'Документ' = DATA TaxCalculationDocument (TaxCalculationLine);
+taxCalculationEmployee 'Сотрудник' = DATA Employee (TaxCalculationLine);
+
+taxCalculationRun(TaxCalculationLine l) = taxCalculationPayrollRun(taxCalculationDocument(l));
+taxCalculationDate(TaxCalculationLine l) = payrollPeriodTo(taxCalculationRun(l));
+taxCalculationOrganization(TaxCalculationLine l) = payrollOrganization(taxCalculationRun(l));
+taxCalculationProfile(TaxCalculationLine l) =
+    employeeTaxProfileOn(taxCalculationOrganization(l), taxCalculationEmployee(l), taxCalculationDate(l));
+taxCalculationSocialDocument(TaxCalculationLine l) =
+    taxCalculationSocialPayments(taxCalculationDocument(l));
+socialPaymentLineByEmployee(SocialPaymentDocument d, Employee worker) =
+    GROUP AGGR SocialPaymentLine s BY socialPaymentDocument(s), socialPaymentEmployee(s);
+taxCalculationSocialLine(TaxCalculationLine l) =
+    socialPaymentLineByEmployee(taxCalculationSocialDocument(l), taxCalculationEmployee(l));
+taxMrp(TaxCalculationLine l) =
+    numericStatutoryValueOn(statutoryParameterByCode('MRP'), taxCalculationDate(l));
+taxParameter(TaxCalculationLine l, STRING[50] code) =
+    numericStatutoryValueOn(statutoryParameterByCode(code), taxCalculationDate(l));
+
+ipnGrossIncome 'Доход для ИПН' (TaxCalculationLine l) =
+    payrollAssessmentBase(taxCalculationRun(l), taxCalculationEmployee(l), AssessmentBaseKind.ipn);
+ipnOpvDeduction 'Вычет ОПВ' (TaxCalculationLine l) = opvAmount(taxCalculationSocialLine(l));
+ipnVosmsDeduction 'Вычет ВОСМС' (TaxCalculationLine l) = vosmsAmount(taxCalculationSocialLine(l));
+ipnIncomeAfterSocialPayments 'После социальных платежей' (TaxCalculationLine l) = taxPositive(
+    ipnGrossIncome(l) - (IF ipnOpvDeduction(l) THEN ipnOpvDeduction(l) ELSE 0.00) -
+                        (IF ipnVosmsDeduction(l) THEN ipnVosmsDeduction(l) ELSE 0.00));
+
+ipnBasicDeduction 'Базовый вычет' = DATA NUMERIC[18,2] (TaxCalculationLine);
+ipnSocialDeduction 'Социальный вычет' = DATA NUMERIC[18,2] (TaxCalculationLine);
+ipnTaxableIncome 'Облагаемый доход ИПН' = DATA NUMERIC[18,2] (TaxCalculationLine);
+ipnAmount 'ИПН' = DATA NUMERIC[18,2] (TaxCalculationLine);
+socialTaxAmount 'Социальный налог' = DATA NUMERIC[18,2] (TaxCalculationLine);
+
+priorBasicDeduction(TaxCalculationLine l) = GROUP SUM ipnBasicDeduction(TaxCalculationLine p)
+    IF taxCalculationOrganization(p) == taxCalculationOrganization(l) AND
+       taxCalculationEmployee(p) == taxCalculationEmployee(l) AND
+       extractYear(taxCalculationDate(p)) == extractYear(taxCalculationDate(l)) AND
+       taxCalculationDate(p) < taxCalculationDate(l) AND
+       (taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.calculated OR
+        taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.approved);
+ipnBasicMonthlyLimit(TaxCalculationLine l) =
+    taxMrp(l) * taxParameter(l, 'IPN_BASIC_MONTHLY_MRP');
+ipnBasicAnnualAvailable(TaxCalculationLine l) = taxPositive(
+    taxMrp(l) * taxParameter(l, 'IPN_BASIC_ANNUAL_MRP') -
+    (IF priorBasicDeduction(l) THEN priorBasicDeduction(l) ELSE 0.00));
+calculatedIpnBasicDeduction(TaxCalculationLine l) =
+    IF taxProfileResident(taxCalculationProfile(l)) AND
+       taxProfileBasicDeduction(taxCalculationProfile(l)) THEN
+        taxMinimum(ipnIncomeAfterSocialPayments(l),
+                   taxMinimum(ipnBasicMonthlyLimit(l), ipnBasicAnnualAvailable(l)))
+    ELSE 0.00;
+
+ipnSocialAnnualLimit(TaxCalculationLine l) =
+    IF taxProfileSocialDeduction(taxCalculationProfile(l)) == IpnSocialDeductionKind.disabilityOneTwo THEN
+        taxMrp(l) * taxParameter(l, 'IPN_SOCIAL_DISABILITY_MRP')
+    ELSE IF taxProfileSocialDeduction(taxCalculationProfile(l)) == IpnSocialDeductionKind.protectedCategory THEN
+        taxMrp(l) * taxParameter(l, 'IPN_SOCIAL_STANDARD_MRP')
+    ELSE 0.00;
+priorSocialDeduction(TaxCalculationLine l) = GROUP SUM ipnSocialDeduction(TaxCalculationLine p)
+    IF taxCalculationOrganization(p) == taxCalculationOrganization(l) AND
+       taxCalculationEmployee(p) == taxCalculationEmployee(l) AND
+       extractYear(taxCalculationDate(p)) == extractYear(taxCalculationDate(l)) AND
+       taxCalculationDate(p) < taxCalculationDate(l) AND
+       (taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.calculated OR
+        taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.approved);
+ipnSocialAnnualAvailable(TaxCalculationLine l) = taxPositive(
+    ipnSocialAnnualLimit(l) -
+    (IF priorSocialDeduction(l) THEN priorSocialDeduction(l) ELSE 0.00));
+ipnIncomeAfterBasicDeduction(TaxCalculationLine l) = taxPositive(
+    ipnIncomeAfterSocialPayments(l) - ipnBasicDeduction(l));
+calculatedIpnSocialDeduction(TaxCalculationLine l) =
+    IF taxProfileResident(taxCalculationProfile(l)) THEN
+        taxMinimum(ipnIncomeAfterBasicDeduction(l), ipnSocialAnnualAvailable(l))
+    ELSE 0.00;
+calculatedIpnTaxableIncome(TaxCalculationLine l) = taxPositive(
+    ipnIncomeAfterBasicDeduction(l) - ipnSocialDeduction(l));
+
+priorIpnTaxableIncome(TaxCalculationLine l) = GROUP SUM ipnTaxableIncome(TaxCalculationLine p)
+    IF taxCalculationOrganization(p) == taxCalculationOrganization(l) AND
+       taxCalculationEmployee(p) == taxCalculationEmployee(l) AND
+       extractYear(taxCalculationDate(p)) == extractYear(taxCalculationDate(l)) AND
+       taxCalculationDate(p) < taxCalculationDate(l) AND
+       (taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.calculated OR
+        taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.approved);
+ipnAnnualThreshold(TaxCalculationLine l) =
+    taxMrp(l) * taxParameter(l, 'IPN_THRESHOLD_MRP');
+calculatedIpnAmount(TaxCalculationLine l) =
+    progressiveIpn((IF priorIpnTaxableIncome(l) THEN priorIpnTaxableIncome(l) ELSE 0.00) +
+                   ipnTaxableIncome(l), ipnAnnualThreshold(l),
+                   taxParameter(l, 'IPN_BASE_RATE'), taxParameter(l, 'IPN_HIGH_RATE')) -
+    (IF progressiveIpn(priorIpnTaxableIncome(l), ipnAnnualThreshold(l),
+                       taxParameter(l, 'IPN_BASE_RATE'), taxParameter(l, 'IPN_HIGH_RATE')) THEN
+         progressiveIpn(priorIpnTaxableIncome(l), ipnAnnualThreshold(l),
+                        taxParameter(l, 'IPN_BASE_RATE'), taxParameter(l, 'IPN_HIGH_RATE'))
+     ELSE 0.00);
+
+socialTaxGrossBase 'Доход для социального налога' (TaxCalculationLine l) =
+    payrollAssessmentBase(taxCalculationRun(l), taxCalculationEmployee(l), AssessmentBaseKind.socialTax);
+socialTaxBase 'База социального налога' (TaxCalculationLine l) = taxPositive(
+    socialTaxGrossBase(l) - (IF ipnOpvDeduction(l) THEN ipnOpvDeduction(l) ELSE 0.00) -
+                            (IF ipnVosmsDeduction(l) THEN ipnVosmsDeduction(l) ELSE 0.00));
+taxOrganizationProfile(TaxCalculationLine l) =
+    organizationTaxProfileOn(taxCalculationOrganization(l), taxCalculationDate(l));
+socialTaxRate 'Ставка социального налога' (TaxCalculationLine l) =
+    IF organizationTaxProfileSocialTaxExempt(taxOrganizationProfile(l)) THEN 0.000000
+    ELSE IF organizationTaxProfileSocialTaxRate(taxOrganizationProfile(l)) THEN
+        organizationTaxProfileSocialTaxRate(taxOrganizationProfile(l))
+    ELSE taxParameter(l, 'SOCIAL_TAX_RATE');
+calculatedSocialTaxAmount(TaxCalculationLine l) =
+    socialPaymentAmount(socialTaxBase(l), socialTaxRate(l));
+
+calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {
+    IF taxCalculationStatus(d) AND taxCalculationStatus(d) != TaxCalculationStatus.draft THEN
+        MESSAGE 'Налоги уже рассчитаны';
+    ELSE IF NOT taxCalculationPayrollRun(d) OR
+            payrollRunStatus(taxCalculationPayrollRun(d)) != PayrollRunStatus.calculated THEN
+        MESSAGE 'Выберите рассчитанную зарплату';
+    ELSE IF NOT taxCalculationSocialPayments(d) OR
+            socialPaymentPayrollRun(taxCalculationSocialPayments(d)) != taxCalculationPayrollRun(d) OR
+            (socialPaymentStatus(taxCalculationSocialPayments(d)) != SocialPaymentStatus.calculated AND
+             socialPaymentStatus(taxCalculationSocialPayments(d)) != SocialPaymentStatus.approved) THEN
+        MESSAGE 'Выберите рассчитанные социальные платежи этой зарплаты';
+    ELSE {
+        FOR worker IS Employee AND payrollEmployeeLineCount(taxCalculationPayrollRun(d), worker) DO {
+            NEW l = TaxCalculationLine {
+                taxCalculationDocument(l) <- d;
+                taxCalculationEmployee(l) <- worker;
+                ipnBasicDeduction(l) <- calculatedIpnBasicDeduction(l);
+                ipnSocialDeduction(l) <- calculatedIpnSocialDeduction(l);
+                ipnTaxableIncome(l) <- calculatedIpnTaxableIncome(l);
+                ipnAmount(l) <- calculatedIpnAmount(l);
+                socialTaxAmount(l) <- calculatedSocialTaxAmount(l);
+            }
+        }
+        taxCalculationStatus(d) <- TaxCalculationStatus.calculated;
+        taxCalculationCalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+approveTaxes 'Утвердить' (TaxCalculationDocument d) {
+    IF taxCalculationStatus(d) == TaxCalculationStatus.calculated THEN {
+        taxCalculationStatus(d) <- TaxCalculationStatus.approved;
+        APPLY;
+    } ELSE
+        MESSAGE 'Сначала рассчитайте налоги';
+}
+
+totalIpn 'ИПН' (TaxCalculationDocument d) = GROUP SUM ipnAmount(TaxCalculationLine l)
+    IF taxCalculationDocument(l) == d;
+totalIpnBasicDeduction 'Базовый вычет' (TaxCalculationDocument d) =
+    GROUP SUM ipnBasicDeduction(TaxCalculationLine l) IF taxCalculationDocument(l) == d;
+totalIpnTaxableIncome 'Облагаемый доход ИПН' (TaxCalculationDocument d) =
+    GROUP SUM ipnTaxableIncome(TaxCalculationLine l) IF taxCalculationDocument(l) == d;
+totalSocialTax 'Социальный налог' (TaxCalculationDocument d) = GROUP SUM socialTaxAmount(TaxCalculationLine l)
+    IF taxCalculationDocument(l) == d;
+payableAfterTaxes 'К выплате' (TaxCalculationDocument d) =
+    payableAfterSocialPayments(taxCalculationSocialPayments(d)) -
+    (IF totalIpn(d) THEN totalIpn(d) ELSE 0.00);
+
+FORM employeeTaxProfiles 'Налоговые профили сотрудников'
+    OBJECTS p = EmployeeTaxProfile
+    PROPERTIES(p) taxProfileOrganization, taxProfileEmployee, taxProfileValidFrom,
+                  taxProfileValidTo, taxProfileResident, taxProfileBasicDeduction,
+                  taxProfileSocialDeduction, taxProfileBasis, taxProfileLegalSource
+;
+
+FORM organizationTaxProfiles 'Налоговые профили организаций'
+    OBJECTS p = OrganizationTaxProfile
+    PROPERTIES(p) organizationTaxProfileOrganization, organizationTaxProfileValidFrom,
+                  organizationTaxProfileValidTo, organizationTaxProfileSocialTaxExempt,
+                  organizationTaxProfileSocialTaxRate, organizationTaxProfileBasis,
+                  organizationTaxProfileLegalSource
+;
+
+FORM taxCalculationDocuments 'Расчёт ИПН и социального налога'
+    OBJECTS d = TaxCalculationDocument
+    PROPERTIES(d) taxCalculationPayrollRun, taxCalculationSocialPayments,
+                  taxCalculationStatus, taxCalculationCalculatedAt,
+                  totalIpnBasicDeduction, totalIpnTaxableIncome,
+                  totalIpn, totalSocialTax, payableAfterTaxes
+    PROPERTIES(d) calculateTaxes, approveTaxes
+;
+
+FORM taxCalculationLines 'Налоги сотрудников'
+    OBJECTS l = TaxCalculationLine
+    PROPERTIES(l) taxCalculationDocument, taxCalculationEmployee,
+                  ipnGrossIncome, ipnOpvDeduction, ipnVosmsDeduction,
+                  ipnIncomeAfterSocialPayments, ipnBasicDeduction,
+                  ipnSocialDeduction, ipnTaxableIncome, ipnAmount,
+                  socialTaxGrossBase, socialTaxBase, socialTaxRate, socialTaxAmount
+;

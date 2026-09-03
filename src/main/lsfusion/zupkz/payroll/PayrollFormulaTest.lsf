@@ -57,9 +57,22 @@ payrollFormulaTest() {
                                             inputBasis(unclassifiedInput) <- 'Неклассифицированное начисление';
                                             calculatePayroll(run);
 
-                                            NEW socialPayments = SocialPaymentDocument {
-                                                socialPaymentPayrollRun(socialPayments) <- run;
-                                                calculateSocialPayments(socialPayments);
+                                            NEW taxProfile = EmployeeTaxProfile {
+                                                taxProfileOrganization(taxProfile) <- org;
+                                                taxProfileEmployee(taxProfile) <- worker;
+                                                taxProfileValidFrom(taxProfile) <- 2026_01_01;
+                                                taxProfileResident(taxProfile) <- TRUE;
+                                                taxProfileBasicDeduction(taxProfile) <- TRUE;
+                                                taxProfileSocialDeduction(taxProfile) <- IpnSocialDeductionKind.none;
+
+                                                NEW socialPayments = SocialPaymentDocument {
+                                                    socialPaymentPayrollRun(socialPayments) <- run;
+                                                    calculateSocialPayments(socialPayments);
+
+                                                    NEW taxes = TaxCalculationDocument {
+                                                        taxCalculationPayrollRun(taxes) <- run;
+                                                        taxCalculationSocialPayments(taxes) <- socialPayments;
+                                                        calculateTaxes(taxes);
 
                             NEW sickAverage = AverageEarningsDocument {
                                 averageAssignment(sickAverage) <- assignment;
@@ -154,6 +167,20 @@ payrollFormulaTest() {
                                     socialCappedBase(5000000.00, 1700000.00), 2.000000),
                                 maximumEmployerOsms2026 = socialPaymentAmount(
                                     socialCappedBase(5000000.00, 3400000.00), 3.000000),
+                                ipnBasicDeduction2026 = totalIpnBasicDeduction(taxes),
+                                ipnTaxableIncome2026 = totalIpnTaxableIncome(taxes),
+                                ipn2026 = totalIpn(taxes),
+                                socialTax2026 = totalSocialTax(taxes),
+                                finalPayable2026 = payableAfterTaxes(taxes),
+                                progressiveIpnAboveThreshold = progressiveIpn(40000000.00, 36762500.00,
+                                                                              10.000000, 15.000000),
+                                progressiveIpnCrossingThreshold = progressiveIpn(36800000.00, 36762500.00,
+                                                                                 10.000000, 15.000000) -
+                                                                          progressiveIpn(36700000.00, 36762500.00,
+                                                                                         10.000000, 15.000000),
+                                annualBasicDeductionRemainder = taxMinimum(100000.00,
+                                    taxPositive(1557000.00 - 1550000.00)),
+                                agriculturalSocialTax = socialPaymentAmount(130638.09, 1.800000),
                                 averageDaily = averageDailyEarnings(1200000.00, 246.00),
                                 averageHourly = averageHourlyEarnings(1200000.00, 1968.00),
                                 averagePayDays = averagePayByDays(1200000.00, 246.00, 10.00),
@@ -197,6 +224,8 @@ payrollFormulaTest() {
                                     }
                                 }
                             }
+                                                    }
+                                            }
                                             }
                                         }
                                     }

@@ -4,7 +4,7 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
         PayrollRecalculation, HRLeave, PayrollSickLeave, PayrollInterimPayment,
-        PayrollAssessmentBase, TaxesKZSocialPayments;
+        PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -63,5 +63,9 @@ NAVIGATOR {
         NEW socialPaymentProfiles;
         NEW socialPaymentDocuments;
         NEW socialPaymentLines;
+        NEW employeeTaxProfiles;
+        NEW organizationTaxProfiles;
+        NEW taxCalculationDocuments;
+        NEW taxCalculationLines;
     }
 }
