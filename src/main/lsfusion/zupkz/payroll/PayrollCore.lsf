@@ -76,12 +76,41 @@ summaryWeekendHours 'Часов в выходной' = DATA NUMERIC[10,2] (Payro
 summaryBusinessTripHours 'Часов командировки' = DATA NUMERIC[10,2] (PayrollTimeSummary);
 summaryAbsenceHours 'Часов отсутствия' = DATA NUMERIC[10,2] (PayrollTimeSummary);
 
+// Входные начисления и удержания периода рассчитываются вместе с окладом,
+// чтобы результат оставался единым снимком PayrollRun.
+CLASS PayrollInput 'Начисление / удержание периода';
+
+inputPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (PayrollInput);
+inputAssignment 'Назначение сотрудника' = DATA EmploymentAssignment (PayrollInput);
+inputCalculationType 'Вид расчёта' = DATA CalculationType (PayrollInput);
+inputBase 'База' = DATA NUMERIC[18,2] (PayrollInput);
+inputPercent 'Процент' = DATA NUMERIC[18,6] (PayrollInput);
+inputManualAmount 'Сумма' = DATA NUMERIC[18,2] (PayrollInput);
+inputBasis 'Основание' = DATA STRING[500] (PayrollInput);
+
+payrollInputAmount(CalculationType type, NUMERIC[18,2] base,
+                   NUMERIC[18,6] percent, NUMERIC[18,2] manualAmount) =
+    IF formulaKind(type) == FormulaKind.percentage THEN ROUND(base * percent / 100.000000, 2)
+    ELSE IF formulaKind(type) == FormulaKind.fixedAmount OR
+            formulaKind(type) == FormulaKind.manual THEN manualAmount;
+inputAmount 'Сумма к расчёту' (PayrollInput i) =
+    payrollInputAmount(inputCalculationType(i), inputBase(i), inputPercent(i), inputManualAmount(i));
+
+CONSTRAINT inputPayrollRun(PayrollInput i) AND inputAssignment(i) AND
+           organization(employment(inputAssignment(i))) != payrollOrganization(inputPayrollRun(i))
+    MESSAGE 'Назначение сотрудника должно принадлежать организации расчёта';
+CONSTRAINT inputCalculationType(PayrollInput i) AND
+           calculationCategory(inputCalculationType(i)) != CalculationCategory.accrual AND
+           calculationCategory(inputCalculationType(i)) != CalculationCategory.deduction
+    MESSAGE 'В период можно вводить только начисление или удержание';
+
 CLASS PayrollLine 'Строка расчёта зарплаты';
 
 linePayrollRun 'Расчёт зарплаты' = DATA PayrollRun (PayrollLine);
 linePayrollAssignment 'Назначение сотрудника' = DATA EmploymentAssignment (PayrollLine);
 lineCalculationType 'Вид расчёта' = DATA CalculationType (PayrollLine);
 lineTimeSummary 'Данные табеля' = DATA PayrollTimeSummary (PayrollLine);
+linePayrollInput 'Входная строка' = DATA PayrollInput (PayrollLine);
 calculationBase 'Расчётная база' = DATA NUMERIC[18,2] (PayrollLine);
 calculationQuantity 'Количество' = DATA NUMERIC[18,6] (PayrollLine);
 calculationRate 'Ставка' = DATA NUMERIC[18,6] (PayrollLine);
@@ -131,13 +160,14 @@ holidayAdditionalAmount(PayrollTimeSummary summary, PayrollRun run) =
 calculationTypeByCode(STRING[50] code) =
     GROUP AGGR CalculationType t BY calculationCode(t);
 
-ensureCalculationType(STRING[50] code, STRING[200] name, FormulaKind formula,
+ensureCalculationType(STRING[50] code, STRING[200] name, CalculationCategory category,
+                      FormulaKind formula,
                       StatutoryParameter coefficient, STRING[500] typeDescription) {
     IF NOT calculationTypeByCode(code) THEN {
         NEW t = CalculationType {
             calculationCode(t) <- code;
             calculationName(t) <- name;
-            calculationCategory(t) <- CalculationCategory.accrual;
+            calculationCategory(t) <- category;
             formulaKind(t) <- formula;
             coefficientParameter(t) <- coefficient;
             calculationDescription(t) <- typeDescription;
@@ -147,14 +177,26 @@ ensureCalculationType(STRING[50] code, STRING[200] name, FormulaKind formula,
 
 loadBaselineCalculationTypes() {
     NEWSESSION {
-        ensureCalculationType('BASE_SALARY', 'Оплата по окладу', FormulaKind.monthlySalaryByHours,
+        ensureCalculationType('BASE_SALARY', 'Оплата по окладу', CalculationCategory.accrual,
+            FormulaKind.monthlySalaryByHours,
             NULL, 'Оклад пропорционально фактически отработанным часам');
-        ensureCalculationType('NIGHT_ADDITIONAL', 'Доплата за ночные часы', FormulaKind.hourlyRate,
+        ensureCalculationType('NIGHT_ADDITIONAL', 'Доплата за ночные часы', CalculationCategory.accrual,
+            FormulaKind.hourlyRate,
             statutoryParameterByCode('MIN_NIGHT_COEF'), 'Доплата к одинарной ставке до установленного коэффициента');
-        ensureCalculationType('OVERTIME_ADDITIONAL', 'Доплата за сверхурочные часы', FormulaKind.hourlyRate,
+        ensureCalculationType('OVERTIME_ADDITIONAL', 'Доплата за сверхурочные часы', CalculationCategory.accrual,
+            FormulaKind.hourlyRate,
             statutoryParameterByCode('MIN_OVERTIME_COEF'), 'Доплата к одинарной ставке до установленного коэффициента');
-        ensureCalculationType('HOLIDAY_ADDITIONAL', 'Доплата за праздничные и выходные часы', FormulaKind.hourlyRate,
+        ensureCalculationType('HOLIDAY_ADDITIONAL', 'Доплата за праздничные и выходные часы', CalculationCategory.accrual,
+            FormulaKind.hourlyRate,
             statutoryParameterByCode('MIN_HOLIDAY_COEF'), 'Доплата к одинарной ставке до установленного коэффициента');
+        ensureCalculationType('FIXED_BONUS', 'Разовая премия', CalculationCategory.accrual,
+            FormulaKind.fixedAmount, NULL, 'Фиксированная премия за расчётный период');
+        ensureCalculationType('PERCENT_ALLOWANCE', 'Процентная надбавка', CalculationCategory.accrual,
+            FormulaKind.percentage, NULL, 'Процент от указанной расчётной базы');
+        ensureCalculationType('OTHER_ACCRUAL', 'Прочее начисление', CalculationCategory.accrual,
+            FormulaKind.manual, NULL, 'Начисление с ручным вводом суммы');
+        ensureCalculationType('OTHER_DEDUCTION', 'Прочее удержание', CalculationCategory.deduction,
+            FormulaKind.manual, NULL, 'Удержание с ручным вводом суммы и основания');
         includeInAverageEarnings(calculationTypeByCode('BASE_SALARY')) <- TRUE;
         includeInAverageEarnings(calculationTypeByCode('NIGHT_ADDITIONAL')) <- TRUE;
         includeInAverageEarnings(calculationTypeByCode('OVERTIME_ADDITIONAL')) <- TRUE;
@@ -277,6 +319,10 @@ missingPayrollCoefficient(PayrollRun run) =
         statutoryParameterByCode('MIN_OVERTIME_COEF'), payrollPeriodTo(run))) OR
     (hasHolidayHours(run) AND NOT numericStatutoryValueOn(
         statutoryParameterByCode('MIN_HOLIDAY_COEF'), payrollPeriodTo(run)));
+invalidPayrollInputCount(PayrollRun run) = GROUP SUM 1
+    IF inputPayrollRun(PayrollInput i) == run AND
+       (NOT inputAssignment(i) OR NOT inputCalculationType(i) OR NOT inputBasis(i) OR
+        NOT inputAmount(i) OR inputAmount(i) <= 0.00);
 
 calculatePayroll 'Рассчитать зарплату' (PayrollRun r) {
     IF payrollRunStatus(r) != PayrollRunStatus.timeCollected THEN
@@ -287,6 +333,8 @@ calculatePayroll 'Рассчитать зарплату' (PayrollRun r) {
         MESSAGE 'Не заполнен оклад, плановые или фактические часы';
     ELSE IF missingPayrollCoefficient(r) THEN
         MESSAGE 'Не задан нормативный коэффициент на дату расчёта';
+    ELSE IF invalidPayrollInputCount(r) THEN
+        MESSAGE 'Проверьте вид, основание, базу/процент или сумму входных начислений и удержаний';
     ELSE {
         FOR summaryPayrollRun(PayrollTimeSummary s) == r DO {
             createPayrollLine(r, s, calculationTypeByCode('BASE_SALARY'),
@@ -311,6 +359,20 @@ calculatePayroll 'Рассчитать зарплату' (PayrollRun r) {
                     hourlyRate(s),
                     numericStatutoryValueOn(statutoryParameterByCode('MIN_HOLIDAY_COEF'), payrollPeriodTo(r)),
                     holidayAdditionalAmount(s, r), 'Доплата за праздничные и выходные часы');
+        }
+        FOR inputPayrollRun(PayrollInput i) == r DO {
+            NEW l = PayrollLine {
+                linePayrollRun(l) <- r;
+                linePayrollAssignment(l) <- inputAssignment(i);
+                lineCalculationType(l) <- inputCalculationType(i);
+                linePayrollInput(l) <- i;
+                calculationBase(l) <- inputBase(i);
+                calculationQuantity(l) <- 1.000000;
+                calculationRate(l) <- inputPercent(i);
+                calculationCoefficient(l) <- 1.000000;
+                calculationAmount(l) <- inputAmount(i);
+                calculationNote(l) <- inputBasis(i);
+            }
         }
         payrollRunStatus(r) <- PayrollRunStatus.calculated;
         payrollCalculatedAt(r) <- currentDateTime();
@@ -358,10 +420,16 @@ FORM payrollTimeSummaries 'Данные табеля для расчёта'
                   summaryBusinessTripHours, summaryAbsenceHours
 ;
 
+FORM payrollInputs 'Начисления и удержания периода'
+    OBJECTS i = PayrollInput
+    PROPERTIES(i) inputPayrollRun, inputAssignment, inputCalculationType,
+                  inputBase, inputPercent, inputManualAmount, inputAmount, inputBasis
+;
+
 FORM payrollLines 'Строки расчёта зарплаты'
     OBJECTS l = PayrollLine
     PROPERTIES(l) linePayrollRun, linePayrollAssignment, lineCalculationType,
-                  lineTimeSummary, calculationBase, calculationQuantity,
+                  lineTimeSummary, linePayrollInput, calculationBase, calculationQuantity,
                   calculationRate, calculationCoefficient, calculationAmount,
                   calculationNote
 ;

@@ -1,0 +1,95 @@
+MODULE PayrollAssessmentBase;
+
+REQUIRE PayrollCore;
+NAMESPACE ZUPKZ;
+
+// Состав базы отделён от ставок, пределов и льгот работника.
+// Здесь хранится только включение вида начисления в конкретную базу на дату.
+CLASS AssessmentBaseKind 'Расчётная база' {
+    ipn 'ИПН',
+    opv 'ОПВ',
+    opvr 'ОПВР',
+    socialContribution 'Социальные отчисления',
+    employeeOsms 'Взносы ОСМС',
+    employerOsms 'Отчисления ОСМС',
+    socialTax 'Социальный налог'
+}
+
+CLASS CalculationBaseRule 'Включение вида расчёта в базу';
+
+baseRuleCalculationType 'Вид расчёта' = DATA CalculationType (CalculationBaseRule);
+baseRuleKind 'База' = DATA AssessmentBaseKind (CalculationBaseRule);
+baseRuleValidFrom 'Действует с' = DATA DATE (CalculationBaseRule);
+baseRuleValidTo 'Действует по' = DATA DATE (CalculationBaseRule);
+baseRuleIncluded 'Включается' = DATA BOOLEAN (CalculationBaseRule);
+baseRuleLegalSource 'Нормативное основание' = DATA LegalSource (CalculationBaseRule);
+baseRuleNote 'Примечание' = DATA STRING[500] (CalculationBaseRule);
+
+CONSTRAINT baseRuleValidTo(CalculationBaseRule r) < baseRuleValidFrom(r)
+    MESSAGE 'Дата окончания правила базы не может быть раньше даты начала';
+
+calculationBaseRuleOn(CalculationType type, AssessmentBaseKind kind, DATE date) =
+    GROUP LAST CalculationBaseRule r
+    IF baseRuleCalculationType(r) == type AND baseRuleKind(r) == kind AND
+       baseRuleValidFrom(r) <= date AND (NOT baseRuleValidTo(r) OR baseRuleValidTo(r) >= date)
+    ORDER baseRuleValidFrom(r), r;
+includedInAssessmentBase(CalculationType type, AssessmentBaseKind kind, DATE date) =
+    baseRuleIncluded(calculationBaseRuleOn(type, kind, date));
+payrollAssessmentBase 'Расчётная база' (PayrollRun run, AssessmentBaseKind kind) =
+    GROUP SUM calculationAmount(PayrollLine l)
+    IF linePayrollRun(l) == run AND
+       calculationCategory(lineCalculationType(l)) == CalculationCategory.accrual AND
+       includedInAssessmentBase(lineCalculationType(l), kind, payrollPeriodTo(run));
+
+baseRuleByPeriod(CalculationType type, AssessmentBaseKind kind, DATE dateFrom) =
+    GROUP AGGR CalculationBaseRule r BY baseRuleCalculationType(r), baseRuleKind(r), baseRuleValidFrom(r);
+
+legalSourceForBase(AssessmentBaseKind kind) =
+    IF kind == AssessmentBaseKind.ipn OR kind == AssessmentBaseKind.socialTax THEN
+        legalSourceByCode('TAX_CODE_2026')
+    ELSE IF kind == AssessmentBaseKind.employeeOsms OR kind == AssessmentBaseKind.employerOsms THEN
+        legalSourceByCode('OSMS_LAW')
+    ELSE legalSourceByCode('SOCIAL_CODE_KZ');
+
+ensureBaseRule(CalculationType type, AssessmentBaseKind kind) {
+    IF type AND NOT baseRuleByPeriod(type, kind, 2026_01_01) THEN {
+        NEW r = CalculationBaseRule {
+            baseRuleCalculationType(r) <- type;
+            baseRuleKind(r) <- kind;
+            baseRuleValidFrom(r) <- 2026_01_01;
+            baseRuleIncluded(r) <- TRUE;
+            baseRuleLegalSource(r) <- legalSourceForBase(kind);
+            baseRuleNote(r) <- 'Стандартное денежное начисление; льготы и пределы применяются в TaxesKZ';
+        }
+    }
+}
+
+ensureStandardBaseRules(CalculationType type) {
+    ensureBaseRule(type, AssessmentBaseKind.ipn);
+    ensureBaseRule(type, AssessmentBaseKind.opv);
+    ensureBaseRule(type, AssessmentBaseKind.opvr);
+    ensureBaseRule(type, AssessmentBaseKind.socialContribution);
+    ensureBaseRule(type, AssessmentBaseKind.employeeOsms);
+    ensureBaseRule(type, AssessmentBaseKind.employerOsms);
+    ensureBaseRule(type, AssessmentBaseKind.socialTax);
+}
+
+loadBaselineAssessmentRules() {
+    NEWSESSION {
+        ensureStandardBaseRules(calculationTypeByCode('BASE_SALARY'));
+        ensureStandardBaseRules(calculationTypeByCode('NIGHT_ADDITIONAL'));
+        ensureStandardBaseRules(calculationTypeByCode('OVERTIME_ADDITIONAL'));
+        ensureStandardBaseRules(calculationTypeByCode('HOLIDAY_ADDITIONAL'));
+        ensureStandardBaseRules(calculationTypeByCode('FIXED_BONUS'));
+        ensureStandardBaseRules(calculationTypeByCode('PERCENT_ALLOWANCE'));
+        APPLY;
+    }
+}
+
+onStarted() + { loadBaselineAssessmentRules(); }
+
+FORM calculationBaseRules 'Состав расчётных баз'
+    OBJECTS r = CalculationBaseRule
+    PROPERTIES(r) baseRuleCalculationType, baseRuleKind, baseRuleValidFrom,
+                  baseRuleValidTo, baseRuleIncluded, baseRuleLegalSource, baseRuleNote
+;

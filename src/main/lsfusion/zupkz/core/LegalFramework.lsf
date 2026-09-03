@@ -120,6 +120,12 @@ loadBaselineLegalParameters() {
             'https://www.adilet.zan.kz/rus/docs/V1500012533', 2016_01_01, 2026_09_03);
         ensureLegalSource('SICK_LEAVE_RULES_907', 'Правила назначения и выплаты социального пособия по временной нетрудоспособности',
             'https://www.adilet.zan.kz/rus/docs/V1500012521', 2016_01_01, 2026_09_03);
+        ensureLegalSource('TAX_CODE_2026', 'Налоговый кодекс Республики Казахстан',
+            'https://www.adilet.zan.kz/rus/docs/K2500000214', 2026_01_01, 2026_09_03);
+        ensureLegalSource('SOCIAL_CODE_KZ', 'Социальный кодекс Республики Казахстан',
+            'https://www.adilet.zan.kz/rus/docs/K2300000224', 2023_07_01, 2026_09_03);
+        ensureLegalSource('OSMS_LAW', 'Об обязательном социальном медицинском страховании',
+            'https://www.adilet.zan.kz/rus/docs/Z1500000405', 2017_07_01, 2026_09_03);
 
         ensureStatutoryParameter('MZP', 'Минимальная заработная плата', 'KZT',
             'Минимальный размер заработной платы на соответствующий год');

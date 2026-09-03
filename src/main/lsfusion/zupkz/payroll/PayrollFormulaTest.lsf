@@ -29,7 +29,32 @@ payrollFormulaTest() {
                             summaryNightHours(summary) <- 8.00;
                             summaryOvertimeHours(summary) <- 10.00;
                             summaryHolidayHours(summary) <- 8.00;
-                            calculatePayroll(run);
+                            NEW bonusInput = PayrollInput {
+                                inputPayrollRun(bonusInput) <- run;
+                                inputAssignment(bonusInput) <- assignment;
+                                inputCalculationType(bonusInput) <- calculationTypeByCode('FIXED_BONUS');
+                                inputManualAmount(bonusInput) <- 20000.00;
+                                inputBasis(bonusInput) <- 'Тестовая премия';
+                                NEW allowanceInput = PayrollInput {
+                                    inputPayrollRun(allowanceInput) <- run;
+                                    inputAssignment(allowanceInput) <- assignment;
+                                    inputCalculationType(allowanceInput) <- calculationTypeByCode('PERCENT_ALLOWANCE');
+                                    inputBase(allowanceInput) <- 100000.00;
+                                    inputPercent(allowanceInput) <- 10.000000;
+                                    inputBasis(allowanceInput) <- 'Тестовая надбавка';
+                                    NEW deductionInput = PayrollInput {
+                                        inputPayrollRun(deductionInput) <- run;
+                                        inputAssignment(deductionInput) <- assignment;
+                                        inputCalculationType(deductionInput) <- calculationTypeByCode('OTHER_DEDUCTION');
+                                        inputManualAmount(deductionInput) <- 5000.00;
+                                        inputBasis(deductionInput) <- 'Тестовое удержание';
+                                        NEW unclassifiedInput = PayrollInput {
+                                            inputPayrollRun(unclassifiedInput) <- run;
+                                            inputAssignment(unclassifiedInput) <- assignment;
+                                            inputCalculationType(unclassifiedInput) <- calculationTypeByCode('OTHER_ACCRUAL');
+                                            inputManualAmount(unclassifiedInput) <- 7000.00;
+                                            inputBasis(unclassifiedInput) <- 'Неклассифицированное начисление';
+                                            calculatePayroll(run);
 
                             NEW sickAverage = AverageEarningsDocument {
                                 averageAssignment(sickAverage) <- assignment;
@@ -93,7 +118,15 @@ payrollFormulaTest() {
                                                 specialHoursAdditionalPay(100000.00, 168.00, 10.00, 1.500000),
                                 documentLineCount = payrollLineCount(run),
                                 documentAccrued = totalAccrued(run),
+                                documentDeducted = totalDeducted(run),
                                 documentPayable = totalPayable(run),
+                                fixedBonusAmount = inputAmount(bonusInput),
+                                percentAllowanceAmount = inputAmount(allowanceInput),
+                                manualDeductionAmount = inputAmount(deductionInput),
+                                unclassifiedAccrualAmount = inputAmount(unclassifiedInput),
+                                ipnAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.ipn),
+                                opvAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.opv),
+                                osmsAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.employeeOsms),
                                 averageDaily = averageDailyEarnings(1200000.00, 246.00),
                                 averageHourly = averageHourlyEarnings(1200000.00, 1968.00),
                                 averagePayDays = averagePayByDays(1200000.00, 246.00, 10.00),
@@ -133,6 +166,10 @@ payrollFormulaTest() {
                                                     }
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            }
                                         }
                                     }
                                 }

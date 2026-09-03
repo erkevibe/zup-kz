@@ -3,7 +3,8 @@ MODULE ZUPKZ;
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
-        PayrollRecalculation, HRLeave, PayrollSickLeave, PayrollInterimPayment;
+        PayrollRecalculation, HRLeave, PayrollSickLeave, PayrollInterimPayment,
+        PayrollAssessmentBase;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -47,7 +48,9 @@ NAVIGATOR {
         NEW payrollRules;
         NEW payrollRuns;
         NEW payrollTimeSummaries;
+        NEW payrollInputs;
         NEW payrollLines;
+        NEW calculationBaseRules;
         NEW averageEarningsDocuments;
         NEW averageEarningsBaseLines;
         NEW payrollRecalculations;
