@@ -40,6 +40,12 @@ payrollAssessmentBase 'Расчётная база' (PayrollRun run, AssessmentB
     IF linePayrollRun(l) == run AND
        calculationCategory(lineCalculationType(l)) == CalculationCategory.accrual AND
        includedInAssessmentBase(lineCalculationType(l), kind, payrollPeriodTo(run));
+payrollAssessmentBase(PayrollRun run, Employee worker, AssessmentBaseKind kind) =
+    GROUP SUM calculationAmount(PayrollLine l)
+    IF linePayrollRun(l) == run AND
+       employee(employment(linePayrollAssignment(l))) == worker AND
+       calculationCategory(lineCalculationType(l)) == CalculationCategory.accrual AND
+       includedInAssessmentBase(lineCalculationType(l), kind, payrollPeriodTo(run));
 
 baseRuleByPeriod(CalculationType type, AssessmentBaseKind kind, DATE dateFrom) =
     GROUP AGGR CalculationBaseRule r BY baseRuleCalculationType(r), baseRuleKind(r), baseRuleValidFrom(r);

@@ -7,6 +7,7 @@ NAMESPACE ZUPKZ;
 payrollFormulaTest() {
     NEW org = Organization {
         NEW worker = Employee {
+            birthDate(worker) <- 1990_01_01;
             NEW contract = Employment {
                 employee(contract) <- worker;
                 organization(contract) <- org;
@@ -55,6 +56,10 @@ payrollFormulaTest() {
                                             inputManualAmount(unclassifiedInput) <- 7000.00;
                                             inputBasis(unclassifiedInput) <- 'Неклассифицированное начисление';
                                             calculatePayroll(run);
+
+                                            NEW socialPayments = SocialPaymentDocument {
+                                                socialPaymentPayrollRun(socialPayments) <- run;
+                                                calculateSocialPayments(socialPayments);
 
                             NEW sickAverage = AverageEarningsDocument {
                                 averageAssignment(sickAverage) <- assignment;
@@ -127,6 +132,28 @@ payrollFormulaTest() {
                                 ipnAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.ipn),
                                 opvAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.opv),
                                 osmsAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.employeeOsms),
+                                opv2026 = totalOpv(socialPayments),
+                                opvr2026 = totalOpvr(socialPayments),
+                                socialContribution2026 = totalSo(socialPayments),
+                                employeeOsms2026 = totalVosms(socialPayments),
+                                employerOsms2026 = totalOosms(socialPayments),
+                                payableBeforeIpn = payableAfterSocialPayments(socialPayments),
+                                maximumOpv2026 = socialPaymentAmount(socialCappedBase(5000000.00, 4250000.00),
+                                                                     10.000000),
+                                maximumOpvr2026 = socialPaymentAmount(socialBoundedBase(5000000.00,
+                                                                                        85000.00, 4250000.00),
+                                                                      3.500000),
+                                minimumOpvr2026 = socialPaymentAmount(socialBoundedBase(50000.00,
+                                                                                        85000.00, 4250000.00),
+                                                                      3.500000),
+                                maximumSocialContribution2026 = socialPaymentAmount(
+                                    socialBoundedBase(4575000.00, 85000.00, 595000.00), 5.000000),
+                                minimumSocialContribution2026 = socialPaymentAmount(
+                                    socialBoundedBase(45000.00, 85000.00, 595000.00), 5.000000),
+                                maximumEmployeeOsms2026 = socialPaymentAmount(
+                                    socialCappedBase(5000000.00, 1700000.00), 2.000000),
+                                maximumEmployerOsms2026 = socialPaymentAmount(
+                                    socialCappedBase(5000000.00, 3400000.00), 3.000000),
                                 averageDaily = averageDailyEarnings(1200000.00, 246.00),
                                 averageHourly = averageHourlyEarnings(1200000.00, 1968.00),
                                 averagePayDays = averagePayByDays(1200000.00, 246.00, 10.00),
@@ -170,6 +197,7 @@ payrollFormulaTest() {
                                     }
                                 }
                             }
+                                            }
                                         }
                                     }
                                 }

@@ -139,6 +139,18 @@ loadBaselineLegalParameters() {
             'Статья 110 Трудового кодекса РК');
         ensureStatutoryParameter('SICK_LEAVE_MONTHLY_CAP_MRP', 'Лимит больничного за месяц', 'MRP',
             'Статья 133 Трудового кодекса РК: предел пособия за календарный месяц');
+        ensureStatutoryParameter('OPV_RATE', 'Ставка ОПВ', 'percent', 'Обязательные пенсионные взносы работника');
+        ensureStatutoryParameter('OPV_MAX_MZP', 'Максимальная база ОПВ', 'MZP', 'Предел месячного дохода для ОПВ');
+        ensureStatutoryParameter('OPVR_RATE', 'Ставка ОПВР', 'percent', 'Обязательные пенсионные взносы работодателя');
+        ensureStatutoryParameter('OPVR_MIN_MZP', 'Минимальная база ОПВР', 'MZP', 'Минимальная месячная база ОПВР');
+        ensureStatutoryParameter('OPVR_MAX_MZP', 'Максимальная база ОПВР', 'MZP', 'Максимальная месячная база ОПВР');
+        ensureStatutoryParameter('SO_RATE', 'Ставка социальных отчислений', 'percent', 'Социальные отчисления работодателя');
+        ensureStatutoryParameter('SO_MIN_MZP', 'Минимальная база СО', 'MZP', 'Минимальная месячная база социальных отчислений');
+        ensureStatutoryParameter('SO_MAX_MZP', 'Максимальная база СО', 'MZP', 'Максимальная месячная база социальных отчислений');
+        ensureStatutoryParameter('VOSMS_RATE', 'Ставка взносов ОСМС', 'percent', 'Взносы работника на ОСМС');
+        ensureStatutoryParameter('VOSMS_MAX_MZP', 'Максимальная база ВОСМС', 'MZP', 'Максимальная месячная база взносов ОСМС');
+        ensureStatutoryParameter('OOSMS_RATE', 'Ставка отчислений ОСМС', 'percent', 'Отчисления работодателя на ОСМС');
+        ensureStatutoryParameter('OOSMS_MAX_MZP', 'Максимальная база ООСМС', 'MZP', 'Максимальная месячная база отчислений ОСМС');
 
         ensureStatutoryValue(statutoryParameterByCode('MZP'), 2026_01_01, 2026_12_31,
             85000.000000, legalSourceByCode('BUDGET_2026_2028'), 'Закон о республиканском бюджете');
@@ -152,6 +164,30 @@ loadBaselineLegalParameters() {
             1.500000, legalSourceByCode('LABOR_CODE_KZ'), 'Не ниже полуторного размера');
         ensureStatutoryValue(statutoryParameterByCode('SICK_LEAVE_MONTHLY_CAP_MRP'), 2023_07_01, NULL,
             25.000000, legalSourceByCode('LABOR_CODE_KZ'), 'С 1 июля 2023 года — 25 МРП за месяц');
+        ensureStatutoryValue(statutoryParameterByCode('OPV_RATE'), 2026_01_01, NULL,
+            10.000000, legalSourceByCode('SOCIAL_CODE_KZ'), 'Статья 249 Социального кодекса');
+        ensureStatutoryValue(statutoryParameterByCode('OPV_MAX_MZP'), 2026_01_01, NULL,
+            50.000000, legalSourceByCode('SOCIAL_CODE_KZ'), 'Максимум 50 МЗП в месяц');
+        ensureStatutoryValue(statutoryParameterByCode('OPVR_RATE'), 2026_01_01, 2026_12_31,
+            3.500000, legalSourceByCode('SOCIAL_CODE_KZ'), 'Ставка ОПВР на 2026 год');
+        ensureStatutoryValue(statutoryParameterByCode('OPVR_MIN_MZP'), 2026_01_01, NULL,
+            1.000000, legalSourceByCode('SOCIAL_CODE_KZ'), 'Минимум 1 МЗП при наличии дохода');
+        ensureStatutoryValue(statutoryParameterByCode('OPVR_MAX_MZP'), 2026_01_01, NULL,
+            50.000000, legalSourceByCode('SOCIAL_CODE_KZ'), 'Максимум 50 МЗП в месяц');
+        ensureStatutoryValue(statutoryParameterByCode('SO_RATE'), 2026_01_01, NULL,
+            5.000000, legalSourceByCode('SOCIAL_CODE_KZ'), 'Ставка социальных отчислений');
+        ensureStatutoryValue(statutoryParameterByCode('SO_MIN_MZP'), 2026_01_01, NULL,
+            1.000000, legalSourceByCode('SOCIAL_CODE_KZ'), 'Минимум 1 МЗП при наличии дохода');
+        ensureStatutoryValue(statutoryParameterByCode('SO_MAX_MZP'), 2026_01_01, NULL,
+            7.000000, legalSourceByCode('SOCIAL_CODE_KZ'), 'Максимум 7 МЗП в месяц');
+        ensureStatutoryValue(statutoryParameterByCode('VOSMS_RATE'), 2026_01_01, NULL,
+            2.000000, legalSourceByCode('OSMS_LAW'), 'Ставка взносов работника');
+        ensureStatutoryValue(statutoryParameterByCode('VOSMS_MAX_MZP'), 2026_01_01, NULL,
+            20.000000, legalSourceByCode('OSMS_LAW'), 'Максимум 20 МЗП в месяц');
+        ensureStatutoryValue(statutoryParameterByCode('OOSMS_RATE'), 2026_01_01, NULL,
+            3.000000, legalSourceByCode('OSMS_LAW'), 'Ставка отчислений работодателя');
+        ensureStatutoryValue(statutoryParameterByCode('OOSMS_MAX_MZP'), 2026_01_01, NULL,
+            40.000000, legalSourceByCode('OSMS_LAW'), 'Максимум 40 МЗП в месяц');
         APPLY;
     }
 }
