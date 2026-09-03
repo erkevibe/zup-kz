@@ -73,6 +73,20 @@ expected = {
     "socialTransferSoAmount2026": Decimal("6680.36"),
     "socialTransferVosmsAmount2026": Decimal("2969.05"),
     "socialTransferOosmsAmount2026": Decimal("4453.57"),
+    "form200LineCount2026": Decimal("3"),
+    "form200Quarter2026": Decimal("1"),
+    "form200TotalAccrued2026": Decimal("155452.38"),
+    "form200TotalIpn2026": Decimal("88.81"),
+    "form200TotalOpv2026": Decimal("14845.24"),
+    "form200TotalSocialTax2026": Decimal("7838.29"),
+    "form200TotalSo2026": Decimal("6680.36"),
+    "form200TotalOosms2026": Decimal("4453.57"),
+    "form200TotalVosms2026": Decimal("2969.05"),
+    "form200TotalOpvr2026": Decimal("5195.83"),
+    "form200JanuaryIpn2026": Decimal("0.00"),
+    "form200FebruaryIpn2026": Decimal("88.81"),
+    "form200JanuarySocialTax2026": Decimal("7838.29"),
+    "form200FebruaryOpv2026": Decimal("14845.24"),
     "ordinaryLowIncomeEnforcementCap": Decimal("29149.00"),
     "protectedLowIncomeEnforcementCap": Decimal("40000.00"),
     "averageDaily": Decimal("4878.048780"),
@@ -117,3 +131,5 @@ assert actual["socialTransferFsmsRecipient2026"] == "ФСМС"
 assert actual["socialTransferPeriod2026"] == "2026-01-01"
 assert actual["socialTransferAccepted2026"] is True
 assert actual["socialTransferEmployeeIin2026"] == "900101300000"
+assert actual["form200DueDate2026"] == "2026-05-15"
+assert actual["form200Accepted2026"] is True

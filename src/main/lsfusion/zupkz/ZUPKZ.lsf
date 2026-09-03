@@ -6,7 +6,7 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         PayrollRecalculation, HRLeave, PayrollSickLeave, PayrollInterimPayment,
         PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax,
         PayrollEnforcement, PayrollSettlement, PayrollPayments,
-        TaxesKZSocialTransferRegisters;
+        TaxesKZSocialTransferRegisters, ReportsKZForm200;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -81,5 +81,10 @@ NAVIGATOR {
         NEW payrollLiabilityLines;
         NEW socialTransferRegisters;
         NEW socialTransferRegisterLines;
+    }
+
+    NEW FOLDER reportsKz 'Отчётность РК' WINDOW toolbar {
+        NEW form200Declarations;
+        NEW form200MonthLines;
     }
 }

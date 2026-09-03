@@ -1,0 +1,261 @@
+MODULE ReportsKZForm200;
+
+REQUIRE TaxesKZSocialTransferRegisters;
+NAMESPACE ZUPKZ;
+
+CLASS Form200Kind 'Вид формы 200.00' {
+    initial 'Первоначальная',
+    additional 'Дополнительная'
+}
+
+CLASS Form200Status 'Статус формы 200.00' {
+    draft 'Черновик',
+    calculated 'Сформирована',
+    approved 'Утверждена',
+    submitted 'Отправлена',
+    accepted 'Принята',
+    rejected 'Не принята'
+}
+
+CLASS Form200QuarterMonth 'Месяц квартала' {
+    first 'I',
+    second 'II',
+    third 'III'
+}
+
+CLASS Form200Declaration 'Декларация 200.00';
+
+form200Organization 'Организация' = DATA Organization (Form200Declaration);
+form200PeriodStart 'Начало квартала' = DATA DATE (Form200Declaration);
+form200Kind 'Вид декларации' = DATA Form200Kind (Form200Declaration);
+form200CorrectionNumber 'Номер корректировки' = DATA INTEGER (Form200Declaration);
+form200Version 'Версия формы' = DATA STRING[30] (Form200Declaration);
+form200Status 'Статус' = DATA Form200Status (Form200Declaration);
+form200CalculatedAt 'Сформирована' = DATA DATETIME (Form200Declaration);
+form200ApprovedAt 'Утверждена' = DATA DATETIME (Form200Declaration);
+form200SubmittedAt 'Отправлена' = DATA DATETIME (Form200Declaration);
+form200AcceptedAt 'Принята' = DATA DATETIME (Form200Declaration);
+form200ExternalId 'Идентификатор КНП' = DATA STRING[100] (Form200Declaration);
+form200ReceiptNumber 'Номер уведомления' = DATA STRING[100] (Form200Declaration);
+form200RejectionReason 'Причина непринятия' = DATA STRING[500] (Form200Declaration);
+
+form200PeriodEnd 'Конец квартала' (Form200Declaration d) =
+    lastDayOfMonth(sumMonth(form200PeriodStart(d), 2));
+form200Year 'Год' (Form200Declaration d) = extractYear(form200PeriodStart(d));
+form200Quarter 'Квартал' (Form200Declaration d) =
+    IF extractMonthNumber(form200PeriodStart(d)) == 1 THEN 1
+    ELSE IF extractMonthNumber(form200PeriodStart(d)) == 4 THEN 2
+    ELSE IF extractMonthNumber(form200PeriodStart(d)) == 7 THEN 3
+    ELSE IF extractMonthNumber(form200PeriodStart(d)) == 10 THEN 4;
+form200DueDate 'Срок представления' (Form200Declaration d) =
+    firstDayOfMonth(sumMonth(form200PeriodEnd(d), 2)) + 14;
+form200Overdue 'Просрочена' (Form200Declaration d) =
+    currentDate() > form200DueDate(d) AND form200Status(d) != Form200Status.accepted;
+validForm200QuarterStart(DATE date) = extractDay(date) == 1 AND
+    (extractMonthNumber(date) == 1 OR extractMonthNumber(date) == 4 OR
+     extractMonthNumber(date) == 7 OR extractMonthNumber(date) == 10);
+
+activeForm200Count(Organization organization, DATE periodStart, Form200Kind kind,
+                   INTEGER correctionNumber) = GROUP SUM 1 IF
+    form200Organization(Form200Declaration d) == organization AND
+    form200PeriodStart(d) == periodStart AND form200Kind(d) == kind AND
+    form200CorrectionNumber(d) == correctionNumber AND
+    form200Status(d) != Form200Status.rejected;
+CONSTRAINT activeForm200Count(Organization organization, DATE periodStart,
+                              Form200Kind kind, INTEGER correctionNumber) > 1
+    MESSAGE 'Декларация этого вида и номера корректировки уже существует';
+
+CLASS Form200MonthLine 'Месячные показатели формы 200.00';
+
+form200LineDeclaration 'Декларация' = DATA Form200Declaration (Form200MonthLine);
+form200LineQuarterMonth 'Месяц квартала' = DATA Form200QuarterMonth (Form200MonthLine);
+form200LineMonth 'Расчётный месяц' = DATA DATE (Form200MonthLine);
+form200LineEmployeeCount 'Численность работников' = DATA INTEGER (Form200MonthLine);
+form200LineAccruedIncome '200.01.001 Начисленный доход' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineIpn '200.00.001 ИПН' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineOpv '200.00.002 ОПВ' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineSocialTax '200.00.005 Социальный налог' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineSo '200.00.008 Социальные отчисления' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineOosms '200.00.010 Отчисления ОСМС' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineVosms '200.00.011 Взносы ОСМС' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineOpvr '200.00.013 ОПВР' = DATA NUMERIC[18,2] (Form200MonthLine);
+
+form200Month(Form200Declaration d, Form200QuarterMonth month) =
+    IF month == Form200QuarterMonth.first THEN form200PeriodStart(d)
+    ELSE IF month == Form200QuarterMonth.second THEN sumMonth(form200PeriodStart(d), 1)
+    ELSE IF month == Form200QuarterMonth.third THEN sumMonth(form200PeriodStart(d), 2);
+
+form200AccrualMonth(PayrollSettlementLine line) =
+    firstDayOfMonth(payrollPeriodTo(settlementPayrollRun(line)));
+form200PaymentMonth(PayrollSettlementLine line) =
+    firstDayOfMonth(actualPayrollPaymentDate(settlementPayrollRun(line)));
+form200FinalSettlement(PayrollSettlementLine line, Organization organization) =
+    payrollOrganization(settlementPayrollRun(line)) == organization AND
+    payrollRunStatus(settlementPayrollRun(line)) == PayrollRunStatus.paid;
+
+form200MonthlyEmployee(Employee worker, Organization organization, DATE month) = GROUP MAX 1 IF
+    settlementEmployee(PayrollSettlementLine line) == worker AND
+    form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyEmployeeCount(Organization organization, DATE month) = GROUP SUM 1
+    IF form200MonthlyEmployee(Employee worker, organization, month);
+form200MonthlyAccrued(Organization organization, DATE month) = GROUP SUM
+    settlementAccrued(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyIpn(Organization organization, DATE month) = GROUP SUM
+    settlementIpn(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200PaymentMonth(line) == month;
+form200MonthlyOpv(Organization organization, DATE month) = GROUP SUM
+    settlementOpv(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200PaymentMonth(line) == month;
+form200MonthlySocialTax(Organization organization, DATE month) = GROUP SUM
+    settlementSocialTax(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlySo(Organization organization, DATE month) = GROUP SUM
+    settlementSo(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyOosms(Organization organization, DATE month) = GROUP SUM
+    settlementOosms(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200PaymentMonth(line) == month;
+form200MonthlyVosms(Organization organization, DATE month) = GROUP SUM
+    settlementVosms(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200PaymentMonth(line) == month;
+form200MonthlyOpvr(Organization organization, DATE month) = GROUP SUM
+    settlementOpvr(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200QuarterSettlementCount(Organization organization, DATE periodStart) = GROUP SUM 1 IF
+    form200FinalSettlement(PayrollSettlementLine line, organization) AND
+    form200AccrualMonth(line) >= periodStart AND
+    form200AccrualMonth(line) <= lastDayOfMonth(sumMonth(periodStart, 2));
+
+generateForm200 'Сформировать 200.00' (Form200Declaration d) {
+    IF form200Status(d) AND form200Status(d) != Form200Status.draft THEN
+        MESSAGE 'Декларация уже сформирована';
+    ELSE IF NOT form200Organization(d) OR NOT bin(form200Organization(d)) OR
+            length(bin(form200Organization(d))) != 12 THEN
+        MESSAGE 'Выберите организацию с БИН из 12 символов';
+    ELSE IF NOT validForm200QuarterStart(form200PeriodStart(d)) THEN
+        MESSAGE 'Начало периода должно быть первым днём квартала';
+    ELSE IF NOT form200Kind(d) OR NOT form200Version(d) THEN
+        MESSAGE 'Укажите вид и версию формы';
+    ELSE IF form200Kind(d) == Form200Kind.initial AND form200CorrectionNumber(d) != 0 THEN
+        MESSAGE 'Для первоначальной декларации номер корректировки должен быть равен нулю';
+    ELSE IF form200Kind(d) == Form200Kind.additional AND form200CorrectionNumber(d) <= 0 THEN
+        MESSAGE 'Для дополнительной декларации укажите положительный номер корректировки';
+    ELSE IF NOT form200QuarterSettlementCount(form200Organization(d), form200PeriodStart(d)) THEN
+        MESSAGE 'В квартале нет выплаченных закрытых расчётов зарплаты';
+    ELSE {
+        FOR month IS Form200QuarterMonth DO {
+            NEW line = Form200MonthLine {
+                form200LineDeclaration(line) <- d;
+                form200LineQuarterMonth(line) <- month;
+                form200LineMonth(line) <- form200Month(d, month);
+                form200LineEmployeeCount(line) <- form200MonthlyEmployeeCount(
+                    form200Organization(d), form200Month(d, month));
+                form200LineAccruedIncome(line) <- form200MonthlyAccrued(
+                    form200Organization(d), form200Month(d, month));
+                form200LineIpn(line) <- form200MonthlyIpn(
+                    form200Organization(d), form200Month(d, month));
+                form200LineOpv(line) <- form200MonthlyOpv(
+                    form200Organization(d), form200Month(d, month));
+                form200LineSocialTax(line) <- form200MonthlySocialTax(
+                    form200Organization(d), form200Month(d, month));
+                form200LineSo(line) <- form200MonthlySo(
+                    form200Organization(d), form200Month(d, month));
+                form200LineOosms(line) <- form200MonthlyOosms(
+                    form200Organization(d), form200Month(d, month));
+                form200LineVosms(line) <- form200MonthlyVosms(
+                    form200Organization(d), form200Month(d, month));
+                form200LineOpvr(line) <- form200MonthlyOpvr(
+                    form200Organization(d), form200Month(d, month));
+            }
+        }
+        form200Status(d) <- Form200Status.calculated;
+        form200CalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+form200LineCount(Form200Declaration d) = GROUP SUM 1
+    IF form200LineDeclaration(Form200MonthLine line) == d;
+form200LineByMonth(Form200Declaration d, Form200QuarterMonth month) = GROUP AGGR
+    Form200MonthLine line BY form200LineDeclaration(line), form200LineQuarterMonth(line);
+form200TotalAccrued '200.01.001 IV' (Form200Declaration d) = GROUP SUM
+    form200LineAccruedIncome(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalIpn '200.00.001 IV' (Form200Declaration d) = GROUP SUM
+    form200LineIpn(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalOpv '200.00.002 IV' (Form200Declaration d) = GROUP SUM
+    form200LineOpv(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalSocialTax '200.00.005 IV' (Form200Declaration d) = GROUP SUM
+    form200LineSocialTax(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalSo '200.00.008 IV' (Form200Declaration d) = GROUP SUM
+    form200LineSo(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalOosms '200.00.010 IV' (Form200Declaration d) = GROUP SUM
+    form200LineOosms(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalVosms '200.00.011 IV' (Form200Declaration d) = GROUP SUM
+    form200LineVosms(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalOpvr '200.00.013 IV' (Form200Declaration d) = GROUP SUM
+    form200LineOpvr(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+
+approveForm200 'Утвердить 200.00' (Form200Declaration d) {
+    IF form200Status(d) != Form200Status.calculated OR form200LineCount(d) != 3 THEN
+        MESSAGE 'Сначала сформируйте три месячных строки декларации';
+    ELSE {
+        form200Status(d) <- Form200Status.approved;
+        form200ApprovedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+submitForm200 'Отметить отправленной' (Form200Declaration d) {
+    IF form200Status(d) != Form200Status.approved THEN
+        MESSAGE 'Сначала утвердите декларацию';
+    ELSE IF NOT form200ExternalId(d) THEN
+        MESSAGE 'Укажите идентификатор отправки в Кабинет налогоплательщика';
+    ELSE {
+        form200Status(d) <- Form200Status.submitted;
+        form200SubmittedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+acceptForm200 'Подтвердить приём' (Form200Declaration d) {
+    IF form200Status(d) != Form200Status.submitted OR NOT form200ReceiptNumber(d) THEN
+        MESSAGE 'Для принятой декларации укажите номер уведомления';
+    ELSE {
+        form200Status(d) <- Form200Status.accepted;
+        form200AcceptedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+rejectForm200 'Отметить непринятой' (Form200Declaration d) {
+    IF form200Status(d) != Form200Status.submitted OR NOT form200RejectionReason(d) THEN
+        MESSAGE 'Для непринятой декларации укажите причину';
+    ELSE {
+        form200Status(d) <- Form200Status.rejected;
+        APPLY;
+    }
+}
+
+FORM form200Declarations 'Декларации 200.00'
+    OBJECTS d = Form200Declaration
+    PROPERTIES(d) form200Organization, form200PeriodStart, form200PeriodEnd,
+                  form200Year, form200Quarter, form200Kind, form200CorrectionNumber,
+                  form200Version, form200DueDate, form200Overdue, form200Status,
+                  form200CalculatedAt, form200ApprovedAt, form200SubmittedAt,
+                  form200AcceptedAt, form200ExternalId, form200ReceiptNumber,
+                  form200RejectionReason, form200TotalAccrued, form200TotalIpn,
+                  form200TotalOpv, form200TotalSocialTax, form200TotalSo,
+                  form200TotalOosms, form200TotalVosms, form200TotalOpvr
+    PROPERTIES(d) generateForm200, approveForm200, submitForm200, acceptForm200,
+                  rejectForm200
+;
+
+FORM form200MonthLines 'Месячные показатели 200.00'
+    OBJECTS line = Form200MonthLine
+    PROPERTIES(line) form200LineDeclaration, form200LineQuarterMonth,
+                     form200LineMonth, form200LineEmployeeCount,
+                     form200LineAccruedIncome, form200LineIpn, form200LineOpv,
+                     form200LineSocialTax, form200LineSo, form200LineOosms,
+                     form200LineVosms, form200LineOpvr
+;
