@@ -1,6 +1,6 @@
 MODULE ReportsKZForm20005;
 
-REQUIRE ReportsKZForm200;
+REQUIRE ReportsKZForm200, PayrollCivilContract;
 NAMESPACE ZUPKZ;
 
 // Форма 200.05 за 2026 год заполняется нарастающим итогом и представляется
@@ -56,10 +56,24 @@ form20005SettlementIncomeStatus(PayrollSettlementLine line) =
 form20005SourceSettlement(PayrollSettlementLine line, Form200Declaration d) =
     form20005ClosedSettlement(line, d) AND form20005ResidentSettlement(line) AND
     (form20005AccruedInYear(line, d) OR form20005PaidInYear(line, d));
-form20005EmployeeStatusInYear(Employee worker, TaxIncomeStatus status,
-                              Form200Declaration d) = GROUP MAX 1 IF
+form20005PayrollEmployeeStatusInYear(Employee worker, TaxIncomeStatus status,
+                                     Form200Declaration d) = GROUP MAX 1 IF
     settlementEmployee(PayrollSettlementLine line) == worker AND
     form20005SettlementIncomeStatus(line) == status AND form20005SourceSettlement(line, d);
+form20005CivilActInYear(CivilContractAct a, Form200Declaration d) =
+    civilActOrganization(a) == form200Organization(d) AND civilActResident(a) AND
+    (civilActStatus(a) == CivilContractActStatus.approved OR
+     civilActStatus(a) == CivilContractActStatus.paid) AND
+    civilActDate(a) >= form20005YearStart(d) AND civilActDate(a) <= form200PeriodEnd(d);
+form20005CivilActPaidInYear(CivilContractAct a, Form200Declaration d) =
+    civilActStatus(a) == CivilContractActStatus.paid AND
+    civilActPaymentDate(a) >= form20005YearStart(d) AND
+    civilActPaymentDate(a) <= form200PeriodEnd(d);
+form20005CivilEmployeeInYear(Employee worker, Form200Declaration d) = GROUP MAX 1 IF
+    civilActContractor(CivilContractAct a) == worker AND form20005CivilActInYear(a, d);
+form20005EmployeeStatusInYear(Employee worker, TaxIncomeStatus status,
+                              Form200Declaration d) =
+    form20005PayrollEmployeeStatusInYear(worker, status, d);
 form20005StatusSettlement(PayrollSettlementLine line, Form200Declaration d,
                           Employee worker, TaxIncomeStatus status) =
     settlementEmployee(line) == worker AND form20005SettlementIncomeStatus(line) == status AND
@@ -140,12 +154,71 @@ form20005OpvrSource(Form200Declaration d, Employee worker, TaxIncomeStatus statu
     settlementOpvr(PayrollSettlementLine line) IF
     form20005StatusSettlement(line, d, worker, status) AND form20005AccruedInYear(line, d);
 
+form20005CivilAccruedSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActGrossIncome(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d);
+form20005CivilOpvSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActOpv(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d);
+form20005CivilVosmsSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActVosms(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d);
+form20005CivilDeductionSource(Form200Declaration d, Employee worker) = GROUP SUM
+    (civilActBasicDeduction(CivilContractAct a) + civilActSocialDeduction(a)) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d);
+form20005CivilCategorySource(Form200Declaration d, Employee worker) = GROUP LAST
+    civilActCategoryCodes(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d)
+    ORDER civilActDate(a), a;
+form20005CivilAifcSource(Form200Declaration d, Employee worker) = GROUP MAX
+    civilActAifc(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d);
+form20005CivilDivisionSource(Form200Declaration d, Employee worker) = GROUP MAX
+    civilActUnregisteredDivision(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d);
+form20005CivilDeductionCodesSource(Form200Declaration d, Employee worker) = GROUP LAST
+    civilActDeductionCodes(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d)
+    ORDER civilActDate(a), a;
+form20005CivilIpnSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActIpn(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d);
+form20005CivilUnpaidSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActGrossIncome(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d) AND
+    NOT form20005CivilActPaidInYear(a, d);
+form20005CivilPaidSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActGrossIncome(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d) AND
+    form20005CivilActPaidInYear(a, d);
+form20005CivilIpnPayableSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActIpn(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d) AND
+    form20005CivilActPaidInYear(a, d);
+form20005CivilOpvPayableSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActOpv(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d) AND
+    form20005CivilActPaidInYear(a, d);
+form20005CivilVosmsPayableSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActVosms(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d) AND
+    form20005CivilActPaidInYear(a, d);
+form20005CivilSoSource(Form200Declaration d, Employee worker) = GROUP SUM
+    civilActSo(CivilContractAct a) IF
+    civilActContractor(a) == worker AND form20005CivilActInYear(a, d);
+
 form20005LineCount(Form200Declaration d) = GROUP SUM 1 IF
     form20005LineDeclaration(Form20005Line line) == d;
 form20005LineByEmployee(Form200Declaration d, Employee worker) = GROUP AGGR
     Form20005Line line BY form20005LineDeclaration(line), form20005LineEmployee(line);
+form20005LineByEmployeeStatus(Form200Declaration d, Employee worker, INTEGER status) = GROUP AGGR
+    Form20005Line line BY form20005LineDeclaration(line), form20005LineEmployee(line),
+                              form20005LineIncomeStatus(line);
 invalidForm20005EmployeeCount(Form200Declaration d) = GROUP SUM 1 IF
     form20005EmployeeStatusInYear(Employee worker, TaxIncomeStatus status, d) AND
+    (NOT iin(worker) OR length(iin(worker)) != 12 OR NOT lastName(worker) OR NOT firstName(worker));
+invalidForm20005CivilEmployeeCount(Form200Declaration d) = GROUP SUM 1 IF
+    form20005CivilEmployeeInYear(Employee worker, d) AND
     (NOT iin(worker) OR length(iin(worker)) != 12 OR NOT lastName(worker) OR NOT firstName(worker));
 
 generateForm20005 'Сформировать 200.05' (Form200Declaration d) {
@@ -157,7 +230,7 @@ generateForm20005 'Сформировать 200.05' (Form200Declaration d) {
         MESSAGE 'Утверждённую декларацию изменять нельзя';
     ELSE IF form20005LineCount(d) THEN
         MESSAGE 'Форма 200.05 уже сформирована';
-    ELSE IF invalidForm20005EmployeeCount(d) THEN
+    ELSE IF invalidForm20005EmployeeCount(d) OR invalidForm20005CivilEmployeeCount(d) THEN
         MESSAGE 'Для формы 200.05 заполните Ф.И.О. и ИИН сотрудников';
     ELSE {
         FOR form20005EmployeeStatusInYear(Employee worker, TaxIncomeStatus incomeStatus, d) DO {
@@ -169,42 +242,121 @@ generateForm20005 'Сформировать 200.05' (Form200Declaration d) {
                     (IF middleName(worker) THEN ' ' + middleName(worker) ELSE '');
                 form20005LineIin(line) <- iin(worker);
                 form20005LineIncomeStatus(line) <- taxIncomeStatusCode(incomeStatus);
-                form20005LineCategory(line) <- form20005CategorySource(d, worker, incomeStatus);
-                form20005LineAifc(line) <- form20005AifcSource(d, worker, incomeStatus);
+                form20005LineCategory(line) <-
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilCategorySource(d, worker)
+                    ELSE form20005CategorySource(d, worker, incomeStatus);
+                form20005LineAifc(line) <-
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilAifcSource(d, worker)
+                    ELSE form20005AifcSource(d, worker, incomeStatus);
                 form20005LineUnregisteredDivision(line) <-
-                    form20005DivisionSource(d, worker, incomeStatus);
-                form20005LineAccruedIncome(line) <- form20005AccruedSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilDivisionSource(d, worker)
+                    ELSE form20005DivisionSource(d, worker, incomeStatus);
+                form20005LineAccruedIncome(line) <-
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilAccruedSource(d, worker)
+                    ELSE form20005AccruedSource(d, worker, incomeStatus);
                 form20005LineIncomeReduction(line) <- 0.00;
                 form20005LineOpvCalculated(line) <-
-                    form20005OpvCalculatedSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilOpvSource(d, worker)
+                    ELSE form20005OpvCalculatedSource(d, worker, incomeStatus);
                 form20005LineVosmsCalculated(line) <-
-                    form20005VosmsCalculatedSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilVosmsSource(d, worker)
+                    ELSE form20005VosmsCalculatedSource(d, worker, incomeStatus);
                 form20005LineTaxDeductionCodes(line) <-
-                    form20005TaxDeductionCodesSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilDeductionCodesSource(d, worker)
+                    ELSE form20005TaxDeductionCodesSource(d, worker, incomeStatus);
                 form20005LineTaxDeduction(line) <-
-                    form20005TaxDeductionSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilDeductionSource(d, worker)
+                    ELSE form20005TaxDeductionSource(d, worker, incomeStatus);
                 form20005LineIpnCalculated(line) <-
-                    form20005IpnCalculatedSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilIpnSource(d, worker)
+                    ELSE form20005IpnCalculatedSource(d, worker, incomeStatus);
                 form20005LineUnpaidIncome(line) <-
-                    form20005UnpaidIncomeSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilUnpaidSource(d, worker)
+                    ELSE form20005UnpaidIncomeSource(d, worker, incomeStatus);
                 form20005LinePaidIncome(line) <-
-                    form20005PaidIncomeSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilPaidSource(d, worker)
+                    ELSE form20005PaidIncomeSource(d, worker, incomeStatus);
                 form20005LineIpnPayable(line) <-
-                    form20005IpnPayableSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilIpnPayableSource(d, worker)
+                    ELSE form20005IpnPayableSource(d, worker, incomeStatus);
                 form20005LineOpvPayable(line) <-
-                    form20005OpvPayableSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilOpvPayableSource(d, worker)
+                    ELSE form20005OpvPayableSource(d, worker, incomeStatus);
                 form20005LineVosmsPayable(line) <-
-                    form20005VosmsPayableSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilVosmsPayableSource(d, worker)
+                    ELSE form20005VosmsPayableSource(d, worker, incomeStatus);
                 form20005LineSocialTaxIncome(line) <-
-                    form20005SocialTaxIncomeSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN 0.00
+                    ELSE form20005SocialTaxIncomeSource(d, worker, incomeStatus);
                 form20005LineSocialTaxCalculated(line) <-
-                    form20005SocialTaxSource(d, worker, incomeStatus);
-                form20005LineSo(line) <- form20005SoSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN 0.00
+                    ELSE form20005SocialTaxSource(d, worker, incomeStatus);
+                form20005LineSo(line) <-
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN
+                        form20005CivilSoSource(d, worker)
+                    ELSE form20005SoSource(d, worker, incomeStatus);
                 form20005LineSocialTaxPayable(line) <-
-                    form20005SocialTaxSource(d, worker, incomeStatus);
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN 0.00
+                    ELSE form20005SocialTaxSource(d, worker, incomeStatus);
                 form20005LineOppv(line) <- 0.00;
-                form20005LineOosms(line) <- form20005OosmsSource(d, worker, incomeStatus);
-                form20005LineOpvr(line) <- form20005OpvrSource(d, worker, incomeStatus);
+                form20005LineOosms(line) <-
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN 0.00
+                    ELSE form20005OosmsSource(d, worker, incomeStatus);
+                form20005LineOpvr(line) <-
+                    IF incomeStatus == TaxIncomeStatus.civilContract THEN 0.00
+                    ELSE form20005OpvrSource(d, worker, incomeStatus);
+                form20005LineCountryCode(line) <-
+                    IF citizenshipCode(worker) != 'KZ' THEN citizenshipCode(worker);
+            }
+        }
+        FOR form20005CivilEmployeeInYear(Employee worker, d) DO {
+            NEW line = Form20005Line {
+                form20005LineDeclaration(line) <- d;
+                form20005LineEmployee(line) <- worker;
+                form20005LineNumber(line) <- form20005LineCount(d) + 1;
+                form20005LineName(line) <- lastName(worker) + ' ' + firstName(worker) +
+                    (IF middleName(worker) THEN ' ' + middleName(worker) ELSE '');
+                form20005LineIin(line) <- iin(worker);
+                form20005LineIncomeStatus(line) <-
+                    taxIncomeStatusCode(TaxIncomeStatus.civilContract);
+                form20005LineCategory(line) <- form20005CivilCategorySource(d, worker);
+                form20005LineAifc(line) <- form20005CivilAifcSource(d, worker);
+                form20005LineUnregisteredDivision(line) <-
+                    form20005CivilDivisionSource(d, worker);
+                form20005LineAccruedIncome(line) <- form20005CivilAccruedSource(d, worker);
+                form20005LineIncomeReduction(line) <- 0.00;
+                form20005LineOpvCalculated(line) <- form20005CivilOpvSource(d, worker);
+                form20005LineVosmsCalculated(line) <- form20005CivilVosmsSource(d, worker);
+                form20005LineTaxDeductionCodes(line) <-
+                    form20005CivilDeductionCodesSource(d, worker);
+                form20005LineTaxDeduction(line) <- form20005CivilDeductionSource(d, worker);
+                form20005LineIpnCalculated(line) <- form20005CivilIpnSource(d, worker);
+                form20005LineUnpaidIncome(line) <- form20005CivilUnpaidSource(d, worker);
+                form20005LinePaidIncome(line) <- form20005CivilPaidSource(d, worker);
+                form20005LineIpnPayable(line) <- form20005CivilIpnPayableSource(d, worker);
+                form20005LineOpvPayable(line) <- form20005CivilOpvPayableSource(d, worker);
+                form20005LineVosmsPayable(line) <- form20005CivilVosmsPayableSource(d, worker);
+                form20005LineSocialTaxIncome(line) <- 0.00;
+                form20005LineSocialTaxCalculated(line) <- 0.00;
+                form20005LineSo(line) <- form20005CivilSoSource(d, worker);
+                form20005LineSocialTaxPayable(line) <- 0.00;
+                form20005LineOppv(line) <- 0.00;
+                form20005LineOosms(line) <- 0.00;
+                form20005LineOpvr(line) <- 0.00;
                 form20005LineCountryCode(line) <-
                     IF citizenshipCode(worker) != 'KZ' THEN citizenshipCode(worker);
             }

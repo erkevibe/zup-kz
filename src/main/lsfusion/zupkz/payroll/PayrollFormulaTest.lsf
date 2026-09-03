@@ -19,6 +19,40 @@ payrollFormulaTest() {
             salaryBankName(worker) <- 'Тестовый банк';
             salaryBankBic(worker) <- 'TESTKZKA';
             salaryIban(worker) <- 'KZ000000000000000002';
+            NEW contractor = Employee {
+                iin(contractor) <- '920202300000';
+                lastName(contractor) <- 'Тестов';
+                firstName(contractor) <- 'Исполнитель';
+                birthDate(contractor) <- 1992_02_02;
+                citizenshipCode(contractor) <- 'KZ';
+                NEW contractorTaxProfile = EmployeeTaxProfile {
+                    taxProfileOrganization(contractorTaxProfile) <- org;
+                    taxProfileEmployee(contractorTaxProfile) <- contractor;
+                    taxProfileValidFrom(contractorTaxProfile) <- 2026_01_01;
+                    taxProfileResident(contractorTaxProfile) <- TRUE;
+                    taxProfileIncomeStatus(contractorTaxProfile) <- TaxIncomeStatus.civilContract;
+                    taxProfileBasicDeduction(contractorTaxProfile) <- NULL;
+                    taxProfileSocialDeduction(contractorTaxProfile) <- IpnSocialDeductionKind.none;
+                    NEW civilContract = CivilContract {
+                        civilContractOrganization(civilContract) <- org;
+                        civilContractContractor(civilContract) <- contractor;
+                        civilContractNumber(civilContract) <- 'GPH-2026-01';
+                        civilContractDate(civilContract) <- 2026_01_10;
+                        civilContractFrom(civilContract) <- 2026_01_10;
+                        civilContractTo(civilContract) <- 2026_01_31;
+                        civilContractSubject(civilContract) <- 'Тестовые консультационные услуги';
+                        civilContractAmount(civilContract) <- 1000000.00;
+                        civilContractStatus(civilContract) <- CivilContractStatus.active;
+                        NEW civilAct = CivilContractAct {
+                            civilActContract(civilAct) <- civilContract;
+                            civilActNumber(civilAct) <- 'ACT-2026-01';
+                            civilActDate(civilAct) <- 2026_01_31;
+                            civilActGrossIncome(civilAct) <- 1000000.00;
+                            calculateCivilAct(civilAct);
+                            approveCivilAct(civilAct);
+                            civilActPaymentDate(civilAct) <- 2026_02_12;
+                            civilActPaymentReference(civilAct) <- 'GPH-PAY-2026-01';
+                            markCivilActPaid(civilAct);
             NEW contract = Employment {
                 employee(contract) <- worker;
                 organization(contract) <- org;
@@ -438,6 +472,33 @@ payrollFormulaTest() {
                                     form20005LineByEmployee(form200Annual, worker)),
                                 form20005Opvr2026 = form20005LineOpvr(
                                     form20005LineByEmployee(form200Annual, worker)),
+                                civilActOpv2026 = civilActOpv(civilAct),
+                                civilActVosms2026 = civilActVosms(civilAct),
+                                civilActSoBase2026 = civilActSoBase(civilAct),
+                                civilActSo2026 = civilActSo(civilAct),
+                                civilActTaxableIncome2026 = civilActTaxableIncome(civilAct),
+                                civilActIpn2026 = civilActIpn(civilAct),
+                                civilActPayable2026 = civilActPayable(civilAct),
+                                civilActPaid2026 = civilActStatus(civilAct) ==
+                                    CivilContractActStatus.paid,
+                                form20005CivilStatus2026 = form20005LineIncomeStatus(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                form20005CivilAccrued2026 = form20005LineAccruedIncome(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                form20005CivilOpv2026 = form20005LineOpvCalculated(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                form20005CivilVosms2026 = form20005LineVosmsCalculated(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                form20005CivilIpn2026 = form20005LineIpnCalculated(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                form20005CivilSo2026 = form20005LineSo(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                form20005CivilPaidIncome2026 = form20005LinePaidIncome(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                form20005CivilOosms2026 = form20005LineOosms(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                form20005CivilOpvr2026 = form20005LineOpvr(
+                                    form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
                                 ordinaryLowIncomeEnforcementCap = taxMinimum(
                                     socialPaymentAmount(80000.00, 50.000000),
                                     taxPositive(80000.00 - 50851.00)),
@@ -506,6 +567,10 @@ payrollFormulaTest() {
                 }
             }
         }
+    }
+    }
+    }
+    }
     }
     }
     }

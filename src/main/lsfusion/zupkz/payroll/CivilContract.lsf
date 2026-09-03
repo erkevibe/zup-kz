@@ -1,0 +1,281 @@
+MODULE PayrollCivilContract;
+
+REQUIRE TaxesKZIncomeTax;
+NAMESPACE ZUPKZ;
+
+// Договор ГПХ — самостоятельный источник дохода физического лица. Он не
+// создаёт трудовые отношения и не использует кадровое назначение/табель.
+CLASS CivilContractStatus 'Статус договора ГПХ' {
+    draft 'Черновик',
+    active 'Действует',
+    closed 'Закрыт',
+    cancelled 'Отменён'
+}
+
+CLASS CivilContract 'Договор ГПХ';
+
+civilContractOrganization 'Организация' = DATA Organization (CivilContract);
+civilContractContractor 'Исполнитель' = DATA Employee (CivilContract);
+civilContractNumber 'Номер договора' = DATA STRING[50] (CivilContract);
+civilContractDate 'Дата договора' = DATA DATE (CivilContract);
+civilContractFrom 'Начало работ' = DATA DATE (CivilContract);
+civilContractTo 'Окончание работ' = DATA DATE (CivilContract);
+civilContractSubject 'Предмет договора' = DATA STRING[500] (CivilContract);
+civilContractAmount 'Сумма договора' = DATA NUMERIC[18,2] (CivilContract);
+civilContractStatus 'Статус' = DATA CivilContractStatus (CivilContract);
+
+CONSTRAINT civilContractTo(CivilContract c) < civilContractFrom(c)
+    MESSAGE 'Окончание договора ГПХ не может быть раньше начала';
+
+CLASS CivilContractActStatus 'Статус акта ГПХ' {
+    draft 'Черновик',
+    calculated 'Рассчитан',
+    approved 'Утверждён',
+    paid 'Выплачен',
+    cancelled 'Отменён'
+}
+
+CLASS CivilContractAct 'Акт выполненных работ ГПХ';
+
+civilActContract 'Договор' = DATA CivilContract (CivilContractAct);
+civilActNumber 'Номер акта' = DATA STRING[50] (CivilContractAct);
+civilActDate 'Дата акта' = DATA DATE (CivilContractAct);
+civilActGrossIncome 'Начисленный доход' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActStatus 'Статус' = DATA CivilContractActStatus (CivilContractAct);
+civilActCalculatedAt 'Рассчитан' = DATA DATETIME (CivilContractAct);
+civilActApprovedAt 'Утверждён' = DATA DATETIME (CivilContractAct);
+civilActPaymentDate 'Дата выплаты' = DATA DATE (CivilContractAct);
+civilActPaymentReference 'Платёжный документ' = DATA STRING[100] (CivilContractAct);
+civilActPaidAt 'Выплачен' = DATA DATETIME (CivilContractAct);
+
+// Снимок законодательства и результата защищает уже утверждённый расчёт от
+// последующего изменения ставок в справочнике.
+civilActResident 'Налоговый резидент' = DATA BOOLEAN (CivilContractAct);
+civilActCategoryCodes 'Категории 200.05' = DATA STRING[30] (CivilContractAct);
+civilActAifc 'МФЦА' = DATA BOOLEAN (CivilContractAct);
+civilActUnregisteredDivision 'Структурное подразделение' = DATA BOOLEAN (CivilContractAct);
+civilActOpvBase 'База ОПВ' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActOpv 'ОПВ' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActVosmsBase 'База ВОСМС' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActVosms 'ВОСМС' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActSoBase 'База СО' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActSo 'Социальные отчисления' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActBasicDeduction 'Базовый вычет ИПН' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActSocialDeduction 'Социальный вычет ИПН' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActDeductionCodes 'Коды вычетов 200.05' = DATA STRING[10] (CivilContractAct);
+civilActTaxableIncome 'Облагаемый доход ИПН' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActIpnThreshold 'Годовой порог ИПН' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActIpnBaseRate 'Базовая ставка ИПН, %' = DATA NUMERIC[18,6] (CivilContractAct);
+civilActIpnHighRate 'Повышенная ставка ИПН, %' = DATA NUMERIC[18,6] (CivilContractAct);
+civilActIpn 'ИПН' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActPayable 'К выплате' = DATA NUMERIC[18,2] (CivilContractAct);
+civilActTaxLedgerEntry 'Запись регистра ИПН' = DATA PersonalTaxLedgerEntry (CivilContractAct);
+
+civilActOrganization(CivilContractAct a) = civilContractOrganization(civilActContract(a));
+civilActContractor(CivilContractAct a) = civilContractContractor(civilActContract(a));
+civilActTaxProfile(CivilContractAct a) =
+    employeeTaxProfileOn(civilActOrganization(a), civilActContractor(a), civilActDate(a));
+civilActSocialProfile(CivilContractAct a) =
+    socialPaymentProfileOn(civilActOrganization(a), civilActContractor(a), civilActDate(a));
+civilActMZP(CivilContractAct a) =
+    numericStatutoryValueOn(statutoryParameterByCode('MZP'), civilActDate(a));
+civilActMRP(CivilContractAct a) =
+    numericStatutoryValueOn(statutoryParameterByCode('MRP'), civilActDate(a));
+civilActParameter(CivilContractAct a, STRING[50] code) =
+    numericStatutoryValueOn(statutoryParameterByCode(code), civilActDate(a));
+
+calculatedCivilActOpvBase(CivilContractAct a) = socialCappedBase(
+    civilActGrossIncome(a), civilActMZP(a) * civilActParameter(a, 'OPV_MAX_MZP'));
+calculatedCivilActOpv(CivilContractAct a) =
+    IF socialProfileOpvExempt(civilActSocialProfile(a)) THEN 0.00
+    ELSE socialPaymentAmount(calculatedCivilActOpvBase(a), civilActParameter(a, 'OPV_RATE'));
+calculatedCivilActVosmsBase(CivilContractAct a) = socialCappedBase(
+    civilActGrossIncome(a), civilActMZP(a) * civilActParameter(a, 'VOSMS_MAX_MZP'));
+calculatedCivilActVosms(CivilContractAct a) =
+    IF socialProfileVosmsExempt(civilActSocialProfile(a)) THEN 0.00
+    ELSE socialPaymentAmount(calculatedCivilActVosmsBase(a), civilActParameter(a, 'VOSMS_RATE'));
+calculatedCivilActSoBase(CivilContractAct a) = socialCappedBase(
+    taxPositive(civilActGrossIncome(a) - civilActOpv(a)),
+    civilActMZP(a) * civilActParameter(a, 'SO_MAX_MZP'));
+calculatedCivilActSo(CivilContractAct a) =
+    IF socialProfileSoExempt(civilActSocialProfile(a)) THEN 0.00
+    ELSE socialPaymentAmount(calculatedCivilActSoBase(a), civilActParameter(a, 'SO_RATE'));
+
+civilActIncomeAfterSocialPayments(CivilContractAct a) = taxPositive(
+    civilActGrossIncome(a) - civilActOpv(a) - civilActVosms(a) - civilActSo(a));
+civilActPriorBasicDeduction(CivilContractAct a) = GROUP SUM
+    taxLedgerBasicDeduction(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == civilActOrganization(a) AND
+    taxLedgerEmployee(e) == civilActContractor(a) AND
+    extractYear(taxLedgerDate(e)) == extractYear(civilActDate(a)) AND
+    taxLedgerDate(e) <= civilActDate(a);
+civilActBasicAvailable(CivilContractAct a) = taxPositive(
+    civilActMRP(a) * civilActParameter(a, 'IPN_BASIC_ANNUAL_MRP') -
+    (IF civilActPriorBasicDeduction(a) THEN civilActPriorBasicDeduction(a) ELSE 0.00));
+calculatedCivilActBasicDeduction(CivilContractAct a) =
+    IF taxProfileBasicDeduction(civilActTaxProfile(a)) THEN
+        taxMinimum(civilActIncomeAfterSocialPayments(a),
+            taxMinimum(civilActMRP(a) * civilActParameter(a, 'IPN_BASIC_MONTHLY_MRP'),
+                       civilActBasicAvailable(a)))
+    ELSE 0.00;
+
+civilActSocialLimit(CivilContractAct a) =
+    IF taxProfileSocialDeduction(civilActTaxProfile(a)) ==
+            IpnSocialDeductionKind.disabilityOneTwo THEN
+        civilActMRP(a) * civilActParameter(a, 'IPN_SOCIAL_DISABILITY_MRP')
+    ELSE IF taxProfileSocialDeduction(civilActTaxProfile(a)) ==
+                 IpnSocialDeductionKind.protectedCategory OR
+            taxProfileSocialDeduction(civilActTaxProfile(a)) ==
+                 IpnSocialDeductionKind.protectedDependent THEN
+        civilActMRP(a) * civilActParameter(a, 'IPN_SOCIAL_STANDARD_MRP')
+    ELSE 0.00;
+civilActPriorSocialDeduction(CivilContractAct a) = GROUP SUM
+    taxLedgerSocialDeduction(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == civilActOrganization(a) AND
+    taxLedgerEmployee(e) == civilActContractor(a) AND
+    extractYear(taxLedgerDate(e)) == extractYear(civilActDate(a)) AND
+    taxLedgerDate(e) <= civilActDate(a);
+civilActSocialAvailable(CivilContractAct a) = taxPositive(
+    civilActSocialLimit(a) -
+    (IF civilActPriorSocialDeduction(a) THEN civilActPriorSocialDeduction(a) ELSE 0.00));
+calculatedCivilActSocialDeduction(CivilContractAct a) = taxMinimum(
+    taxPositive(civilActIncomeAfterSocialPayments(a) - calculatedCivilActBasicDeduction(a)),
+    civilActSocialAvailable(a));
+calculatedCivilActTaxableIncome(CivilContractAct a) = taxPositive(
+    civilActIncomeAfterSocialPayments(a) - calculatedCivilActBasicDeduction(a) -
+    calculatedCivilActSocialDeduction(a));
+civilActPriorTaxableIncome(CivilContractAct a) = GROUP SUM
+    taxLedgerTaxableIncome(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == civilActOrganization(a) AND
+    taxLedgerEmployee(e) == civilActContractor(a) AND
+    extractYear(taxLedgerDate(e)) == extractYear(civilActDate(a)) AND
+    taxLedgerDate(e) <= civilActDate(a);
+calculatedCivilActIpn(CivilContractAct a) = progressiveIpn(
+    (IF civilActPriorTaxableIncome(a) THEN civilActPriorTaxableIncome(a) ELSE 0.00) +
+        civilActTaxableIncome(a),
+    civilActIpnThreshold(a), civilActIpnBaseRate(a), civilActIpnHighRate(a)) -
+    (IF progressiveIpn(civilActPriorTaxableIncome(a),
+                       civilActIpnThreshold(a), civilActIpnBaseRate(a),
+                       civilActIpnHighRate(a)) THEN
+         progressiveIpn(civilActPriorTaxableIncome(a),
+                        civilActIpnThreshold(a), civilActIpnBaseRate(a),
+                        civilActIpnHighRate(a))
+     ELSE 0.00);
+calculatedCivilActPayable(CivilContractAct a) = civilActGrossIncome(a) -
+    civilActOpv(a) - civilActVosms(a) - civilActSo(a) - civilActIpn(a);
+
+duplicateCivilActCount(CivilContractAct a) = GROUP SUM 1 IF
+    civilActContract(CivilContractAct other) == civilActContract(a) AND
+    civilActNumber(other) == civilActNumber(a);
+
+calculateCivilAct 'Рассчитать акт' (CivilContractAct a) {
+    IF civilActStatus(a) AND civilActStatus(a) != CivilContractActStatus.draft THEN
+        MESSAGE 'Акт уже рассчитан';
+    ELSE IF NOT civilActContract(a) OR
+            civilContractStatus(civilActContract(a)) != CivilContractStatus.active OR
+            NOT civilActNumber(a) OR NOT civilActDate(a) OR civilActGrossIncome(a) <= 0.00 THEN
+        MESSAGE 'Укажите действующий договор, номер, дату и положительную сумму акта';
+    ELSE IF duplicateCivilActCount(a) > 1 THEN
+        MESSAGE 'Номер акта должен быть уникален в пределах договора';
+    ELSE IF civilActDate(a) < civilContractFrom(civilActContract(a)) OR
+            civilActDate(a) > civilContractTo(civilActContract(a)) THEN
+        MESSAGE 'Дата акта должна входить в срок договора';
+    ELSE IF NOT iin(civilActContractor(a)) OR length(iin(civilActContractor(a))) != 12 THEN
+        MESSAGE 'Заполните ИИН исполнителя (12 цифр)';
+    ELSE IF NOT taxProfileResident(civilActTaxProfile(a)) THEN
+        MESSAGE 'Текущий расчёт ГПХ поддерживает налоговых резидентов РК';
+    ELSE {
+        civilActResident(a) <- TRUE;
+        civilActCategoryCodes(a) <- taxProfileCategoryCodes(civilActTaxProfile(a));
+        civilActAifc(a) <- taxProfileAifc(civilActTaxProfile(a));
+        civilActUnregisteredDivision(a) <-
+            taxProfileUnregisteredDivision(civilActTaxProfile(a));
+        civilActOpvBase(a) <- calculatedCivilActOpvBase(a);
+        civilActOpv(a) <-
+            IF socialProfileOpvExempt(civilActSocialProfile(a)) THEN 0.00
+            ELSE socialPaymentAmount(civilActOpvBase(a), civilActParameter(a, 'OPV_RATE'));
+        civilActVosmsBase(a) <- calculatedCivilActVosmsBase(a);
+        civilActVosms(a) <-
+            IF socialProfileVosmsExempt(civilActSocialProfile(a)) THEN 0.00
+            ELSE socialPaymentAmount(civilActVosmsBase(a), civilActParameter(a, 'VOSMS_RATE'));
+        civilActSoBase(a) <- calculatedCivilActSoBase(a);
+        civilActSo(a) <-
+            IF socialProfileSoExempt(civilActSocialProfile(a)) THEN 0.00
+            ELSE socialPaymentAmount(civilActSoBase(a), civilActParameter(a, 'SO_RATE'));
+        civilActBasicDeduction(a) <- calculatedCivilActBasicDeduction(a);
+        civilActSocialDeduction(a) <- calculatedCivilActSocialDeduction(a);
+        civilActDeductionCodes(a) <-
+            (IF calculatedCivilActBasicDeduction(a) > 0.00 THEN '1' ELSE '') +
+            (IF calculatedCivilActSocialDeduction(a) > 0.00 THEN
+                (IF calculatedCivilActBasicDeduction(a) > 0.00 THEN ',' ELSE '') +
+                (IF taxProfileSocialDeduction(civilActTaxProfile(a)) ==
+                        IpnSocialDeductionKind.disabilityOneTwo THEN '2'
+                 ELSE IF taxProfileSocialDeduction(civilActTaxProfile(a)) ==
+                        IpnSocialDeductionKind.protectedDependent THEN '4' ELSE '3')
+             ELSE '');
+        civilActTaxableIncome(a) <- calculatedCivilActTaxableIncome(a);
+        civilActIpnThreshold(a) <-
+            civilActMRP(a) * civilActParameter(a, 'IPN_THRESHOLD_MRP');
+        civilActIpnBaseRate(a) <- civilActParameter(a, 'IPN_BASE_RATE');
+        civilActIpnHighRate(a) <- civilActParameter(a, 'IPN_HIGH_RATE');
+        civilActIpn(a) <- calculatedCivilActIpn(a);
+        civilActPayable(a) <- calculatedCivilActPayable(a);
+        NEW e = PersonalTaxLedgerEntry {
+            taxLedgerOrganization(e) <- civilActOrganization(a);
+            taxLedgerEmployee(e) <- civilActContractor(a);
+            taxLedgerDate(e) <- civilActDate(a);
+            taxLedgerBasicDeduction(e) <- civilActBasicDeduction(a);
+            taxLedgerSocialDeduction(e) <- civilActSocialDeduction(a);
+            taxLedgerTaxableIncome(e) <- civilActTaxableIncome(a);
+            taxLedgerIpn(e) <- civilActIpn(a);
+            civilActTaxLedgerEntry(a) <- e;
+        }
+        civilActStatus(a) <- CivilContractActStatus.calculated;
+        civilActCalculatedAt(a) <- currentDateTime();
+        APPLY;
+    }
+}
+
+approveCivilAct 'Утвердить акт' (CivilContractAct a) {
+    IF civilActStatus(a) == CivilContractActStatus.calculated THEN {
+        civilActStatus(a) <- CivilContractActStatus.approved;
+        civilActApprovedAt(a) <- currentDateTime();
+        APPLY;
+    } ELSE MESSAGE 'Сначала рассчитайте акт';
+}
+
+markCivilActPaid 'Отметить выплаченным' (CivilContractAct a) {
+    IF civilActStatus(a) != CivilContractActStatus.approved THEN
+        MESSAGE 'Выплатить можно только утверждённый акт';
+    ELSE IF NOT civilActPaymentDate(a) OR NOT civilActPaymentReference(a) THEN
+        MESSAGE 'Укажите дату и платёжный документ';
+    ELSE IF civilActPaymentDate(a) < civilActDate(a) THEN
+        MESSAGE 'Дата выплаты не может быть раньше даты акта';
+    ELSE {
+        civilActStatus(a) <- CivilContractActStatus.paid;
+        civilActPaidAt(a) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM civilContracts 'Договоры ГПХ'
+    OBJECTS c = CivilContract
+    PROPERTIES(c) civilContractOrganization, civilContractContractor,
+                  civilContractNumber, civilContractDate, civilContractFrom,
+                  civilContractTo, civilContractSubject, civilContractAmount,
+                  civilContractStatus
+;
+
+FORM civilContractActs 'Акты ГПХ'
+    OBJECTS a = CivilContractAct
+    PROPERTIES(a) civilActContract, civilActNumber, civilActDate,
+                  civilActGrossIncome, civilActStatus, civilActCalculatedAt,
+                  civilActApprovedAt, civilActPaymentDate, civilActPaymentReference,
+                  civilActPaidAt, civilActResident, civilActCategoryCodes,
+                  civilActOpvBase, civilActOpv, civilActVosmsBase, civilActVosms,
+                  civilActSoBase, civilActSo, civilActBasicDeduction,
+                  civilActSocialDeduction, civilActDeductionCodes,
+                  civilActTaxableIncome, civilActIpnThreshold, civilActIpnBaseRate,
+                  civilActIpnHighRate, civilActIpn, civilActPayable
+    PROPERTIES(a) calculateCivilAct, approveCivilAct, markCivilActPaid
+;

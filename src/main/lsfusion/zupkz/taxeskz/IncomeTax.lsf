@@ -118,6 +118,21 @@ CONSTRAINT calculatedTaxDocumentCount(PayrollRun run) > 1
 
 CLASS TaxCalculationLine 'Налоги сотрудника';
 
+// Единый накопительный регистр нужен, чтобы годовые вычеты и прогрессивная
+// шкала учитывали доход одного человека и из зарплаты, и по договорам ГПХ.
+CLASS PersonalTaxLedgerEntry 'Запись годового регистра ИПН';
+
+taxLedgerOrganization 'Организация' = DATA Organization (PersonalTaxLedgerEntry);
+taxLedgerEmployee 'Физическое лицо' = DATA Employee (PersonalTaxLedgerEntry);
+taxLedgerDate 'Дата дохода' = DATA DATE (PersonalTaxLedgerEntry);
+taxLedgerBasicDeduction 'Базовый вычет' = DATA NUMERIC[18,2] (PersonalTaxLedgerEntry);
+taxLedgerSocialDeduction 'Социальный вычет' = DATA NUMERIC[18,2] (PersonalTaxLedgerEntry);
+taxLedgerTaxableIncome 'Облагаемый доход' = DATA NUMERIC[18,2] (PersonalTaxLedgerEntry);
+taxLedgerIpn 'ИПН' = DATA NUMERIC[18,2] (PersonalTaxLedgerEntry);
+
+taxCalculationLedgerEntry 'Запись регистра ИПН' =
+    DATA PersonalTaxLedgerEntry (TaxCalculationLine);
+
 taxCalculationDocument 'Документ' = DATA TaxCalculationDocument (TaxCalculationLine);
 taxCalculationEmployee 'Сотрудник' = DATA Employee (TaxCalculationLine);
 taxCalculationResident 'Налоговый резидент' = DATA BOOLEAN (TaxCalculationLine);
@@ -158,13 +173,12 @@ ipnTaxableIncome 'Облагаемый доход ИПН' = DATA NUMERIC[18,2] (
 ipnAmount 'ИПН' = DATA NUMERIC[18,2] (TaxCalculationLine);
 socialTaxAmount 'Социальный налог' = DATA NUMERIC[18,2] (TaxCalculationLine);
 
-priorBasicDeduction(TaxCalculationLine l) = GROUP SUM ipnBasicDeduction(TaxCalculationLine p)
-    IF taxCalculationOrganization(p) == taxCalculationOrganization(l) AND
-       taxCalculationEmployee(p) == taxCalculationEmployee(l) AND
-       extractYear(taxCalculationDate(p)) == extractYear(taxCalculationDate(l)) AND
-       taxCalculationDate(p) < taxCalculationDate(l) AND
-       (taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.calculated OR
-        taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.approved);
+priorBasicDeduction(TaxCalculationLine l) = GROUP SUM
+    taxLedgerBasicDeduction(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == taxCalculationOrganization(l) AND
+    taxLedgerEmployee(e) == taxCalculationEmployee(l) AND
+    extractYear(taxLedgerDate(e)) == extractYear(taxCalculationDate(l)) AND
+    taxLedgerDate(e) <= taxCalculationDate(l);
 ipnBasicMonthlyLimit(TaxCalculationLine l) =
     taxMrp(l) * taxParameter(l, 'IPN_BASIC_MONTHLY_MRP');
 ipnBasicAnnualAvailable(TaxCalculationLine l) = taxPositive(
@@ -183,13 +197,12 @@ ipnSocialAnnualLimit(TaxCalculationLine l) =
     ELSE IF taxProfileSocialDeduction(taxCalculationProfile(l)) == IpnSocialDeductionKind.protectedCategory THEN
         taxMrp(l) * taxParameter(l, 'IPN_SOCIAL_STANDARD_MRP')
     ELSE 0.00;
-priorSocialDeduction(TaxCalculationLine l) = GROUP SUM ipnSocialDeduction(TaxCalculationLine p)
-    IF taxCalculationOrganization(p) == taxCalculationOrganization(l) AND
-       taxCalculationEmployee(p) == taxCalculationEmployee(l) AND
-       extractYear(taxCalculationDate(p)) == extractYear(taxCalculationDate(l)) AND
-       taxCalculationDate(p) < taxCalculationDate(l) AND
-       (taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.calculated OR
-        taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.approved);
+priorSocialDeduction(TaxCalculationLine l) = GROUP SUM
+    taxLedgerSocialDeduction(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == taxCalculationOrganization(l) AND
+    taxLedgerEmployee(e) == taxCalculationEmployee(l) AND
+    extractYear(taxLedgerDate(e)) == extractYear(taxCalculationDate(l)) AND
+    taxLedgerDate(e) <= taxCalculationDate(l);
 ipnSocialAnnualAvailable(TaxCalculationLine l) = taxPositive(
     ipnSocialAnnualLimit(l) -
     (IF priorSocialDeduction(l) THEN priorSocialDeduction(l) ELSE 0.00));
@@ -212,13 +225,12 @@ calculatedTaxDeductionCodes(TaxCalculationLine l) =
 calculatedIpnTaxableIncome(TaxCalculationLine l) = taxPositive(
     ipnIncomeAfterBasicDeduction(l) - ipnSocialDeduction(l));
 
-priorIpnTaxableIncome(TaxCalculationLine l) = GROUP SUM ipnTaxableIncome(TaxCalculationLine p)
-    IF taxCalculationOrganization(p) == taxCalculationOrganization(l) AND
-       taxCalculationEmployee(p) == taxCalculationEmployee(l) AND
-       extractYear(taxCalculationDate(p)) == extractYear(taxCalculationDate(l)) AND
-       taxCalculationDate(p) < taxCalculationDate(l) AND
-       (taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.calculated OR
-        taxCalculationStatus(taxCalculationDocument(p)) == TaxCalculationStatus.approved);
+priorIpnTaxableIncome(TaxCalculationLine l) = GROUP SUM
+    taxLedgerTaxableIncome(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == taxCalculationOrganization(l) AND
+    taxLedgerEmployee(e) == taxCalculationEmployee(l) AND
+    extractYear(taxLedgerDate(e)) == extractYear(taxCalculationDate(l)) AND
+    taxLedgerDate(e) <= taxCalculationDate(l);
 ipnAnnualThreshold(TaxCalculationLine l) =
     taxMrp(l) * taxParameter(l, 'IPN_THRESHOLD_MRP');
 calculatedIpnAmount(TaxCalculationLine l) =
@@ -278,6 +290,16 @@ calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {
                 ipnTaxableIncome(l) <- calculatedIpnTaxableIncome(l);
                 ipnAmount(l) <- calculatedIpnAmount(l);
                 socialTaxAmount(l) <- calculatedSocialTaxAmount(l);
+                NEW e = PersonalTaxLedgerEntry {
+                    taxLedgerOrganization(e) <- taxCalculationOrganization(l);
+                    taxLedgerEmployee(e) <- worker;
+                    taxLedgerDate(e) <- taxCalculationDate(l);
+                    taxLedgerBasicDeduction(e) <- ipnBasicDeduction(l);
+                    taxLedgerSocialDeduction(e) <- ipnSocialDeduction(l);
+                    taxLedgerTaxableIncome(e) <- ipnTaxableIncome(l);
+                    taxLedgerIpn(e) <- ipnAmount(l);
+                    taxCalculationLedgerEntry(l) <- e;
+                }
             }
         }
         taxCalculationStatus(d) <- TaxCalculationStatus.calculated;

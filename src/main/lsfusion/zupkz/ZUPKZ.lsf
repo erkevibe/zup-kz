@@ -5,6 +5,7 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
         PayrollRecalculation, HRLeave, PayrollSickLeave, PayrollInterimPayment,
         PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax,
+        PayrollCivilContract,
         PayrollEnforcement, PayrollSettlement, PayrollPayments,
         TaxesKZSocialTransferRegisters, ReportsKZForm200, ReportsKZForm20005;
 NAMESPACE ZUPKZ;
@@ -52,6 +53,8 @@ NAVIGATOR {
         NEW payrollTimeSummaries;
         NEW payrollInputs;
         NEW payrollLines;
+        NEW civilContracts;
+        NEW civilContractActs;
         NEW calculationBaseRules;
         NEW averageEarningsDocuments;
         NEW averageEarningsBaseLines;

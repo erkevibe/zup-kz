@@ -98,7 +98,7 @@ expected = {
     "form200FebruaryOpv2026": Decimal("14845.24"),
     "form200JanuaryCalculatedIpn2026": Decimal("88.81"),
     "form200FebruaryPaidIncome2026": Decimal("155452.38"),
-    "form20005LineCount2026": Decimal("1"),
+    "form20005LineCount2026": Decimal("2"),
     "form20005Year2026": Decimal("2026"),
     "form20005IncomeStatus2026": Decimal("1"),
     "taxIncomeStatusEmployeeCode": Decimal("1"),
@@ -121,6 +121,22 @@ expected = {
     "form20005Oppv2026": Decimal("0.00"),
     "form20005Oosms2026": Decimal("4453.57"),
     "form20005Opvr2026": Decimal("5195.83"),
+    "civilActOpv2026": Decimal("100000.00"),
+    "civilActVosms2026": Decimal("20000.00"),
+    "civilActSoBase2026": Decimal("595000.00"),
+    "civilActSo2026": Decimal("29750.00"),
+    "civilActTaxableIncome2026": Decimal("850250.00"),
+    "civilActIpn2026": Decimal("85025.00"),
+    "civilActPayable2026": Decimal("765225.00"),
+    "form20005CivilStatus2026": Decimal("2"),
+    "form20005CivilAccrued2026": Decimal("1000000.00"),
+    "form20005CivilOpv2026": Decimal("100000.00"),
+    "form20005CivilVosms2026": Decimal("20000.00"),
+    "form20005CivilIpn2026": Decimal("85025.00"),
+    "form20005CivilSo2026": Decimal("29750.00"),
+    "form20005CivilPaidIncome2026": Decimal("1000000.00"),
+    "form20005CivilOosms2026": Decimal("0.00"),
+    "form20005CivilOpvr2026": Decimal("0.00"),
     "ordinaryLowIncomeEnforcementCap": Decimal("29149.00"),
     "protectedLowIncomeEnforcementCap": Decimal("40000.00"),
     "averageDaily": Decimal("4878.048780"),
@@ -171,3 +187,4 @@ assert actual["form20005EmployeeName2026"] == "Тестов Работник П�
 assert actual["form20005EmployeeIin2026"] == "900101300000"
 assert actual["form20005CategoryCodes2026"] == "3,4"
 assert actual["form20005TaxDeductionCodes2026"] == "1"
+assert actual["civilActPaid2026"] is True
