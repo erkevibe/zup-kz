@@ -1,0 +1,197 @@
+MODULE TaxesKZSocialTransferRegisters;
+
+REQUIRE PayrollPayments;
+NAMESPACE ZUPKZ;
+
+// Один реестр соответствует одному виду платежа и одному расчётному месяцу.
+// Формат МТ-102 зависит от банка, поэтому здесь хранится проверенный снимок данных,
+// из которого позднее формируется банковский файл без повторного расчёта сумм.
+CLASS SocialTransferRegisterStatus 'Статус списка социальных платежей' {
+    draft 'Черновик',
+    generated 'Сформирован',
+    approved 'Утверждён',
+    sent 'Отправлен',
+    accepted 'Принят',
+    rejected 'Отклонён'
+}
+
+CLASS SocialTransferRegister 'Персонифицированный список социальных платежей';
+
+socialTransferLiabilityDocument 'Документ обязательных платежей' =
+    DATA PayrollLiabilityDocument (SocialTransferRegister);
+socialTransferKind 'Вид платежа' = DATA PayrollLiabilityKind (SocialTransferRegister);
+socialTransferNumber 'Номер' = DATA STRING[50] (SocialTransferRegister);
+socialTransferPeriod 'Период' = DATA DATE (SocialTransferRegister);
+socialTransferStatus 'Статус' = DATA SocialTransferRegisterStatus (SocialTransferRegister);
+socialTransferGeneratedAt 'Сформирован' = DATA DATETIME (SocialTransferRegister);
+socialTransferApprovedAt 'Утверждён' = DATA DATETIME (SocialTransferRegister);
+socialTransferSentAt 'Отправлен' = DATA DATETIME (SocialTransferRegister);
+socialTransferAcceptedAt 'Принят' = DATA DATETIME (SocialTransferRegister);
+socialTransferExternalId 'Идентификатор отправки' = DATA STRING[100] (SocialTransferRegister);
+socialTransferRejectionReason 'Причина отклонения' = DATA STRING[500] (SocialTransferRegister);
+
+socialTransferPayrollRun(SocialTransferRegister r) =
+    liabilityPayrollRun(socialTransferLiabilityDocument(r));
+socialTransferOrganization(SocialTransferRegister r) =
+    payrollOrganization(socialTransferPayrollRun(r));
+socialTransferRecipient(PayrollLiabilityKind kind) =
+    IF kind == PayrollLiabilityKind.opv OR kind == PayrollLiabilityKind.opvr THEN 'ЕНПФ'
+    ELSE IF kind == PayrollLiabilityKind.socialContribution THEN 'ГФСС'
+    ELSE IF kind == PayrollLiabilityKind.vosms OR kind == PayrollLiabilityKind.oosms THEN 'ФСМС';
+socialTransferRecipient 'Получатель' (SocialTransferRegister r) =
+    socialTransferRecipient(socialTransferKind(r));
+isSocialTransferKind(PayrollLiabilityKind kind) =
+    kind == PayrollLiabilityKind.opv OR kind == PayrollLiabilityKind.opvr OR
+    kind == PayrollLiabilityKind.socialContribution OR
+    kind == PayrollLiabilityKind.vosms OR kind == PayrollLiabilityKind.oosms;
+
+activeSocialTransferRegisterCount(PayrollLiabilityDocument document,
+                                  PayrollLiabilityKind kind) = GROUP SUM 1 IF
+    socialTransferLiabilityDocument(SocialTransferRegister r) == document AND
+    socialTransferKind(r) == kind AND
+    socialTransferStatus(r) != SocialTransferRegisterStatus.rejected;
+CONSTRAINT activeSocialTransferRegisterCount(PayrollLiabilityDocument document,
+                                             PayrollLiabilityKind kind) > 1
+    MESSAGE 'Для одного вида платежа может быть только один действующий список';
+
+CLASS SocialTransferRegisterLine 'Строка списка социальных платежей';
+
+socialTransferLineRegister 'Список' = DATA SocialTransferRegister (SocialTransferRegisterLine);
+socialTransferLineSettlement 'Расчётный листок' =
+    DATA PayrollSettlementLine (SocialTransferRegisterLine);
+socialTransferLineEmployee 'Сотрудник' = DATA Employee (SocialTransferRegisterLine);
+socialTransferLineIin 'ИИН' = DATA STRING[12] (SocialTransferRegisterLine);
+socialTransferLineLastName 'Фамилия' = DATA STRING[100] (SocialTransferRegisterLine);
+socialTransferLineFirstName 'Имя' = DATA STRING[100] (SocialTransferRegisterLine);
+socialTransferLineMiddleName 'Отчество' = DATA STRING[100] (SocialTransferRegisterLine);
+socialTransferLineBirthDate 'Дата рождения' = DATA DATE (SocialTransferRegisterLine);
+socialTransferLinePeriod 'Период' = DATA DATE (SocialTransferRegisterLine);
+socialTransferLineAmount 'Сумма' = DATA NUMERIC[18,2] (SocialTransferRegisterLine);
+
+socialTransferAmount(PayrollSettlementLine line, PayrollLiabilityKind kind) =
+    IF kind == PayrollLiabilityKind.opv THEN settlementOpv(line)
+    ELSE IF kind == PayrollLiabilityKind.opvr THEN settlementOpvr(line)
+    ELSE IF kind == PayrollLiabilityKind.socialContribution THEN settlementSo(line)
+    ELSE IF kind == PayrollLiabilityKind.vosms THEN settlementVosms(line)
+    ELSE IF kind == PayrollLiabilityKind.oosms THEN settlementOosms(line);
+
+missingSocialTransferPersonCount(PayrollRun run, PayrollLiabilityKind kind) = GROUP SUM 1
+    IF settlementPayrollRun(PayrollSettlementLine line) == run AND
+       socialTransferAmount(line, kind) > 0.00 AND
+       (NOT iin(settlementEmployee(line)) OR length(iin(settlementEmployee(line))) != 12 OR
+        NOT lastName(settlementEmployee(line)) OR NOT firstName(settlementEmployee(line)) OR
+        NOT birthDate(settlementEmployee(line)));
+
+generateSocialTransferRegister 'Сформировать список' (SocialTransferRegister r) {
+    IF socialTransferStatus(r) AND
+       socialTransferStatus(r) != SocialTransferRegisterStatus.draft THEN
+        MESSAGE 'Персонифицированный список уже сформирован';
+    ELSE IF NOT socialTransferLiabilityDocument(r) OR NOT socialTransferNumber(r) OR
+            liabilityStatus(socialTransferLiabilityDocument(r)) != PayrollLiabilityStatus.approved THEN
+        MESSAGE 'Выберите утверждённый документ обязательных платежей и укажите номер';
+    ELSE IF NOT isSocialTransferKind(socialTransferKind(r)) THEN
+        MESSAGE 'Выберите ОПВ, ОПВР, СО, ВОСМС или ООСМС';
+    ELSE IF missingSocialTransferPersonCount(socialTransferPayrollRun(r), socialTransferKind(r)) THEN
+        MESSAGE 'Заполните ИИН из 12 символов, фамилию, имя и дату рождения сотрудников';
+    ELSE {
+        socialTransferPeriod(r) <- firstDayOfMonth(payrollPeriodTo(socialTransferPayrollRun(r)));
+        FOR settlementPayrollRun(PayrollSettlementLine settlement) == socialTransferPayrollRun(r) AND
+            socialTransferAmount(settlement, socialTransferKind(r)) > 0.00 DO {
+            NEW line = SocialTransferRegisterLine {
+                socialTransferLineRegister(line) <- r;
+                socialTransferLineSettlement(line) <- settlement;
+                socialTransferLineEmployee(line) <- settlementEmployee(settlement);
+                socialTransferLineIin(line) <- iin(settlementEmployee(settlement));
+                socialTransferLineLastName(line) <- lastName(settlementEmployee(settlement));
+                socialTransferLineFirstName(line) <- firstName(settlementEmployee(settlement));
+                socialTransferLineMiddleName(line) <- middleName(settlementEmployee(settlement));
+                socialTransferLineBirthDate(line) <- birthDate(settlementEmployee(settlement));
+                socialTransferLinePeriod(line) <- socialTransferPeriod(r);
+                socialTransferLineAmount(line) <- socialTransferAmount(settlement, socialTransferKind(r));
+            }
+        }
+        socialTransferStatus(r) <- SocialTransferRegisterStatus.generated;
+        socialTransferGeneratedAt(r) <- currentDateTime();
+        APPLY;
+    }
+}
+
+socialTransferLineCount(SocialTransferRegister r) = GROUP SUM 1
+    IF socialTransferLineRegister(SocialTransferRegisterLine line) == r;
+totalSocialTransferAmount 'Сумма списка' (SocialTransferRegister r) = GROUP SUM
+    socialTransferLineAmount(SocialTransferRegisterLine line)
+    IF socialTransferLineRegister(line) == r;
+expectedSocialTransferAmount 'Сумма обязательства' (SocialTransferRegister r) =
+    liabilityLineAmount(liabilityLineByKind(socialTransferLiabilityDocument(r), socialTransferKind(r)));
+socialTransferDifference 'Расхождение' (SocialTransferRegister r) =
+    totalSocialTransferAmount(r) - expectedSocialTransferAmount(r);
+socialTransferLineByRegister(SocialTransferRegister r) =
+    GROUP AGGR SocialTransferRegisterLine line BY socialTransferLineRegister(line);
+
+approveSocialTransferRegister 'Утвердить список' (SocialTransferRegister r) {
+    IF socialTransferStatus(r) != SocialTransferRegisterStatus.generated OR
+       NOT socialTransferLineCount(r) THEN
+        MESSAGE 'Сначала сформируйте непустой персонифицированный список';
+    ELSE IF socialTransferDifference(r) != 0.00 THEN
+        MESSAGE 'Сумма списка не совпадает с обязательством';
+    ELSE {
+        socialTransferStatus(r) <- SocialTransferRegisterStatus.approved;
+        socialTransferApprovedAt(r) <- currentDateTime();
+        APPLY;
+    }
+}
+
+sendSocialTransferRegister 'Отметить отправленным' (SocialTransferRegister r) {
+    IF socialTransferStatus(r) != SocialTransferRegisterStatus.approved THEN
+        MESSAGE 'Сначала утвердите персонифицированный список';
+    ELSE IF NOT socialTransferExternalId(r) THEN
+        MESSAGE 'Укажите идентификатор отправки';
+    ELSE {
+        socialTransferStatus(r) <- SocialTransferRegisterStatus.sent;
+        socialTransferSentAt(r) <- currentDateTime();
+        APPLY;
+    }
+}
+
+acceptSocialTransferRegister 'Подтвердить принятие' (SocialTransferRegister r) {
+    IF socialTransferStatus(r) != SocialTransferRegisterStatus.sent THEN
+        MESSAGE 'Принять можно только отправленный список';
+    ELSE {
+        socialTransferStatus(r) <- SocialTransferRegisterStatus.accepted;
+        socialTransferAcceptedAt(r) <- currentDateTime();
+        APPLY;
+    }
+}
+
+rejectSocialTransferRegister 'Отметить отклонённым' (SocialTransferRegister r) {
+    IF socialTransferStatus(r) != SocialTransferRegisterStatus.sent THEN
+        MESSAGE 'Отклонить можно только отправленный список';
+    ELSE IF NOT socialTransferRejectionReason(r) THEN
+        MESSAGE 'Укажите причину отклонения';
+    ELSE {
+        socialTransferStatus(r) <- SocialTransferRegisterStatus.rejected;
+        APPLY;
+    }
+}
+
+FORM socialTransferRegisters 'Персонифицированные списки социальных платежей'
+    OBJECTS r = SocialTransferRegister
+    PROPERTIES(r) socialTransferLiabilityDocument, socialTransferKind,
+                  socialTransferRecipient, socialTransferNumber, socialTransferPeriod,
+                  socialTransferStatus, socialTransferGeneratedAt, socialTransferApprovedAt,
+                  socialTransferSentAt, socialTransferAcceptedAt, socialTransferExternalId,
+                  socialTransferRejectionReason, expectedSocialTransferAmount,
+                  totalSocialTransferAmount, socialTransferDifference
+    PROPERTIES(r) generateSocialTransferRegister, approveSocialTransferRegister,
+                  sendSocialTransferRegister, acceptSocialTransferRegister,
+                  rejectSocialTransferRegister
+;
+
+FORM socialTransferRegisterLines 'Строки списков социальных платежей'
+    OBJECTS line = SocialTransferRegisterLine
+    PROPERTIES(line) socialTransferLineRegister, socialTransferLineEmployee,
+                     socialTransferLineIin, socialTransferLineLastName,
+                     socialTransferLineFirstName, socialTransferLineMiddleName,
+                     socialTransferLineBirthDate, socialTransferLinePeriod,
+                     socialTransferLineAmount
+;

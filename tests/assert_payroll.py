@@ -66,6 +66,13 @@ expected = {
     "opvLiability2026": Decimal("14845.24"),
     "totalPayrollLiability2026": Decimal("42071.15"),
     "overdueLiabilityCount2026": Decimal("2"),
+    "socialTransferAmount2026": Decimal("14845.24"),
+    "socialTransferExpected2026": Decimal("14845.24"),
+    "socialTransferDifference2026": Decimal("0.00"),
+    "socialTransferOpvrAmount2026": Decimal("5195.83"),
+    "socialTransferSoAmount2026": Decimal("6680.36"),
+    "socialTransferVosmsAmount2026": Decimal("2969.05"),
+    "socialTransferOosmsAmount2026": Decimal("4453.57"),
     "ordinaryLowIncomeEnforcementCap": Decimal("29149.00"),
     "protectedLowIncomeEnforcementCap": Decimal("40000.00"),
     "averageDaily": Decimal("4878.048780"),
@@ -104,3 +111,9 @@ assert actual["latestPayrollPaymentDate2026"] == "2026-02-10"
 assert actual["opvLiabilityDue2026"] == "2026-03-25"
 assert actual["socialContributionDue2026"] == "2026-02-25"
 assert actual["ipnLiabilityDue2026"] == "2026-03-25"
+assert actual["socialTransferRecipient2026"] == "ЕНПФ"
+assert actual["socialTransferGfssRecipient2026"] == "ГФСС"
+assert actual["socialTransferFsmsRecipient2026"] == "ФСМС"
+assert actual["socialTransferPeriod2026"] == "2026-01-01"
+assert actual["socialTransferAccepted2026"] is True
+assert actual["socialTransferEmployeeIin2026"] == "900101300000"

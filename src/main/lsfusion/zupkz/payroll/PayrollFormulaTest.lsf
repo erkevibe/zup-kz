@@ -11,6 +11,9 @@ payrollFormulaTest() {
         payrollIban(org) <- 'KZ000000000000000001';
         NEW worker = Employee {
             iin(worker) <- '900101300000';
+            lastName(worker) <- 'Тестов';
+            firstName(worker) <- 'Работник';
+            middleName(worker) <- 'Первый';
             birthDate(worker) <- 1990_01_01;
             salaryBankName(worker) <- 'Тестовый банк';
             salaryBankBic(worker) <- 'TESTKZKA';
@@ -141,6 +144,17 @@ payrollFormulaTest() {
                                                                                     liabilityNumber(liabilities) <- 'LIAB-2026-01';
                                                                                     generatePayrollLiabilities(liabilities);
                                                                                     approvePayrollLiabilities(liabilities);
+
+                                                                                    NEW opvRegister = SocialTransferRegister {
+                                                                                        socialTransferLiabilityDocument(opvRegister) <- liabilities;
+                                                                                        socialTransferKind(opvRegister) <- PayrollLiabilityKind.opv;
+                                                                                        socialTransferNumber(opvRegister) <- 'OPV-2026-01';
+                                                                                        generateSocialTransferRegister(opvRegister);
+                                                                                        approveSocialTransferRegister(opvRegister);
+                                                                                        socialTransferExternalId(opvRegister) <- 'ENPF-EXT-1';
+                                                                                        sendSocialTransferRegister(opvRegister);
+                                                                                        acceptSocialTransferRegister(opvRegister);
+
                                                                                     liabilityPaymentDate(liabilities) <- 2026_03_25;
                                                                                     liabilityBankReference(liabilities) <- 'TAX-BANK-1';
                                                                                     markPayrollLiabilitiesPaid(liabilities);
@@ -296,6 +310,27 @@ payrollFormulaTest() {
                                     liabilityLineByKind(liabilities, PayrollLiabilityKind.socialContribution)),
                                 ipnLiabilityDue2026 = liabilityLineDueDate(
                                     liabilityLineByKind(liabilities, PayrollLiabilityKind.ipn)),
+                                socialTransferRecipient2026 = socialTransferRecipient(opvRegister),
+                                socialTransferPeriod2026 = socialTransferPeriod(opvRegister),
+                                socialTransferAmount2026 = totalSocialTransferAmount(opvRegister),
+                                socialTransferExpected2026 = expectedSocialTransferAmount(opvRegister),
+                                socialTransferDifference2026 = socialTransferDifference(opvRegister),
+                                socialTransferOpvrAmount2026 = socialTransferAmount(
+                                    settlementLineByEmployee(run, worker), PayrollLiabilityKind.opvr),
+                                socialTransferSoAmount2026 = socialTransferAmount(
+                                    settlementLineByEmployee(run, worker), PayrollLiabilityKind.socialContribution),
+                                socialTransferVosmsAmount2026 = socialTransferAmount(
+                                    settlementLineByEmployee(run, worker), PayrollLiabilityKind.vosms),
+                                socialTransferOosmsAmount2026 = socialTransferAmount(
+                                    settlementLineByEmployee(run, worker), PayrollLiabilityKind.oosms),
+                                socialTransferGfssRecipient2026 = socialTransferRecipient(
+                                    PayrollLiabilityKind.socialContribution),
+                                socialTransferFsmsRecipient2026 = socialTransferRecipient(
+                                    PayrollLiabilityKind.vosms),
+                                socialTransferAccepted2026 =
+                                    socialTransferStatus(opvRegister) == SocialTransferRegisterStatus.accepted,
+                                socialTransferEmployeeIin2026 = socialTransferLineIin(
+                                    socialTransferLineByRegister(opvRegister)),
                                 ordinaryLowIncomeEnforcementCap = taxMinimum(
                                     socialPaymentAmount(80000.00, 50.000000),
                                     taxPositive(80000.00 - 50851.00)),
@@ -363,5 +398,6 @@ payrollFormulaTest() {
                 }
             }
         }
+    }
     }
 }
