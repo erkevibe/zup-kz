@@ -2,7 +2,8 @@ MODULE ZUPKZ;
 
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
-        TimeWorkSchedule, TimeTimesheet, PayrollCore;
+        TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
+        PayrollRecalculation;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -44,5 +45,9 @@ NAVIGATOR {
         NEW payrollRuns;
         NEW payrollTimeSummaries;
         NEW payrollLines;
+        NEW averageEarningsDocuments;
+        NEW averageEarningsBaseLines;
+        NEW payrollRecalculations;
+        NEW payrollRecalculationLines;
     }
 }

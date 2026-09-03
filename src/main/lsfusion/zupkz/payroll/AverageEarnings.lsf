@@ -1,0 +1,168 @@
+MODULE AverageEarnings;
+
+REQUIRE PayrollCore;
+NAMESPACE ZUPKZ;
+
+// Приказ № 908: база и фактически отработанное время фиксируются снимком.
+CLASS AverageEarningsStatus 'Статус среднего заработка' {
+    draft 'Черновик',
+    baseCollected 'База собрана',
+    calculated 'Рассчитан'
+}
+
+CLASS AverageEarningsMode 'Способ расчёта среднего заработка' {
+    daily 'По рабочим дням',
+    hourly 'По рабочим часам',
+    summarized 'Суммированный учёт'
+}
+
+CLASS AverageEarningsEventKind 'Событие среднего заработка' {
+    vacation 'Трудовой отпуск',
+    unusedVacation 'Компенсация отпуска',
+    businessTrip 'Командировка',
+    sickLeave 'Временная нетрудоспособность',
+    other 'Иное'
+}
+
+CLASS AverageEarningsDocument 'Расчёт среднего заработка';
+
+averageNumber 'Номер' = DATA STRING[50] (AverageEarningsDocument);
+averageAssignment 'Назначение' = DATA EmploymentAssignment (AverageEarningsDocument);
+averageEventKind 'Событие' = DATA AverageEarningsEventKind (AverageEarningsDocument);
+averageMode 'Способ расчёта' = DATA AverageEarningsMode (AverageEarningsDocument);
+averageEventFrom 'Событие с' = DATA DATE (AverageEarningsDocument);
+averageEventTo 'Событие по' = DATA DATE (AverageEarningsDocument);
+averagePeriodFrom 'Расчётный период с' = DATA DATE (AverageEarningsDocument);
+averagePeriodTo 'Расчётный период по' = DATA DATE (AverageEarningsDocument);
+averageEventWorkDays 'Рабочих дней события' = DATA NUMERIC[10,2] (AverageEarningsDocument);
+averageEventWorkHours 'Рабочих часов события' = DATA NUMERIC[10,2] (AverageEarningsDocument);
+averageEventCalendarDays 'Календарных дней события' = DATA NUMERIC[10,2] (AverageEarningsDocument);
+averageDailyHours 'Среднедневных рабочих часов' = DATA NUMERIC[10,6] (AverageEarningsDocument);
+averageStatus 'Статус' = DATA AverageEarningsStatus (AverageEarningsDocument);
+averageCalculatedAt 'Рассчитан' = DATA DATETIME (AverageEarningsDocument);
+averageLegalSource 'Нормативное основание' (AverageEarningsDocument d) =
+    legalSourceByCode('AVERAGE_WAGE_RULES_908');
+
+CONSTRAINT averageEventTo(AverageEarningsDocument d) < averageEventFrom(d)
+    MESSAGE 'Окончание события не может быть раньше начала';
+CONSTRAINT averagePeriodTo(AverageEarningsDocument d) < averagePeriodFrom(d)
+    MESSAGE 'Окончание расчётного периода не может быть раньше начала';
+
+CLASS AverageEarningsBaseLine 'Строка базы среднего заработка';
+
+baseAverageDocument 'Расчёт' = DATA AverageEarningsDocument (AverageEarningsBaseLine);
+basePayrollRun 'Расчёт зарплаты' = DATA PayrollRun (AverageEarningsBaseLine);
+baseEarnings 'Начислено' = DATA NUMERIC[18,2] (AverageEarningsBaseLine);
+baseWorkedDays 'Отработано дней' = DATA NUMERIC[10,2] (AverageEarningsBaseLine);
+baseWorkedHours 'Отработано часов' = DATA NUMERIC[10,2] (AverageEarningsBaseLine);
+baseIncreaseCoefficient 'Повышающий коэффициент' = DATA NUMERIC[18,6] (AverageEarningsBaseLine);
+baseIncluded 'Включено в базу' = DATA BOOLEAN (AverageEarningsBaseLine);
+baseNote 'Основание корректировки' = DATA STRING[500] (AverageEarningsBaseLine);
+
+CONSTRAINT baseIncreaseCoefficient(AverageEarningsBaseLine l) <= 0.000000
+    MESSAGE 'Повышающий коэффициент должен быть больше нуля';
+
+adjustedBaseEarnings 'С учётом повышения' (AverageEarningsBaseLine l) =
+    ROUND(baseEarnings(l) * baseIncreaseCoefficient(l), 2)
+    IF baseIncluded(l) AND baseEarnings(l) AND baseIncreaseCoefficient(l) > 0.000000;
+totalAverageEarnings 'База заработка' (AverageEarningsDocument d) =
+    GROUP SUM adjustedBaseEarnings(AverageEarningsBaseLine l) IF baseAverageDocument(l) == d;
+totalAverageWorkedDays 'Отработано дней' (AverageEarningsDocument d) =
+    GROUP SUM baseWorkedDays(AverageEarningsBaseLine l)
+    IF baseAverageDocument(l) == d AND baseIncluded(l);
+totalAverageWorkedHours 'Отработано часов' (AverageEarningsDocument d) =
+    GROUP SUM baseWorkedHours(AverageEarningsBaseLine l)
+    IF baseAverageDocument(l) == d AND baseIncluded(l);
+
+averageDailyEarnings(NUMERIC[18,2] earnings, NUMERIC[10,2] workedDays) =
+    ROUND(earnings / workedDays, 6) IF earnings >= 0.00 AND workedDays > 0.00;
+averageHourlyEarnings(NUMERIC[18,2] earnings, NUMERIC[10,2] workedHours) =
+    ROUND(earnings / workedHours, 6) IF earnings >= 0.00 AND workedHours > 0.00;
+averagePayByDays(NUMERIC[18,2] earnings, NUMERIC[10,2] workedDays, NUMERIC[10,2] eventDays) =
+    ROUND(averageDailyEarnings(earnings, workedDays) * eventDays, 2) IF eventDays >= 0.00;
+averagePayByHours(NUMERIC[18,2] earnings, NUMERIC[10,2] workedHours, NUMERIC[10,2] eventHours) =
+    ROUND(averageHourlyEarnings(earnings, workedHours) * eventHours, 2) IF eventHours >= 0.00;
+averagePaySummarized(NUMERIC[18,2] earnings, NUMERIC[10,2] workedHours,
+                     NUMERIC[10,6] dailyHours, NUMERIC[10,2] calendarDays) =
+    ROUND(averageHourlyEarnings(earnings, workedHours) * dailyHours * calendarDays, 2)
+    IF dailyHours > 0.000000 AND calendarDays >= 0.00;
+
+averageDaily 'Средний дневной' (AverageEarningsDocument d) =
+    averageDailyEarnings(totalAverageEarnings(d), totalAverageWorkedDays(d));
+averageHourly 'Средний часовой' (AverageEarningsDocument d) =
+    averageHourlyEarnings(totalAverageEarnings(d), totalAverageWorkedHours(d));
+averagePayable 'К оплате' (AverageEarningsDocument d) =
+    IF averageMode(d) == AverageEarningsMode.daily THEN
+        averagePayByDays(totalAverageEarnings(d), totalAverageWorkedDays(d), averageEventWorkDays(d))
+    ELSE IF averageMode(d) == AverageEarningsMode.hourly THEN
+        averagePayByHours(totalAverageEarnings(d), totalAverageWorkedHours(d), averageEventWorkHours(d))
+    ELSE IF averageMode(d) == AverageEarningsMode.summarized THEN
+        averagePaySummarized(totalAverageEarnings(d), totalAverageWorkedHours(d),
+                             averageDailyHours(d), averageEventCalendarDays(d));
+
+eligibleAverageEarnings(PayrollTimeSummary s) = GROUP SUM calculationAmount(PayrollLine l)
+    IF lineTimeSummary(l) == s AND includeInAverageEarnings(lineCalculationType(l));
+averageBaseLineCount(AverageEarningsDocument d) = GROUP SUM 1
+    IF baseAverageDocument(AverageEarningsBaseLine l) == d;
+completedPayrollRun(PayrollRun r) = payrollRunStatus(r) == PayrollRunStatus.calculated OR
+    payrollRunStatus(r) == PayrollRunStatus.approved OR payrollRunStatus(r) == PayrollRunStatus.paid;
+
+collectAverageBase 'Собрать базу' (AverageEarningsDocument d) {
+    IF averageStatus(d) != AverageEarningsStatus.draft THEN
+        MESSAGE 'База уже зафиксирована';
+    ELSE IF NOT averageAssignment(d) OR NOT averagePeriodFrom(d) OR NOT averagePeriodTo(d) THEN
+        MESSAGE 'Заполните назначение и расчётный период';
+    ELSE IF averageBaseLineCount(d) THEN
+        MESSAGE 'Строки базы уже созданы';
+    ELSE {
+        FOR summaryAssignment(PayrollTimeSummary s) == averageAssignment(d) AND
+            payrollPeriodFrom(summaryPayrollRun(s)) >= averagePeriodFrom(d) AND
+            payrollPeriodTo(summaryPayrollRun(s)) <= averagePeriodTo(d) AND
+            completedPayrollRun(summaryPayrollRun(s))
+        DO {
+            NEW l = AverageEarningsBaseLine {
+                baseAverageDocument(l) <- d;
+                basePayrollRun(l) <- summaryPayrollRun(s);
+                baseEarnings(l) <- eligibleAverageEarnings(s);
+                baseWorkedDays(l) <- summaryWorkedDays(s);
+                baseWorkedHours(l) <- summaryWorkedHours(s);
+                baseIncreaseCoefficient(l) <- 1.000000;
+                baseIncluded(l) <- TRUE;
+            }
+        }
+        averageStatus(d) <- AverageEarningsStatus.baseCollected;
+        APPLY;
+    }
+}
+
+calculateAverageEarnings 'Рассчитать' (AverageEarningsDocument d) {
+    IF averageStatus(d) != AverageEarningsStatus.baseCollected THEN
+        MESSAGE 'Сначала соберите базу';
+    ELSE IF NOT totalAverageEarnings(d) THEN
+        MESSAGE 'В расчётном периоде нет включённого заработка';
+    ELSE IF NOT averagePayable(d) THEN
+        MESSAGE 'Нет отработанных дней/часов или единиц события';
+    ELSE {
+        averageStatus(d) <- AverageEarningsStatus.calculated;
+        averageCalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM averageEarningsDocuments 'Средний заработок'
+    OBJECTS d = AverageEarningsDocument
+    PROPERTIES(d) averageNumber, averageAssignment, averageEventKind, averageMode,
+                  averageEventFrom, averageEventTo, averagePeriodFrom, averagePeriodTo,
+                  averageEventWorkDays, averageEventWorkHours, averageEventCalendarDays,
+                  averageDailyHours, averageStatus, averageCalculatedAt, averageLegalSource,
+                  totalAverageEarnings, totalAverageWorkedDays, totalAverageWorkedHours,
+                  averageDaily, averageHourly, averagePayable
+    PROPERTIES(d) collectAverageBase, calculateAverageEarnings
+;
+
+FORM averageEarningsBaseLines 'База среднего заработка'
+    OBJECTS l = AverageEarningsBaseLine
+    PROPERTIES(l) baseAverageDocument, basePayrollRun, baseEarnings,
+                  baseWorkedDays, baseWorkedHours, baseIncreaseCoefficient,
+                  baseIncluded, adjustedBaseEarnings, baseNote
+;

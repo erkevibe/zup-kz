@@ -25,6 +25,7 @@ payrollFormulaTest() {
                             summaryAssignment(summary) <- assignment;
                             summaryPlannedHours(summary) <- 168.00;
                             summaryWorkedHours(summary) <- 186.00;
+                            summaryWorkedDays(summary) <- 23.00;
                             summaryNightHours(summary) <- 8.00;
                             summaryOvertimeHours(summary) <- 10.00;
                             summaryHolidayHours(summary) <- 8.00;
@@ -40,7 +41,15 @@ payrollFormulaTest() {
                                                 specialHoursAdditionalPay(100000.00, 168.00, 10.00, 1.500000),
                                 documentLineCount = payrollLineCount(run),
                                 documentAccrued = totalAccrued(run),
-                                documentPayable = totalPayable(run);
+                                documentPayable = totalPayable(run),
+                                averageDaily = averageDailyEarnings(1200000.00, 246.00),
+                                averageHourly = averageHourlyEarnings(1200000.00, 1968.00),
+                                averagePayDays = averagePayByDays(1200000.00, 246.00, 10.00),
+                                averagePayHours = averagePayByHours(1200000.00, 1968.00, 80.00),
+                                averagePaySummarized = averagePaySummarized(1200000.00, 1968.00,
+                                                                           7.876000, 10.00),
+                                positiveRecalculation = payrollRecalculationDelta(100000.00, 110000.00),
+                                negativeRecalculation = payrollRecalculationDelta(100000.00, 95000.00);
                         }
                     }
                 }

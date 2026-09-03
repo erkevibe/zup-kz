@@ -116,6 +116,8 @@ loadBaselineLegalParameters() {
             'https://adilet.zan.kz/rus/docs/K1500000414', 2016_01_01, 2026_08_31);
         ensureLegalSource('BUDGET_2026_2028', 'О республиканском бюджете на 2026–2028 годы',
             'https://www.adilet.zan.kz/rus/docs/Z2500000239', 2026_01_01, 2026_08_31);
+        ensureLegalSource('AVERAGE_WAGE_RULES_908', 'Единые правила исчисления средней заработной платы',
+            'https://www.adilet.zan.kz/rus/docs/V1500012533', 2016_01_01, 2026_09_03);
 
         ensureStatutoryParameter('MZP', 'Минимальная заработная плата', 'KZT',
             'Минимальный размер заработной платы на соответствующий год');

@@ -32,6 +32,7 @@ calculationCode 'Код' = DATA STRING[50] (CalculationType);
 calculationName 'Наименование' = DATA STRING[200] (CalculationType);
 calculationCategory 'Категория' = DATA CalculationCategory (CalculationType);
 formulaKind 'Формула' = DATA FormulaKind (CalculationType);
+includeInAverageEarnings 'Включать в средний заработок' = DATA BOOLEAN (CalculationType);
 coefficientParameter 'Параметр коэффициента' = DATA StatutoryParameter (CalculationType);
 calculationDescription 'Описание' = DATA STRING[500] (CalculationType);
 
@@ -67,6 +68,7 @@ summaryPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (PayrollTime
 summaryAssignment 'Назначение сотрудника' = DATA EmploymentAssignment (PayrollTimeSummary);
 summaryPlannedHours 'Плановых часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
 summaryWorkedHours 'Отработано часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+summaryWorkedDays 'Отработано дней' = DATA NUMERIC[10,2] (PayrollTimeSummary);
 summaryNightHours 'Ночных часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
 summaryOvertimeHours 'Сверхурочных часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
 summaryHolidayHours 'Праздничных часов' = DATA NUMERIC[10,2] (PayrollTimeSummary);
@@ -153,6 +155,10 @@ loadBaselineCalculationTypes() {
             statutoryParameterByCode('MIN_OVERTIME_COEF'), 'Доплата к одинарной ставке до установленного коэффициента');
         ensureCalculationType('HOLIDAY_ADDITIONAL', 'Доплата за праздничные и выходные часы', FormulaKind.hourlyRate,
             statutoryParameterByCode('MIN_HOLIDAY_COEF'), 'Доплата к одинарной ставке до установленного коэффициента');
+        includeInAverageEarnings(calculationTypeByCode('BASE_SALARY')) <- TRUE;
+        includeInAverageEarnings(calculationTypeByCode('NIGHT_ADDITIONAL')) <- TRUE;
+        includeInAverageEarnings(calculationTypeByCode('OVERTIME_ADDITIONAL')) <- TRUE;
+        includeInAverageEarnings(calculationTypeByCode('HOLIDAY_ADDITIONAL')) <- TRUE;
         APPLY;
     }
 }
@@ -169,6 +175,11 @@ approvedWorkedHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo)
     GROUP SUM workedHours(TimesheetLine l)
     IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
        lineDate(l) <= dateTo AND timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+approvedWorkedDays(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
+    GROUP SUM 1 IF lineEmploymentAssignment(TimesheetLine l) == assignment AND
+                   lineDate(l) >= dateFrom AND lineDate(l) <= dateTo AND
+                   workedHours(l) > 0.00 AND
+                   timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
 approvedNightHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo) =
     GROUP SUM nightHours(TimesheetLine l)
     IF lineEmploymentAssignment(l) == assignment AND lineDate(l) >= dateFrom AND
@@ -214,6 +225,7 @@ collectApprovedTime 'Собрать утверждённый табель' (Payr
                     summaryAssignment(s) <- assignment;
                     summaryPlannedHours(s) <- approvedPlannedHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
                     summaryWorkedHours(s) <- approvedWorkedHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
+                    summaryWorkedDays(s) <- approvedWorkedDays(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
                     summaryNightHours(s) <- approvedNightHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
                     summaryOvertimeHours(s) <- approvedOvertimeHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
                     summaryHolidayHours(s) <- approvedHolidayHours(assignment, payrollPeriodFrom(r), payrollPeriodTo(r));
@@ -320,7 +332,8 @@ onStarted() + { loadBaselineCalculationTypes(); }
 FORM calculationTypes 'Виды начислений и удержаний'
     OBJECTS c = CalculationType
     PROPERTIES(c) calculationCode, calculationName, calculationCategory,
-                  formulaKind, coefficientParameter, calculationDescription
+                  formulaKind, includeInAverageEarnings, coefficientParameter,
+                  calculationDescription
 ;
 
 FORM payrollRules 'Правила расчёта'
@@ -340,7 +353,7 @@ FORM payrollRuns 'Расчёты зарплаты'
 FORM payrollTimeSummaries 'Данные табеля для расчёта'
     OBJECTS s = PayrollTimeSummary
     PROPERTIES(s) summaryPayrollRun, summaryAssignment, summaryPlannedHours,
-                  summaryWorkedHours, summaryNightHours, summaryOvertimeHours,
+                  summaryWorkedHours, summaryWorkedDays, summaryNightHours, summaryOvertimeHours,
                   summaryHolidayHours, summaryWeekendHours,
                   summaryBusinessTripHours, summaryAbsenceHours
 ;

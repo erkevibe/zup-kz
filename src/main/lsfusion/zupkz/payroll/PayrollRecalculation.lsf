@@ -1,0 +1,78 @@
+MODULE PayrollRecalculation;
+
+REQUIRE PayrollCore;
+NAMESPACE ZUPKZ;
+
+CLASS PayrollRecalculationStatus 'Статус перерасчёта' {
+    draft 'Черновик',
+    calculated 'Рассчитан',
+    approved 'Утверждён'
+}
+
+CLASS PayrollRecalculation 'Перерасчёт зарплаты';
+
+recalculationNumber 'Номер' = DATA STRING[50] (PayrollRecalculation);
+recalculationDate 'Дата' = DATA DATE (PayrollRecalculation);
+recalculationOriginalRun 'Исходный расчёт' = DATA PayrollRun (PayrollRecalculation);
+recalculationReason 'Причина' = DATA STRING[500] (PayrollRecalculation);
+recalculationStatus 'Статус' = DATA PayrollRecalculationStatus (PayrollRecalculation);
+recalculationCalculatedAt 'Рассчитан' = DATA DATETIME (PayrollRecalculation);
+
+CLASS PayrollRecalculationLine 'Строка перерасчёта';
+
+lineRecalculation 'Перерасчёт' = DATA PayrollRecalculation (PayrollRecalculationLine);
+lineOriginalPayrollLine 'Исходная строка' = DATA PayrollLine (PayrollRecalculationLine);
+lineOriginalAmount 'Исходная сумма' = DATA NUMERIC[18,2] (PayrollRecalculationLine);
+lineCorrectedAmount 'Исправленная сумма' = DATA NUMERIC[18,2] (PayrollRecalculationLine);
+lineRecalculationNote 'Комментарий' = DATA STRING[500] (PayrollRecalculationLine);
+
+payrollRecalculationDelta(NUMERIC[18,2] originalAmount, NUMERIC[18,2] correctedAmount) =
+    ROUND(correctedAmount - originalAmount, 2) IF originalAmount AND correctedAmount;
+lineRecalculationDelta 'Разница' (PayrollRecalculationLine l) =
+    payrollRecalculationDelta(lineOriginalAmount(l), lineCorrectedAmount(l));
+totalRecalculationDelta 'Итого перерасчёта' (PayrollRecalculation d) =
+    GROUP SUM lineRecalculationDelta(PayrollRecalculationLine l) IF lineRecalculation(l) == d;
+recalculationLineCount(PayrollRecalculation d) = GROUP SUM 1
+    IF lineRecalculation(PayrollRecalculationLine l) == d;
+invalidRecalculationLineCount(PayrollRecalculation d) = GROUP SUM 1
+    IF lineRecalculation(PayrollRecalculationLine l) == d AND
+       (NOT lineOriginalAmount(l) OR NOT lineCorrectedAmount(l));
+
+CONSTRAINT lineOriginalPayrollLine(PayrollRecalculationLine l) AND
+           linePayrollRun(lineOriginalPayrollLine(l)) !=
+           recalculationOriginalRun(lineRecalculation(l))
+    MESSAGE 'Исходная строка должна принадлежать выбранному расчёту';
+
+captureOriginalAmount 'Заполнить исходную сумму' (PayrollRecalculationLine l) {
+    IF lineOriginalPayrollLine(l) THEN
+        lineOriginalAmount(l) <- calculationAmount(lineOriginalPayrollLine(l));
+}
+
+calculateRecalculation 'Рассчитать перерасчёт' (PayrollRecalculation d) {
+    IF recalculationStatus(d) != PayrollRecalculationStatus.draft THEN
+        MESSAGE 'Документ уже рассчитан';
+    ELSE IF NOT recalculationOriginalRun(d) OR NOT recalculationReason(d) THEN
+        MESSAGE 'Заполните исходный расчёт и причину';
+    ELSE IF NOT recalculationLineCount(d) OR invalidRecalculationLineCount(d) THEN
+        MESSAGE 'Заполните исходные и исправленные суммы';
+    ELSE {
+        recalculationStatus(d) <- PayrollRecalculationStatus.calculated;
+        recalculationCalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM payrollRecalculations 'Перерасчёты зарплаты'
+    OBJECTS d = PayrollRecalculation
+    PROPERTIES(d) recalculationNumber, recalculationDate, recalculationOriginalRun,
+                  recalculationReason, recalculationStatus, recalculationCalculatedAt,
+                  totalRecalculationDelta
+    PROPERTIES(d) calculateRecalculation
+;
+
+FORM payrollRecalculationLines 'Строки перерасчёта'
+    OBJECTS l = PayrollRecalculationLine
+    PROPERTIES(l) lineRecalculation, lineOriginalPayrollLine, lineOriginalAmount,
+                  lineCorrectedAmount, lineRecalculationDelta, lineRecalculationNote
+    PROPERTIES(l) captureOriginalAmount
+;
