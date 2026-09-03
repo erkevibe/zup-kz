@@ -6,8 +6,15 @@ NAMESPACE ZUPKZ;
 // Headless smoke-test endpoint. The production top module does not require this module.
 payrollFormulaTest() {
     NEW org = Organization {
+        payrollBankName(org) <- 'Тестовый банк';
+        payrollBankBic(org) <- 'TESTKZKA';
+        payrollIban(org) <- 'KZ000000000000000001';
         NEW worker = Employee {
+            iin(worker) <- '900101300000';
             birthDate(worker) <- 1990_01_01;
+            salaryBankName(worker) <- 'Тестовый банк';
+            salaryBankBic(worker) <- 'TESTKZKA';
+            salaryIban(worker) <- 'KZ000000000000000002';
             NEW contract = Employment {
                 employee(contract) <- worker;
                 organization(contract) <- org;
@@ -120,7 +127,23 @@ payrollFormulaTest() {
                                                                             paymentStatementMethod(payment) <- PaymentMethod.bankTransfer;
                                                                             calculatePaymentStatement(payment);
                                                                             approvePaymentStatement(payment);
-                                                                            markPaymentStatementPaid(payment);
+
+                                                                            NEW bankRegister = SalaryBankRegister {
+                                                                                bankRegisterStatement(bankRegister) <- payment;
+                                                                                bankRegisterNumber(bankRegister) <- 'BANK-2026-01';
+                                                                                generateBankRegister(bankRegister);
+                                                                                bankRegisterExternalId(bankRegister) <- 'BANK-EXT-1';
+                                                                                sendBankRegister(bankRegister);
+                                                                                acceptBankRegister(bankRegister);
+
+                                                                                NEW liabilities = PayrollLiabilityDocument {
+                                                                                    liabilityPayrollRun(liabilities) <- run;
+                                                                                    liabilityNumber(liabilities) <- 'LIAB-2026-01';
+                                                                                    generatePayrollLiabilities(liabilities);
+                                                                                    approvePayrollLiabilities(liabilities);
+                                                                                    liabilityPaymentDate(liabilities) <- 2026_03_25;
+                                                                                    liabilityBankReference(liabilities) <- 'TAX-BANK-1';
+                                                                                    markPayrollLiabilitiesPaid(liabilities);
 
                             NEW sickAverage = AverageEarningsDocument {
                                 averageAssignment(sickAverage) <- assignment;
@@ -256,6 +279,23 @@ payrollFormulaTest() {
                                 payrollMarkedPaid2026 = payrollRunStatus(run) == PayrollRunStatus.paid,
                                 latePaymentDetected2026 = paymentStatementOverdue(payment),
                                 latestPayrollPaymentDate2026 = latestPayrollPaymentDate(run),
+                                bankRegisterAmount2026 = totalBankRegisterAmount(bankRegister),
+                                bankRegisterAccepted2026 =
+                                    bankRegisterStatus(bankRegister) == BankRegisterStatus.accepted,
+                                bankRegisterEmployeeIin2026 = bankRegisterLineIin(
+                                    bankRegisterLineByRegister(bankRegister)),
+                                opvLiability2026 = liabilityLineAmount(
+                                    liabilityLineByKind(liabilities, PayrollLiabilityKind.opv)),
+                                totalPayrollLiability2026 = totalPayrollLiability(liabilities),
+                                overdueLiabilityCount2026 = overdueLiabilityCount(liabilities),
+                                liabilitiesPaid2026 =
+                                    liabilityStatus(liabilities) == PayrollLiabilityStatus.paid,
+                                opvLiabilityDue2026 = liabilityLineDueDate(
+                                    liabilityLineByKind(liabilities, PayrollLiabilityKind.opv)),
+                                socialContributionDue2026 = liabilityLineDueDate(
+                                    liabilityLineByKind(liabilities, PayrollLiabilityKind.socialContribution)),
+                                ipnLiabilityDue2026 = liabilityLineDueDate(
+                                    liabilityLineByKind(liabilities, PayrollLiabilityKind.ipn)),
                                 ordinaryLowIncomeEnforcementCap = taxMinimum(
                                     socialPaymentAmount(80000.00, 50.000000),
                                     taxPositive(80000.00 - 50851.00)),
@@ -295,6 +335,8 @@ payrollFormulaTest() {
                                 outsideSchedulePaymentDue = thirdNextWorkDate(calendarByYear(2026),
                                                                               LeaveWorkWeek.fiveDay,
                                                                               2026_07_13);
+                                                                                    }
+                                                                                }
                                                                             }
                                                             }
                                                         }

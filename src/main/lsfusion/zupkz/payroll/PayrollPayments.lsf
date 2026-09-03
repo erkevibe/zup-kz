@@ -1,0 +1,305 @@
+MODULE PayrollPayments;
+
+REQUIRE PayrollSettlement;
+NAMESPACE ZUPKZ;
+
+// Первый банковский контур хранит один действующий зарплатный счёт сотрудника
+// и один счёт работодателя. Историю счетов добавим, когда появится реальный
+// сценарий смены зарплатного проекта.
+salaryBankName 'Банк зарплатного проекта' = DATA STRING[150] (Employee);
+salaryBankBic 'БИК банка' = DATA STRING[20] (Employee);
+salaryIban 'Зарплатный IBAN' = DATA STRING[34] (Employee);
+payrollBankName 'Банк организации' = DATA STRING[150] (Organization);
+payrollBankBic 'БИК организации' = DATA STRING[20] (Organization);
+payrollIban 'Расчётный IBAN' = DATA STRING[34] (Organization);
+
+CLASS BankRegisterStatus 'Статус банковского реестра' {
+    draft 'Черновик',
+    generated 'Сформирован',
+    sent 'Отправлен',
+    accepted 'Принят банком',
+    rejected 'Отклонён банком'
+}
+
+CLASS SalaryBankRegister 'Банковский реестр зарплаты';
+
+bankRegisterStatement 'Ведомость' = DATA PaymentStatement (SalaryBankRegister);
+bankRegisterNumber 'Номер' = DATA STRING[50] (SalaryBankRegister);
+bankRegisterStatus 'Статус' = DATA BankRegisterStatus (SalaryBankRegister);
+bankRegisterGeneratedAt 'Сформирован' = DATA DATETIME (SalaryBankRegister);
+bankRegisterSentAt 'Отправлен' = DATA DATETIME (SalaryBankRegister);
+bankRegisterAcceptedAt 'Принят банком' = DATA DATETIME (SalaryBankRegister);
+bankRegisterExternalId 'Идентификатор банка' = DATA STRING[100] (SalaryBankRegister);
+bankRegisterRejectionReason 'Причина отклонения' = DATA STRING[500] (SalaryBankRegister);
+
+bankRegisterPayrollRun(SalaryBankRegister r) =
+    paymentStatementPayrollRun(bankRegisterStatement(r));
+bankRegisterOrganization(SalaryBankRegister r) =
+    payrollOrganization(bankRegisterPayrollRun(r));
+activeBankRegisterCount(PaymentStatement statement) = GROUP SUM 1 IF
+    bankRegisterStatement(SalaryBankRegister r) == statement AND
+    (bankRegisterStatus(r) == BankRegisterStatus.generated OR
+     bankRegisterStatus(r) == BankRegisterStatus.sent OR
+     bankRegisterStatus(r) == BankRegisterStatus.accepted);
+CONSTRAINT activeBankRegisterCount(PaymentStatement statement) > 1
+    MESSAGE 'Для ведомости может быть только один действующий банковский реестр';
+
+CLASS SalaryBankRegisterLine 'Строка банковского реестра';
+
+bankRegisterLineRegister 'Реестр' = DATA SalaryBankRegister (SalaryBankRegisterLine);
+bankRegisterLinePayment 'Строка ведомости' = DATA PaymentStatementLine (SalaryBankRegisterLine);
+bankRegisterLineEmployee 'Сотрудник' = DATA Employee (SalaryBankRegisterLine);
+bankRegisterLineIin 'ИИН' = DATA STRING[12] (SalaryBankRegisterLine);
+bankRegisterLineBankName 'Банк' = DATA STRING[150] (SalaryBankRegisterLine);
+bankRegisterLineBic 'БИК' = DATA STRING[20] (SalaryBankRegisterLine);
+bankRegisterLineIban 'IBAN' = DATA STRING[34] (SalaryBankRegisterLine);
+bankRegisterLineAmount 'Сумма' = DATA NUMERIC[18,2] (SalaryBankRegisterLine);
+bankRegisterLinePurpose 'Назначение платежа' = DATA STRING[250] (SalaryBankRegisterLine);
+
+missingBankEmployeeDataCount(PaymentStatement statement) = GROUP SUM 1
+    IF paymentLineStatement(PaymentStatementLine l) == statement AND
+       (NOT iin(paymentLineEmployee(l)) OR NOT salaryBankBic(paymentLineEmployee(l)) OR
+        NOT salaryIban(paymentLineEmployee(l)));
+
+generateBankRegister 'Сформировать реестр' (SalaryBankRegister r) {
+    IF bankRegisterStatus(r) AND bankRegisterStatus(r) != BankRegisterStatus.draft THEN
+        MESSAGE 'Банковский реестр уже сформирован';
+    ELSE IF NOT bankRegisterNumber(r) OR NOT bankRegisterStatement(r) OR
+            paymentStatementStatus(bankRegisterStatement(r)) != PaymentStatementStatus.approved OR
+            paymentStatementMethod(bankRegisterStatement(r)) != PaymentMethod.bankTransfer THEN
+        MESSAGE 'Выберите утверждённую банковскую ведомость и укажите номер реестра';
+    ELSE IF NOT payrollBankBic(bankRegisterOrganization(r)) OR
+            NOT payrollIban(bankRegisterOrganization(r)) THEN
+        MESSAGE 'Заполните банковские реквизиты организации';
+    ELSE IF missingBankEmployeeDataCount(bankRegisterStatement(r)) THEN
+        MESSAGE 'Заполните ИИН, БИК и зарплатный IBAN сотрудников';
+    ELSE {
+        FOR paymentLineStatement(PaymentStatementLine p) == bankRegisterStatement(r) DO {
+            NEW l = SalaryBankRegisterLine {
+                bankRegisterLineRegister(l) <- r;
+                bankRegisterLinePayment(l) <- p;
+                bankRegisterLineEmployee(l) <- paymentLineEmployee(p);
+                bankRegisterLineIin(l) <- iin(paymentLineEmployee(p));
+                bankRegisterLineBankName(l) <- salaryBankName(paymentLineEmployee(p));
+                bankRegisterLineBic(l) <- salaryBankBic(paymentLineEmployee(p));
+                bankRegisterLineIban(l) <- salaryIban(paymentLineEmployee(p));
+                bankRegisterLineAmount(l) <- paymentLineAmount(p);
+                bankRegisterLinePurpose(l) <- 'Заработная плата за расчётный период';
+            }
+        }
+        bankRegisterStatus(r) <- BankRegisterStatus.generated;
+        bankRegisterGeneratedAt(r) <- currentDateTime();
+        APPLY;
+    }
+}
+
+sendBankRegister 'Отметить отправленным' (SalaryBankRegister r) {
+    IF bankRegisterStatus(r) != BankRegisterStatus.generated THEN
+        MESSAGE 'Сначала сформируйте банковский реестр';
+    ELSE IF NOT bankRegisterExternalId(r) THEN
+        MESSAGE 'Укажите идентификатор отправки в банк';
+    ELSE {
+        bankRegisterStatus(r) <- BankRegisterStatus.sent;
+        bankRegisterSentAt(r) <- currentDateTime();
+        APPLY;
+    }
+}
+
+acceptBankRegister 'Подтвердить исполнение банком' (SalaryBankRegister r) {
+    IF bankRegisterStatus(r) != BankRegisterStatus.sent THEN
+        MESSAGE 'Банк может подтвердить только отправленный реестр';
+    ELSE IF paymentStatementStatus(bankRegisterStatement(r)) != PaymentStatementStatus.approved THEN
+        MESSAGE 'Связанная ведомость уже не ожидает исполнения';
+    ELSE {
+        bankRegisterStatus(r) <- BankRegisterStatus.accepted;
+        bankRegisterAcceptedAt(r) <- currentDateTime();
+        APPLY;
+        markPaymentStatementPaid(bankRegisterStatement(r));
+    }
+}
+
+rejectBankRegister 'Отметить отклонённым' (SalaryBankRegister r) {
+    IF bankRegisterStatus(r) != BankRegisterStatus.sent THEN
+        MESSAGE 'Отклонить можно только отправленный реестр';
+    ELSE IF NOT bankRegisterRejectionReason(r) THEN
+        MESSAGE 'Укажите причину отклонения банка';
+    ELSE {
+        bankRegisterStatus(r) <- BankRegisterStatus.rejected;
+        APPLY;
+    }
+}
+
+totalBankRegisterAmount 'Сумма реестра' (SalaryBankRegister r) = GROUP SUM
+    bankRegisterLineAmount(SalaryBankRegisterLine l) IF bankRegisterLineRegister(l) == r;
+bankRegisterLineByRegister(SalaryBankRegister r) =
+    GROUP AGGR SalaryBankRegisterLine l BY bankRegisterLineRegister(l);
+
+CLASS PayrollLiabilityKind 'Обязательный платёж' {
+    opv 'ОПВ',
+    opvr 'ОПВР',
+    socialContribution 'Социальные отчисления',
+    vosms 'ВОСМС',
+    oosms 'ООСМС',
+    ipn 'ИПН',
+    socialTax 'Социальный налог'
+}
+
+CLASS PayrollLiabilityStatus 'Статус перечисления обязательных платежей' {
+    draft 'Черновик',
+    calculated 'Сформирован',
+    approved 'Утверждён',
+    paid 'Перечислен'
+}
+
+CLASS PayrollLiabilityDocument 'Перечисление налогов и социальных платежей';
+
+liabilityPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (PayrollLiabilityDocument);
+liabilityNumber 'Номер' = DATA STRING[50] (PayrollLiabilityDocument);
+liabilityStatus 'Статус' = DATA PayrollLiabilityStatus (PayrollLiabilityDocument);
+liabilityCalculatedAt 'Сформирован' = DATA DATETIME (PayrollLiabilityDocument);
+liabilityPaymentDate 'Дата перечисления' = DATA DATE (PayrollLiabilityDocument);
+liabilityBankReference 'Банковская ссылка' = DATA STRING[100] (PayrollLiabilityDocument);
+liabilityPaidAt 'Перечислен' = DATA DATETIME (PayrollLiabilityDocument);
+
+activeLiabilityDocumentCount(PayrollRun run) = GROUP SUM 1 IF
+    liabilityPayrollRun(PayrollLiabilityDocument d) == run AND
+    (liabilityStatus(d) == PayrollLiabilityStatus.calculated OR
+     liabilityStatus(d) == PayrollLiabilityStatus.approved OR
+     liabilityStatus(d) == PayrollLiabilityStatus.paid);
+CONSTRAINT activeLiabilityDocumentCount(PayrollRun run) > 1
+    MESSAGE 'Для расчёта зарплаты может быть только один документ обязательных платежей';
+
+CLASS PayrollLiabilityLine 'Строка обязательного платежа';
+
+liabilityLineDocument 'Документ' = DATA PayrollLiabilityDocument (PayrollLiabilityLine);
+liabilityLineKind 'Вид платежа' = DATA PayrollLiabilityKind (PayrollLiabilityLine);
+liabilityLineAmount 'Сумма' = DATA NUMERIC[18,2] (PayrollLiabilityLine);
+liabilityLineDueDate 'Срок перечисления' = DATA DATE (PayrollLiabilityLine);
+liabilityLineLegalSource 'Нормативное основание' = DATA LegalSource (PayrollLiabilityLine);
+
+payrollLiabilityAmount(PayrollRun run, PayrollLiabilityKind kind) =
+    GROUP SUM (IF kind == PayrollLiabilityKind.opv THEN settlementOpv(PayrollSettlementLine s)
+               ELSE IF kind == PayrollLiabilityKind.opvr THEN settlementOpvr(s)
+               ELSE IF kind == PayrollLiabilityKind.socialContribution THEN settlementSo(s)
+               ELSE IF kind == PayrollLiabilityKind.vosms THEN settlementVosms(s)
+               ELSE IF kind == PayrollLiabilityKind.oosms THEN settlementOosms(s)
+               ELSE IF kind == PayrollLiabilityKind.ipn THEN settlementIpn(s)
+               ELSE IF kind == PayrollLiabilityKind.socialTax THEN settlementSocialTax(s))
+    IF settlementPayrollRun(s) == run;
+
+actualPayrollPaymentDate(PayrollRun run) = GROUP LAST paymentStatementDate(PaymentStatement d)
+    IF paymentStatementPayrollRun(d) == run AND
+       paymentStatementStatus(d) == PaymentStatementStatus.paid
+    ORDER paymentStatementDate(d), d;
+paymentBasedLiability(PayrollLiabilityKind kind) =
+    kind == PayrollLiabilityKind.opv OR kind == PayrollLiabilityKind.opvr OR
+    kind == PayrollLiabilityKind.vosms OR kind == PayrollLiabilityKind.oosms OR
+    kind == PayrollLiabilityKind.ipn;
+liabilityReferenceDate(PayrollRun run, PayrollLiabilityKind kind) =
+    IF paymentBasedLiability(kind) THEN actualPayrollPaymentDate(run)
+    ELSE payrollPeriodTo(run);
+calculatedLiabilityDueDate(PayrollRun run, PayrollLiabilityKind kind) =
+    firstDayOfMonth(sumMonth(liabilityReferenceDate(run, kind), 1)) + 24;
+liabilityLegalSource(PayrollLiabilityKind kind) =
+    IF kind == PayrollLiabilityKind.opv OR kind == PayrollLiabilityKind.opvr OR
+       kind == PayrollLiabilityKind.socialContribution THEN legalSourceByCode('SOCIAL_CODE_KZ')
+    ELSE IF kind == PayrollLiabilityKind.vosms OR kind == PayrollLiabilityKind.oosms THEN
+        legalSourceByCode('OSMS_LAW')
+    ELSE legalSourceByCode('TAX_CODE_2026');
+
+generatePayrollLiabilities 'Сформировать обязательные платежи' (PayrollLiabilityDocument d) {
+    IF liabilityStatus(d) AND liabilityStatus(d) != PayrollLiabilityStatus.draft THEN
+        MESSAGE 'Обязательные платежи уже сформированы';
+    ELSE IF NOT liabilityNumber(d) OR NOT liabilityPayrollRun(d) OR
+            payrollRunStatus(liabilityPayrollRun(d)) != PayrollRunStatus.paid THEN
+        MESSAGE 'Укажите номер и выберите выплаченный расчёт зарплаты';
+    ELSE {
+        FOR kind IS PayrollLiabilityKind AND
+            payrollLiabilityAmount(liabilityPayrollRun(d), kind) > 0.00 DO {
+            NEW l = PayrollLiabilityLine {
+                liabilityLineDocument(l) <- d;
+                liabilityLineKind(l) <- kind;
+                liabilityLineAmount(l) <- payrollLiabilityAmount(liabilityPayrollRun(d), kind);
+                liabilityLineDueDate(l) <- calculatedLiabilityDueDate(liabilityPayrollRun(d), kind);
+                liabilityLineLegalSource(l) <- liabilityLegalSource(kind);
+            }
+        }
+        liabilityStatus(d) <- PayrollLiabilityStatus.calculated;
+        liabilityCalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+liabilityLineCount(PayrollLiabilityDocument d) = GROUP SUM 1
+    IF liabilityLineDocument(PayrollLiabilityLine l) == d;
+totalPayrollLiability 'Всего к перечислению' (PayrollLiabilityDocument d) = GROUP SUM
+    liabilityLineAmount(PayrollLiabilityLine l) IF liabilityLineDocument(l) == d;
+overdueLiabilityCount 'Просрочено платежей' (PayrollLiabilityDocument d) = GROUP SUM 1
+    IF liabilityLineDocument(PayrollLiabilityLine l) == d AND
+       liabilityPaymentDate(d) > liabilityLineDueDate(l);
+liabilityLineByKind(PayrollLiabilityDocument d, PayrollLiabilityKind kind) =
+    GROUP AGGR PayrollLiabilityLine l BY liabilityLineDocument(l), liabilityLineKind(l);
+
+approvePayrollLiabilities 'Утвердить' (PayrollLiabilityDocument d) {
+    IF liabilityStatus(d) != PayrollLiabilityStatus.calculated OR NOT liabilityLineCount(d) THEN
+        MESSAGE 'Сначала сформируйте обязательные платежи';
+    ELSE {
+        liabilityStatus(d) <- PayrollLiabilityStatus.approved;
+        APPLY;
+    }
+}
+
+markPayrollLiabilitiesPaid 'Отметить перечисленными' (PayrollLiabilityDocument d) {
+    IF liabilityStatus(d) != PayrollLiabilityStatus.approved THEN
+        MESSAGE 'Сначала утвердите обязательные платежи';
+    ELSE IF NOT liabilityPaymentDate(d) OR NOT liabilityBankReference(d) THEN
+        MESSAGE 'Укажите дату и банковскую ссылку платежа';
+    ELSE {
+        liabilityStatus(d) <- PayrollLiabilityStatus.paid;
+        liabilityPaidAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM salaryBankRegisters 'Банковские реестры зарплаты'
+    OBJECTS r = SalaryBankRegister
+    PROPERTIES(r) bankRegisterStatement, bankRegisterNumber, bankRegisterStatus,
+                  bankRegisterOrganization, bankRegisterGeneratedAt, bankRegisterSentAt,
+                  bankRegisterAcceptedAt, bankRegisterExternalId,
+                  bankRegisterRejectionReason, totalBankRegisterAmount
+    PROPERTIES(r) generateBankRegister, sendBankRegister, acceptBankRegister,
+                  rejectBankRegister
+;
+
+FORM salaryBankRegisterLines 'Строки банковских реестров'
+    OBJECTS l = SalaryBankRegisterLine
+    PROPERTIES(l) bankRegisterLineRegister, bankRegisterLinePayment,
+                  bankRegisterLineEmployee, bankRegisterLineIin,
+                  bankRegisterLineBankName, bankRegisterLineBic,
+                  bankRegisterLineIban, bankRegisterLineAmount,
+                  bankRegisterLinePurpose
+;
+
+FORM payrollLiabilityDocuments 'Перечисление налогов и социальных платежей'
+    OBJECTS d = PayrollLiabilityDocument
+    PROPERTIES(d) liabilityPayrollRun, liabilityNumber, liabilityStatus,
+                  liabilityCalculatedAt, liabilityPaymentDate,
+                  liabilityBankReference, liabilityPaidAt,
+                  totalPayrollLiability, overdueLiabilityCount
+    PROPERTIES(d) generatePayrollLiabilities, approvePayrollLiabilities,
+                  markPayrollLiabilitiesPaid
+;
+
+FORM payrollLiabilityLines 'Строки обязательных платежей'
+    OBJECTS l = PayrollLiabilityLine
+    PROPERTIES(l) liabilityLineDocument, liabilityLineKind, liabilityLineAmount,
+                  liabilityLineDueDate, liabilityLineLegalSource
+;
+
+EXTEND FORM employees
+    PROPERTIES(e) salaryBankName, salaryBankBic, salaryIban
+;
+
+EXTEND FORM organizations
+    PROPERTIES(o) payrollBankName, payrollBankBic, payrollIban
+;

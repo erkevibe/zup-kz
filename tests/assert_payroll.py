@@ -62,6 +62,10 @@ expected = {
     "paymentStatementAmount2026": Decimal("67274.64"),
     "remainingAfterPayment2026": Decimal("0.00"),
     "unpaidAfterPayment2026": Decimal("0.00"),
+    "bankRegisterAmount2026": Decimal("67274.64"),
+    "opvLiability2026": Decimal("14845.24"),
+    "totalPayrollLiability2026": Decimal("42071.15"),
+    "overdueLiabilityCount2026": Decimal("2"),
     "ordinaryLowIncomeEnforcementCap": Decimal("29149.00"),
     "protectedLowIncomeEnforcementCap": Decimal("40000.00"),
     "averageDaily": Decimal("4878.048780"),
@@ -93,4 +97,10 @@ assert actual["scheduledLeavePaymentDue"] == "2026-07-08"
 assert actual["outsideSchedulePaymentDue"] == "2026-07-16"
 assert actual["payrollMarkedPaid2026"] is True
 assert actual["latePaymentDetected2026"] is True
+assert actual["bankRegisterAccepted2026"] is True
+assert actual["bankRegisterEmployeeIin2026"] == "900101300000"
+assert actual["liabilitiesPaid2026"] is True
 assert actual["latestPayrollPaymentDate2026"] == "2026-02-10"
+assert actual["opvLiabilityDue2026"] == "2026-03-25"
+assert actual["socialContributionDue2026"] == "2026-02-25"
+assert actual["ipnLiabilityDue2026"] == "2026-03-25"
