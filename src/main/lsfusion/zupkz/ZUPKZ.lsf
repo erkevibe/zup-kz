@@ -3,7 +3,7 @@ MODULE ZUPKZ;
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
-        PayrollRecalculation;
+        PayrollRecalculation, HRLeave, PayrollInterimPayment;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -25,6 +25,8 @@ NAVIGATOR {
         NEW employments;
         NEW employmentAssignments;
         NEW personnelEvents;
+        NEW leaveEntitlements;
+        NEW leaveDocuments;
     }
 
     NEW FOLDER workingTime 'Рабочее время' WINDOW toolbar {
@@ -49,5 +51,6 @@ NAVIGATOR {
         NEW averageEarningsBaseLines;
         NEW payrollRecalculations;
         NEW payrollRecalculationLines;
+        NEW interimPayments;
     }
 }

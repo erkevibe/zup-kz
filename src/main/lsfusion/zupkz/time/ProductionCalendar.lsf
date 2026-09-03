@@ -26,6 +26,7 @@ calendarDate 'Дата' = DATA DATE (CalendarDay);
 dayKindFiveDay 'Вид дня, пятидневка' = DATA CalendarDayKind (CalendarDay);
 dayKindSixDay 'Вид дня, шестидневка' = DATA CalendarDayKind (CalendarDay);
 holidayName 'Праздник / основание переноса' = DATA STRING[200] (CalendarDay);
+excludeFromAnnualLeave 'Не включать в ежегодный отпуск' = DATA BOOLEAN (CalendarDay);
 shortenedDay 'Сокращённый день' = DATA BOOLEAN (CalendarDay);
 hoursFiveDay40 '5 дней / 40 часов' = DATA NUMERIC[6,2] (CalendarDay);
 hoursSixDay40 '6 дней / 40 часов' = DATA NUMERIC[6,2] (CalendarDay);
@@ -59,7 +60,7 @@ FORM productionCalendars 'Производственные календари'
 FORM calendarDays 'Дни производственного календаря'
     OBJECTS d = CalendarDay
     PROPERTIES(d) productionCalendar, calendarDate, dayKindFiveDay, dayKindSixDay, holidayName,
-                  shortenedDay, hoursFiveDay40, hoursSixDay40,
+                  excludeFromAnnualLeave, shortenedDay, hoursFiveDay40, hoursSixDay40,
                   hoursFiveDay36, hoursSixDay36
 ;
 
@@ -112,6 +113,7 @@ setHoliday2026(ProductionCalendar c, DATE date, STRING[200] holidayCaption) {
     dayKindFiveDay(calendarDayByDate(c, date)) <- CalendarDayKind.holiday;
     dayKindSixDay(calendarDayByDate(c, date)) <- CalendarDayKind.holiday;
     holidayName(calendarDayByDate(c, date)) <- holidayCaption;
+    excludeFromAnnualLeave(calendarDayByDate(c, date)) <- TRUE;
     hoursFiveDay40(calendarDayByDate(c, date)) <- 0.00;
     hoursFiveDay36(calendarDayByDate(c, date)) <- 0.00;
     hoursSixDay40(calendarDayByDate(c, date)) <- 0.00;
@@ -155,6 +157,11 @@ generateOfficialCalendarDays2026(ProductionCalendar c) {
     setHoliday2026(c, 2026_10_25, 'День Республики');
     setHoliday2026(c, 2026_12_16, 'День Независимости');
 
+    // Статья 84 ТК: это выходные, но не праздничные дни.
+    // Поэтому они входят в продолжительность ежегодного отпуска.
+    excludeFromAnnualLeave(calendarDayByDate(c, 2026_01_07)) <- NULL;
+    excludeFromAnnualLeave(calendarDayByDate(c, 2026_05_27)) <- NULL;
+
     // Перенос 15 марта следует из статьи 3 Закона о праздниках и подтверждается
     // опубликованной годовой нормой. Остальные переносы перечислены календарём.
     setTransferredWeekendBoth2026(c, 2026_03_09, 'Перенос выходного с 8 марта');
@@ -163,6 +170,24 @@ generateOfficialCalendarDays2026(ProductionCalendar c) {
     setTransferredWeekendFiveDay2026(c, 2026_03_25, 'Перенос выходного Наурыз мейрамы');
     setTransferredWeekendFiveDay2026(c, 2026_05_11, 'Перенос выходного с 9 мая');
     setTransferredWeekendBoth2026(c, 2026_10_26, 'Перенос выходного с 25 октября');
+}
+
+updateAnnualLeaveExclusions2026(ProductionCalendar c) {
+    setHoliday2026(c, 2026_01_01, 'Новый год');
+    setHoliday2026(c, 2026_01_02, 'Новый год');
+    setHoliday2026(c, 2026_03_08, 'Международный женский день');
+    setHoliday2026(c, 2026_03_15, 'День Конституции Республики Казахстан');
+    setHoliday2026(c, 2026_03_21, 'Наурыз мейрамы');
+    setHoliday2026(c, 2026_03_22, 'Наурыз мейрамы');
+    setHoliday2026(c, 2026_03_23, 'Наурыз мейрамы');
+    setHoliday2026(c, 2026_05_01, 'Праздник единства народа Казахстана');
+    setHoliday2026(c, 2026_05_07, 'День защитника Отечества');
+    setHoliday2026(c, 2026_05_09, 'День Победы');
+    setHoliday2026(c, 2026_07_06, 'День Столицы');
+    setHoliday2026(c, 2026_10_25, 'День Республики');
+    setHoliday2026(c, 2026_12_16, 'День Независимости');
+    excludeFromAnnualLeave(calendarDayByDate(c, 2026_01_07)) <- NULL;
+    excludeFromAnnualLeave(calendarDayByDate(c, 2026_05_27)) <- NULL;
 }
 
 // Официальная годовая норма загружается идемпотентно. Детальные дни календаря
@@ -194,6 +219,7 @@ loadOfficialCalendar2026() {
 
         IF NOT calendarDayCount(calendarByYear(2026)) THEN
             generateOfficialCalendarDays2026(calendarByYear(2026));
+        updateAnnualLeaveExclusions2026(calendarByYear(2026));
         APPLY;
     }
 }

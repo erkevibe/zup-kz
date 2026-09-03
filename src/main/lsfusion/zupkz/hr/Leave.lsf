@@ -1,0 +1,170 @@
+MODULE HRLeave;
+
+REQUIRE HREmployment, TimeProductionCalendar, AverageEarnings;
+NAMESPACE ZUPKZ;
+
+CLASS LeaveKind 'Вид отпуска' {
+    annualPaid 'Основной оплачиваемый',
+    annualAdditional 'Дополнительный оплачиваемый',
+    unpaid 'Без сохранения заработной платы',
+    education 'Учебный',
+    maternity 'По беременности и родам',
+    childcare 'По уходу за ребёнком',
+    screening 'Для скрининговых исследований',
+    pregnancyRegistration 'Для постановки на учёт по беременности',
+    creative 'Творческий',
+    other 'Иной'
+}
+
+CLASS LeaveStatus 'Статус отпуска' {
+    draft 'Черновик',
+    approved 'Утверждён',
+    cancelled 'Отменён'
+}
+
+CLASS LeaveWorkWeek 'Рабочая неделя для оплаты' {
+    fiveDay 'Пятидневная',
+    sixDay 'Шестидневная'
+}
+
+CLASS LeaveEntitlement 'Право на ежегодный отпуск';
+
+entitlementAssignment 'Назначение' = DATA EmploymentAssignment (LeaveEntitlement);
+entitlementWorkYearFrom 'Рабочий год с' = DATA DATE (LeaveEntitlement);
+entitlementWorkYearTo 'Рабочий год по' = DATA DATE (LeaveEntitlement);
+entitlementBasicDays 'Основной отпуск, дней' = DATA NUMERIC[6,2] (LeaveEntitlement);
+entitlementAdditionalDays 'Дополнительный отпуск, дней' = DATA NUMERIC[6,2] (LeaveEntitlement);
+entitlementNote 'Основание' = DATA STRING[500] (LeaveEntitlement);
+
+CONSTRAINT entitlementWorkYearTo(LeaveEntitlement e) < entitlementWorkYearFrom(e)
+    MESSAGE 'Окончание рабочего года не может быть раньше начала';
+CONSTRAINT entitlementBasicDays(LeaveEntitlement e) < 24.00
+    MESSAGE 'Основной ежегодный отпуск не может быть меньше 24 календарных дней';
+
+CLASS LeaveDocument 'Отпуск';
+
+leaveNumber 'Номер акта' = DATA STRING[50] (LeaveDocument);
+leaveOrderDate 'Дата акта' = DATA DATE (LeaveDocument);
+leaveAssignment 'Назначение' = DATA EmploymentAssignment (LeaveDocument);
+leaveKind 'Вид отпуска' = DATA LeaveKind (LeaveDocument);
+leaveDateFrom 'Отпуск с' = DATA DATE (LeaveDocument);
+leaveDateTo 'Отпуск по' = DATA DATE (LeaveDocument);
+leaveEntitlement 'Право на отпуск' = DATA LeaveEntitlement (LeaveDocument);
+leaveCalendar 'Производственный календарь' = DATA ProductionCalendar (LeaveDocument);
+leaveWorkWeek 'Рабочая неделя' = DATA LeaveWorkWeek (LeaveDocument);
+leaveOutsideSchedule 'Вне графика отпусков' = DATA BOOLEAN (LeaveDocument);
+leaveAverageEarnings 'Средний заработок' = DATA AverageEarningsDocument (LeaveDocument);
+leaveBasis 'Основание' = DATA STRING[500] (LeaveDocument);
+leaveStatus 'Статус' = DATA LeaveStatus (LeaveDocument);
+
+CONSTRAINT leaveDateTo(LeaveDocument l) < leaveDateFrom(l)
+    MESSAGE 'Окончание отпуска не может быть раньше начала';
+CONSTRAINT leaveEntitlement(LeaveDocument l) AND
+           entitlementAssignment(leaveEntitlement(l)) != leaveAssignment(l)
+    MESSAGE 'Право на отпуск должно принадлежать тому же назначению';
+CONSTRAINT leaveAverageEarnings(LeaveDocument l) AND
+           averageAssignment(leaveAverageEarnings(l)) != leaveAssignment(l)
+    MESSAGE 'Расчёт среднего заработка должен принадлежать тому же назначению';
+
+annualPaidLeave(LeaveDocument l) = leaveKind(l) == LeaveKind.annualPaid OR
+    leaveKind(l) == LeaveKind.annualAdditional;
+annualLeaveDays(ProductionCalendar c, DATE dateFrom, DATE dateTo) = GROUP SUM 1
+    IF productionCalendar(CalendarDay d) == c AND calendarDate(d) >= dateFrom AND
+       calendarDate(d) <= dateTo AND NOT excludeFromAnnualLeave(d);
+leaveCalendarDays 'Календарных дней' (LeaveDocument l) = GROUP SUM 1
+    IF productionCalendar(CalendarDay d) == leaveCalendar(l) AND
+       calendarDate(d) >= leaveDateFrom(l) AND calendarDate(d) <= leaveDateTo(l);
+leaveChargedDays 'Дней отпуска' (LeaveDocument l) =
+    IF annualPaidLeave(l) THEN annualLeaveDays(leaveCalendar(l), leaveDateFrom(l), leaveDateTo(l))
+    ELSE leaveCalendarDays(l);
+
+calendarWorkDay(CalendarDay d, LeaveWorkWeek week) =
+    (week == LeaveWorkWeek.fiveDay AND hoursFiveDay40(d) > 0.00) OR
+    (week == LeaveWorkWeek.sixDay AND hoursSixDay40(d) > 0.00);
+leaveEventWorkDays 'Рабочих дней для оплаты' (LeaveDocument l) = GROUP SUM 1
+    IF productionCalendar(CalendarDay d) == leaveCalendar(l) AND
+       calendarDate(d) >= leaveDateFrom(l) AND calendarDate(d) <= leaveDateTo(l) AND
+       calendarWorkDay(d, leaveWorkWeek(l));
+previousWorkDay(ProductionCalendar c, LeaveWorkWeek week, DATE date) = GROUP LAST CalendarDay d
+    IF productionCalendar(d) == c AND calendarDate(d) < date AND calendarWorkDay(d, week)
+    ORDER calendarDate(d), d;
+nextWorkDay(ProductionCalendar c, LeaveWorkWeek week, DATE date) = GROUP LAST CalendarDay d
+    IF productionCalendar(d) == c AND calendarDate(d) > date AND calendarWorkDay(d, week)
+    ORDER DESC calendarDate(d), d;
+previousWorkDate(ProductionCalendar c, LeaveWorkWeek week, DATE date) =
+    calendarDate(previousWorkDay(c, week, date));
+nextWorkDate(ProductionCalendar c, LeaveWorkWeek week, DATE date) =
+    calendarDate(nextWorkDay(c, week, date));
+thirdPreviousWorkDate(ProductionCalendar c, LeaveWorkWeek week, DATE date) =
+    previousWorkDate(c, week, previousWorkDate(c, week, previousWorkDate(c, week, date)));
+thirdNextWorkDate(ProductionCalendar c, LeaveWorkWeek week, DATE date) =
+    nextWorkDate(c, week, nextWorkDate(c, week, nextWorkDate(c, week, date)));
+leavePaymentDueDate 'Срок оплаты' (LeaveDocument l) =
+    IF leaveOutsideSchedule(l) THEN
+        thirdNextWorkDate(leaveCalendar(l), leaveWorkWeek(l), leaveOrderDate(l))
+    ELSE thirdPreviousWorkDate(leaveCalendar(l), leaveWorkWeek(l), leaveDateFrom(l));
+leaveGrossAmount 'Сумма отпуска' (LeaveDocument l) =
+    averagePayable(leaveAverageEarnings(l)) IF annualPaidLeave(l);
+
+usedLeaveDays 'Использовано дней' (LeaveEntitlement e) = GROUP SUM leaveChargedDays(LeaveDocument l)
+    IF leaveEntitlement(l) == e AND leaveStatus(l) == LeaveStatus.approved AND annualPaidLeave(l);
+entitlementDays 'Положено дней' (LeaveEntitlement e) =
+    (IF entitlementBasicDays(e) THEN entitlementBasicDays(e) ELSE 0.00) +
+    (IF entitlementAdditionalDays(e) THEN entitlementAdditionalDays(e) ELSE 0.00);
+remainingLeaveDays 'Осталось дней' (LeaveEntitlement e) =
+    entitlementDays(e) - (IF usedLeaveDays(e) THEN usedLeaveDays(e) ELSE 0.00);
+hasFourteenDayPart 'Есть часть не менее 14 дней' (LeaveEntitlement e) = GROUP MAX 1
+    IF leaveEntitlement(LeaveDocument l) == e AND leaveStatus(l) == LeaveStatus.approved AND
+       annualPaidLeave(l) AND leaveChargedDays(l) >= 14.00;
+
+prepareAverageForLeave 'Заполнить средний заработок' (LeaveDocument l) {
+    IF NOT leaveAverageEarnings(l) THEN
+        MESSAGE 'Создайте или выберите расчёт среднего заработка';
+    ELSE IF averageStatus(leaveAverageEarnings(l)) != AverageEarningsStatus.draft THEN
+        MESSAGE 'База среднего заработка уже зафиксирована';
+    ELSE {
+        averageAssignment(leaveAverageEarnings(l)) <- leaveAssignment(l);
+        averageEventKind(leaveAverageEarnings(l)) <- AverageEarningsEventKind.vacation;
+        averageEventFrom(leaveAverageEarnings(l)) <- leaveDateFrom(l);
+        averageEventTo(leaveAverageEarnings(l)) <- leaveDateTo(l);
+        averageMode(leaveAverageEarnings(l)) <- AverageEarningsMode.daily;
+        averageEventWorkDays(leaveAverageEarnings(l)) <- leaveEventWorkDays(l);
+    }
+}
+
+approveLeave 'Утвердить отпуск' (LeaveDocument l) {
+    IF leaveStatus(l) AND leaveStatus(l) != LeaveStatus.draft THEN
+        MESSAGE 'Можно утвердить только черновик';
+    ELSE IF NOT leaveAssignment(l) OR NOT leaveKind(l) OR NOT leaveDateFrom(l) OR
+            NOT leaveDateTo(l) OR NOT leaveCalendar(l) OR NOT leaveNumber(l) OR NOT leaveOrderDate(l) THEN
+        MESSAGE 'Заполните сотрудника, вид, даты, календарь и реквизиты акта';
+    ELSE IF NOT leaveChargedDays(l) THEN
+        MESSAGE 'В календаре нет дней указанного периода';
+    ELSE IF annualPaidLeave(l) AND (NOT leaveEntitlement(l) OR
+            leaveChargedDays(l) > remainingLeaveDays(leaveEntitlement(l))) THEN
+        MESSAGE 'Нет права или недостаточно остатка дней отпуска';
+    ELSE IF annualPaidLeave(l) AND (NOT leaveAverageEarnings(l) OR
+            averageStatus(leaveAverageEarnings(l)) != AverageEarningsStatus.calculated) THEN
+        MESSAGE 'Рассчитайте средний заработок';
+    ELSE {
+        leaveStatus(l) <- LeaveStatus.approved;
+        APPLY;
+    }
+}
+
+FORM leaveEntitlements 'Права на отпуск'
+    OBJECTS e = LeaveEntitlement
+    PROPERTIES(e) entitlementAssignment, entitlementWorkYearFrom, entitlementWorkYearTo,
+                  entitlementBasicDays, entitlementAdditionalDays, entitlementDays,
+                  usedLeaveDays, remainingLeaveDays, hasFourteenDayPart, entitlementNote
+;
+
+FORM leaveDocuments 'Отпуска'
+    OBJECTS l = LeaveDocument
+    PROPERTIES(l) leaveNumber, leaveOrderDate, leaveAssignment, leaveKind,
+                  leaveDateFrom, leaveDateTo, leaveEntitlement, leaveCalendar,
+                  leaveWorkWeek, leaveOutsideSchedule, leaveCalendarDays,
+                  leaveChargedDays, leaveEventWorkDays, leavePaymentDueDate,
+                  leaveAverageEarnings, leaveGrossAmount, leaveBasis, leaveStatus
+    PROPERTIES(l) prepareAverageForLeave, approveLeave
+;

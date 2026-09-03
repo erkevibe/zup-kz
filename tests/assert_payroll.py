@@ -23,6 +23,13 @@ expected = {
     "averagePaySummarized": Decimal("48024.39"),
     "positiveRecalculation": Decimal("10000.00"),
     "negativeRecalculation": Decimal("-5000.00"),
+    "annualLeaveWithHoliday": Decimal("5"),
+    "annualLeaveWithReligiousDay": Decimal("3"),
+    "vacationInterimPayment": Decimal("48780.49"),
+    "advanceInterimPayment": Decimal("50000.00"),
 }
 for name, value in expected.items():
     assert Decimal(str(actual[name])) == value, (name, actual[name], value)
+
+assert actual["scheduledLeavePaymentDue"] == "2026-07-08"
+assert actual["outsideSchedulePaymentDue"] == "2026-07-16"

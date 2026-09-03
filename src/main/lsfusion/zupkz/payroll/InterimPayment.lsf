@@ -1,0 +1,98 @@
+MODULE PayrollInterimPayment;
+
+REQUIRE HRLeave;
+NAMESPACE ZUPKZ;
+
+CLASS InterimPaymentKind 'Вид межрасчётной выплаты' {
+    advance 'Аванс',
+    vacation 'Отпускные',
+    sickLeave 'Больничные',
+    termination 'Расчёт при увольнении',
+    other 'Иная'
+}
+
+CLASS InterimPaymentStatus 'Статус межрасчётной выплаты' {
+    draft 'Черновик',
+    calculated 'Рассчитана',
+    approved 'Утверждена',
+    paid 'Выплачена'
+}
+
+CLASS InterimPayment 'Межрасчётная выплата';
+
+interimPaymentNumber 'Номер' = DATA STRING[50] (InterimPayment);
+interimPaymentDate 'Дата документа' = DATA DATE (InterimPayment);
+interimPaymentAssignment 'Назначение' = DATA EmploymentAssignment (InterimPayment);
+interimPaymentKind 'Вид выплаты' = DATA InterimPaymentKind (InterimPayment);
+interimPaymentLeave 'Отпуск' = DATA LeaveDocument (InterimPayment);
+interimPaymentManualAmount 'Сумма вручную' = DATA NUMERIC[18,2] (InterimPayment);
+interimPaymentManualDueDate 'Срок оплаты вручную' = DATA DATE (InterimPayment);
+interimPaymentPaidDate 'Дата оплаты' = DATA DATE (InterimPayment);
+interimPaymentReason 'Основание' = DATA STRING[500] (InterimPayment);
+interimPaymentStatus 'Статус' = DATA InterimPaymentStatus (InterimPayment);
+
+CONSTRAINT interimPaymentLeave(InterimPayment p) AND
+           leaveAssignment(interimPaymentLeave(p)) != interimPaymentAssignment(p)
+    MESSAGE 'Отпуск должен принадлежать тому же назначению';
+
+interimGrossAmount(InterimPaymentKind kind, NUMERIC[18,2] sourceAmount,
+                   NUMERIC[18,2] manualAmount) =
+    IF kind == InterimPaymentKind.vacation THEN sourceAmount ELSE manualAmount;
+interimPaymentGross 'Начислено' (InterimPayment p) =
+    interimGrossAmount(interimPaymentKind(p), leaveGrossAmount(interimPaymentLeave(p)),
+                       interimPaymentManualAmount(p));
+interimPaymentDueDate 'Срок оплаты' (InterimPayment p) =
+    IF interimPaymentKind(p) == InterimPaymentKind.vacation THEN
+        leavePaymentDueDate(interimPaymentLeave(p))
+    ELSE interimPaymentManualDueDate(p);
+interimPaymentOnTime 'Оплачено в срок' (InterimPayment p) =
+    interimPaymentPaidDate(p) <= interimPaymentDueDate(p)
+    IF interimPaymentPaidDate(p) AND interimPaymentDueDate(p);
+
+calculateInterimPayment 'Рассчитать' (InterimPayment p) {
+    IF interimPaymentStatus(p) AND interimPaymentStatus(p) != InterimPaymentStatus.draft THEN
+        MESSAGE 'Выплата уже рассчитана';
+    ELSE IF NOT interimPaymentNumber(p) OR NOT interimPaymentDate(p) OR
+            NOT interimPaymentAssignment(p) OR NOT interimPaymentKind(p) OR
+            NOT interimPaymentReason(p) THEN
+        MESSAGE 'Заполните реквизиты, назначение, вид и основание';
+    ELSE IF interimPaymentKind(p) == InterimPaymentKind.vacation AND
+            (NOT interimPaymentLeave(p) OR leaveStatus(interimPaymentLeave(p)) != LeaveStatus.approved) THEN
+        MESSAGE 'Выберите утверждённый отпуск';
+    ELSE IF NOT interimPaymentGross(p) OR interimPaymentGross(p) <= 0.00 OR
+            NOT interimPaymentDueDate(p) THEN
+        MESSAGE 'Не заданы положительная сумма или срок оплаты';
+    ELSE {
+        interimPaymentStatus(p) <- InterimPaymentStatus.calculated;
+        APPLY;
+    }
+}
+
+approveInterimPayment 'Утвердить' (InterimPayment p) {
+    IF interimPaymentStatus(p) == InterimPaymentStatus.calculated THEN {
+        interimPaymentStatus(p) <- InterimPaymentStatus.approved;
+        APPLY;
+    } ELSE
+        MESSAGE 'Сначала рассчитайте выплату';
+}
+
+markInterimPaymentPaid 'Отметить оплаченной' (InterimPayment p) {
+    IF interimPaymentStatus(p) != InterimPaymentStatus.approved THEN
+        MESSAGE 'Можно оплатить только утверждённый документ';
+    ELSE IF NOT interimPaymentPaidDate(p) THEN
+        MESSAGE 'Заполните дату оплаты';
+    ELSE {
+        interimPaymentStatus(p) <- InterimPaymentStatus.paid;
+        APPLY;
+    }
+}
+
+FORM interimPayments 'Межрасчётные выплаты'
+    OBJECTS p = InterimPayment
+    PROPERTIES(p) interimPaymentNumber, interimPaymentDate, interimPaymentAssignment,
+                  interimPaymentKind, interimPaymentLeave, interimPaymentManualAmount,
+                  interimPaymentGross, interimPaymentManualDueDate, interimPaymentDueDate,
+                  interimPaymentPaidDate, interimPaymentOnTime, interimPaymentReason,
+                  interimPaymentStatus
+    PROPERTIES(p) calculateInterimPayment, approveInterimPayment, markInterimPaymentPaid
+;
