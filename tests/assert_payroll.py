@@ -101,6 +101,9 @@ expected = {
     "form20005LineCount2026": Decimal("1"),
     "form20005Year2026": Decimal("2026"),
     "form20005IncomeStatus2026": Decimal("1"),
+    "taxIncomeStatusEmployeeCode": Decimal("1"),
+    "taxIncomeStatusCivilContractCode": Decimal("2"),
+    "taxIncomeStatusOtherCode": Decimal("11"),
     "form20005AccruedIncome2026": Decimal("155452.38"),
     "form20005OpvCalculated2026": Decimal("14845.24"),
     "form20005VosmsCalculated2026": Decimal("2969.05"),
@@ -166,3 +169,5 @@ assert actual["form200DueDate2026"] == "2026-05-15"
 assert actual["form200Accepted2026"] is True
 assert actual["form20005EmployeeName2026"] == "Тестов Работник Первый"
 assert actual["form20005EmployeeIin2026"] == "900101300000"
+assert actual["form20005CategoryCodes2026"] == "3,4"
+assert actual["form20005TaxDeductionCodes2026"] == "1"

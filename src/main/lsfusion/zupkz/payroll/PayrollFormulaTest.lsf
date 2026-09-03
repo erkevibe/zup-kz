@@ -74,6 +74,8 @@ payrollFormulaTest() {
                                                 taxProfileEmployee(taxProfile) <- worker;
                                                 taxProfileValidFrom(taxProfile) <- 2026_01_01;
                                                 taxProfileResident(taxProfile) <- TRUE;
+                                                taxProfileIncomeStatus(taxProfile) <- TaxIncomeStatus.employee;
+                                                taxProfileCategoryCodes(taxProfile) <- '3,4';
                                                 taxProfileBasicDeduction(taxProfile) <- TRUE;
                                                 taxProfileSocialDeduction(taxProfile) <- IpnSocialDeductionKind.none;
 
@@ -394,6 +396,14 @@ payrollFormulaTest() {
                                     form20005LineByEmployee(form200Annual, worker)),
                                 form20005IncomeStatus2026 = form20005LineIncomeStatus(
                                     form20005LineByEmployee(form200Annual, worker)),
+                                form20005CategoryCodes2026 = form20005LineCategory(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                form20005TaxDeductionCodes2026 = form20005LineTaxDeductionCodes(
+                                    form20005LineByEmployee(form200Annual, worker)),
+                                taxIncomeStatusEmployeeCode = taxIncomeStatusCode(TaxIncomeStatus.employee),
+                                taxIncomeStatusCivilContractCode =
+                                    taxIncomeStatusCode(TaxIncomeStatus.civilContract),
+                                taxIncomeStatusOtherCode = taxIncomeStatusCode(TaxIncomeStatus.other),
                                 form20005AccruedIncome2026 = form20005LineAccruedIncome(
                                     form20005LineByEmployee(form200Annual, worker)),
                                 form20005OpvCalculated2026 = form20005LineOpvCalculated(

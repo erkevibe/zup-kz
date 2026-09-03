@@ -6,8 +6,36 @@ NAMESPACE ZUPKZ;
 CLASS IpnSocialDeductionKind 'Вид социального вычета ИПН' {
     none 'Нет',
     protectedCategory 'Льготная категория — 882 МРП',
-    disabilityOneTwo 'Инвалидность I–II группы — 5 000 МРП'
+    disabilityOneTwo 'Инвалидность I–II группы — 5 000 МРП',
+    protectedDependent 'Родитель / опекун / усыновитель — 882 МРП'
 }
+
+CLASS TaxIncomeStatus 'Статус дохода физического лица' {
+    employee '1 — Работник',
+    civilContract '2 — Договор ГПХ',
+    winnings '3 — Выигрыш',
+    pension '4 — Пенсионные выплаты',
+    repoInterest '5 — Вознаграждение по репо',
+    otherInterest '6 — Иные вознаграждения',
+    dividends '7 — Дивиденды',
+    scholarship '8 — Стипендия',
+    endowmentInsurance '9 — Накопительное страхование',
+    householdIncome '10 — Личное подсобное хозяйство',
+    other '11 — Иной доход'
+}
+
+taxIncomeStatusCode(TaxIncomeStatus status) =
+    IF status == TaxIncomeStatus.employee THEN 1
+    ELSE IF status == TaxIncomeStatus.civilContract THEN 2
+    ELSE IF status == TaxIncomeStatus.winnings THEN 3
+    ELSE IF status == TaxIncomeStatus.pension THEN 4
+    ELSE IF status == TaxIncomeStatus.repoInterest THEN 5
+    ELSE IF status == TaxIncomeStatus.otherInterest THEN 6
+    ELSE IF status == TaxIncomeStatus.dividends THEN 7
+    ELSE IF status == TaxIncomeStatus.scholarship THEN 8
+    ELSE IF status == TaxIncomeStatus.endowmentInsurance THEN 9
+    ELSE IF status == TaxIncomeStatus.householdIncome THEN 10
+    ELSE IF status == TaxIncomeStatus.other THEN 11;
 
 // Заявление на вычеты и подтверждающие документы действуют в заданном периоде.
 CLASS EmployeeTaxProfile 'Налоговый профиль сотрудника';
@@ -17,6 +45,10 @@ taxProfileEmployee 'Сотрудник' = DATA Employee (EmployeeTaxProfile);
 taxProfileValidFrom 'Действует с' = DATA DATE (EmployeeTaxProfile);
 taxProfileValidTo 'Действует по' = DATA DATE (EmployeeTaxProfile);
 taxProfileResident 'Налоговый резидент' = DATA BOOLEAN (EmployeeTaxProfile);
+taxProfileIncomeStatus 'Статус дохода 200.05' = DATA TaxIncomeStatus (EmployeeTaxProfile);
+taxProfileCategoryCodes 'Категории 200.05' = DATA STRING[30] (EmployeeTaxProfile);
+taxProfileAifc 'Работник МФЦА' = DATA BOOLEAN (EmployeeTaxProfile);
+taxProfileUnregisteredDivision 'Не самостоятельное подразделение' = DATA BOOLEAN (EmployeeTaxProfile);
 taxProfileBasicDeduction 'Применять базовый вычет' = DATA BOOLEAN (EmployeeTaxProfile);
 taxProfileSocialDeduction 'Социальный вычет' = DATA IpnSocialDeductionKind (EmployeeTaxProfile);
 taxProfileBasis 'Заявление / основание' = DATA STRING[500] (EmployeeTaxProfile);
@@ -88,6 +120,13 @@ CLASS TaxCalculationLine 'Налоги сотрудника';
 
 taxCalculationDocument 'Документ' = DATA TaxCalculationDocument (TaxCalculationLine);
 taxCalculationEmployee 'Сотрудник' = DATA Employee (TaxCalculationLine);
+taxCalculationResident 'Налоговый резидент' = DATA BOOLEAN (TaxCalculationLine);
+taxCalculationIncomeStatus 'Статус дохода 200.05' = DATA TaxIncomeStatus (TaxCalculationLine);
+taxCalculationCategoryCodes 'Категории 200.05' = DATA STRING[30] (TaxCalculationLine);
+taxCalculationAifc 'Работник МФЦА' = DATA BOOLEAN (TaxCalculationLine);
+taxCalculationUnregisteredDivision 'Не самостоятельное подразделение' =
+    DATA BOOLEAN (TaxCalculationLine);
+taxCalculationDeductionCodes 'Коды вычетов 200.05' = DATA STRING[10] (TaxCalculationLine);
 
 taxCalculationRun(TaxCalculationLine l) = taxCalculationPayrollRun(taxCalculationDocument(l));
 taxCalculationDate(TaxCalculationLine l) = payrollPeriodTo(taxCalculationRun(l));
@@ -160,6 +199,16 @@ calculatedIpnSocialDeduction(TaxCalculationLine l) =
     IF taxProfileResident(taxCalculationProfile(l)) THEN
         taxMinimum(ipnIncomeAfterBasicDeduction(l), ipnSocialAnnualAvailable(l))
     ELSE 0.00;
+calculatedTaxDeductionCodes(TaxCalculationLine l) =
+    (IF calculatedIpnBasicDeduction(l) > 0.00 THEN '1' ELSE '') +
+    (IF calculatedIpnSocialDeduction(l) > 0.00 THEN
+        (IF calculatedIpnBasicDeduction(l) > 0.00 THEN ',' ELSE '') +
+        (IF taxProfileSocialDeduction(taxCalculationProfile(l)) ==
+                IpnSocialDeductionKind.disabilityOneTwo THEN '2'
+         ELSE IF taxProfileSocialDeduction(taxCalculationProfile(l)) ==
+                IpnSocialDeductionKind.protectedDependent THEN '4'
+         ELSE '3')
+     ELSE '');
 calculatedIpnTaxableIncome(TaxCalculationLine l) = taxPositive(
     ipnIncomeAfterBasicDeduction(l) - ipnSocialDeduction(l));
 
@@ -213,8 +262,19 @@ calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {
             NEW l = TaxCalculationLine {
                 taxCalculationDocument(l) <- d;
                 taxCalculationEmployee(l) <- worker;
+                taxCalculationResident(l) <- taxProfileResident(taxCalculationProfile(l));
+                taxCalculationIncomeStatus(l) <-
+                    IF taxProfileIncomeStatus(taxCalculationProfile(l)) THEN
+                        taxProfileIncomeStatus(taxCalculationProfile(l))
+                    ELSE TaxIncomeStatus.employee;
+                taxCalculationCategoryCodes(l) <-
+                    taxProfileCategoryCodes(taxCalculationProfile(l));
+                taxCalculationAifc(l) <- taxProfileAifc(taxCalculationProfile(l));
+                taxCalculationUnregisteredDivision(l) <-
+                    taxProfileUnregisteredDivision(taxCalculationProfile(l));
                 ipnBasicDeduction(l) <- calculatedIpnBasicDeduction(l);
                 ipnSocialDeduction(l) <- calculatedIpnSocialDeduction(l);
+                taxCalculationDeductionCodes(l) <- calculatedTaxDeductionCodes(l);
                 ipnTaxableIncome(l) <- calculatedIpnTaxableIncome(l);
                 ipnAmount(l) <- calculatedIpnAmount(l);
                 socialTaxAmount(l) <- calculatedSocialTaxAmount(l);
@@ -249,7 +309,9 @@ payableAfterTaxes 'К выплате' (TaxCalculationDocument d) =
 FORM employeeTaxProfiles 'Налоговые профили сотрудников'
     OBJECTS p = EmployeeTaxProfile
     PROPERTIES(p) taxProfileOrganization, taxProfileEmployee, taxProfileValidFrom,
-                  taxProfileValidTo, taxProfileResident, taxProfileBasicDeduction,
+                  taxProfileValidTo, taxProfileResident, taxProfileIncomeStatus,
+                  taxProfileCategoryCodes, taxProfileAifc,
+                  taxProfileUnregisteredDivision, taxProfileBasicDeduction,
                   taxProfileSocialDeduction, taxProfileBasis, taxProfileLegalSource
 ;
 
@@ -273,6 +335,9 @@ FORM taxCalculationDocuments 'Расчёт ИПН и социального на
 FORM taxCalculationLines 'Налоги сотрудников'
     OBJECTS l = TaxCalculationLine
     PROPERTIES(l) taxCalculationDocument, taxCalculationEmployee,
+                  taxCalculationResident, taxCalculationIncomeStatus,
+                  taxCalculationCategoryCodes, taxCalculationAifc,
+                  taxCalculationUnregisteredDivision, taxCalculationDeductionCodes,
                   ipnGrossIncome, ipnOpvDeduction, ipnVosmsDeduction,
                   ipnIncomeAfterSocialPayments, ipnBasicDeduction,
                   ipnSocialDeduction, ipnTaxableIncome, ipnAmount,
