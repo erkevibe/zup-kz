@@ -53,6 +53,15 @@ expected = {
     "lowerPriorityWithheld2026": Decimal("0.00"),
     "totalEnforcementWithheld2026": Decimal("65274.64"),
     "payableAfterEnforcement2026": Decimal("67274.64"),
+    "payslipAccrued2026": Decimal("155452.38"),
+    "payslipOpv2026": Decimal("14845.24"),
+    "payslipVosms2026": Decimal("2969.05"),
+    "payslipIpn2026": Decimal("88.81"),
+    "payslipEnforcement2026": Decimal("65274.64"),
+    "payslipPayable2026": Decimal("67274.64"),
+    "paymentStatementAmount2026": Decimal("67274.64"),
+    "remainingAfterPayment2026": Decimal("0.00"),
+    "unpaidAfterPayment2026": Decimal("0.00"),
     "ordinaryLowIncomeEnforcementCap": Decimal("29149.00"),
     "protectedLowIncomeEnforcementCap": Decimal("40000.00"),
     "averageDaily": Decimal("4878.048780"),
@@ -82,3 +91,6 @@ for name, value in expected.items():
 
 assert actual["scheduledLeavePaymentDue"] == "2026-07-08"
 assert actual["outsideSchedulePaymentDue"] == "2026-07-16"
+assert actual["payrollMarkedPaid2026"] is True
+assert actual["latePaymentDetected2026"] is True
+assert actual["latestPayrollPaymentDate2026"] == "2026-02-10"

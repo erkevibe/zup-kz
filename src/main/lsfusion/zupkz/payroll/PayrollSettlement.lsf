@@ -1,0 +1,263 @@
+MODULE PayrollSettlement;
+
+REQUIRE PayrollEnforcement;
+NAMESPACE ZUPKZ;
+
+// Дата выплаты задаётся трудовым / коллективным договором, но не может быть
+// позже первой декады месяца, следующего за расчётным (статья 113 ТК РК).
+payrollPaymentDueDate 'Дата выплаты' = DATA DATE (PayrollRun);
+latestPayrollPaymentDate 'Предельная дата выплаты' (PayrollRun r) =
+    firstDayOfMonth(sumMonth(payrollPeriodTo(r), 1)) + 9;
+payrollPaymentLegalSource(PayrollRun r) = legalSourceByCode('LABOR_CODE_KZ');
+
+CONSTRAINT payrollPaymentDueDate(PayrollRun r) <= payrollPeriodTo(r)
+    MESSAGE 'Дата выплаты должна быть позже окончания расчётного периода';
+CONSTRAINT payrollPaymentDueDate(PayrollRun r) > latestPayrollPaymentDate(r)
+    MESSAGE 'Дата выплаты зарплаты не может быть позже первой декады следующего месяца';
+
+approvedSocialPaymentForRun(PayrollRun run) = GROUP LAST SocialPaymentDocument d
+    IF socialPaymentPayrollRun(d) == run AND socialPaymentStatus(d) == SocialPaymentStatus.approved
+    ORDER d;
+approvedTaxCalculationForRun(PayrollRun run) = GROUP LAST TaxCalculationDocument d
+    IF taxCalculationPayrollRun(d) == run AND taxCalculationStatus(d) == TaxCalculationStatus.approved
+    ORDER d;
+approvedEnforcementForRun(PayrollRun run) = GROUP LAST EnforcementCalculationDocument d
+    IF enforcementPayrollRun(d) == run AND
+       enforcementCalculationStatus(d) == EnforcementCalculationStatus.approved
+    ORDER d;
+
+CLASS PayrollSettlementLine 'Расчётный листок';
+
+settlementPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (PayrollSettlementLine);
+settlementEmployee 'Сотрудник' = DATA Employee (PayrollSettlementLine);
+settlementAccrued 'Начислено' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementPayrollDeducted 'Прочие удержания' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementOpv 'ОПВ' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementOpvr 'ОПВР работодателя' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementSo 'Социальные отчисления' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementVosms 'ВОСМС' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementOosms 'ООСМС работодателя' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementIpn 'ИПН' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementSocialTax 'Социальный налог' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementEnforcement 'Исполнительные удержания' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementPayable 'К выплате' = DATA NUMERIC[18,2] (PayrollSettlementLine);
+settlementClosedAt 'Закрыт' = DATA DATETIME (PayrollSettlementLine);
+settlementLegalSource 'Нормативное основание' (PayrollSettlementLine l) =
+    payrollPaymentLegalSource(settlementPayrollRun(l));
+
+settlementLineByEmployee(PayrollRun run, Employee worker) =
+    GROUP AGGR PayrollSettlementLine l BY settlementPayrollRun(l), settlementEmployee(l);
+payrollAccruedByEmployee(PayrollRun run, Employee worker) =
+    GROUP SUM calculationAmount(PayrollLine l)
+    IF linePayrollRun(l) == run AND
+       employee(employment(linePayrollAssignment(l))) == worker AND
+       calculationCategory(lineCalculationType(l)) == CalculationCategory.accrual;
+payrollDeductedByEmployee(PayrollRun run, Employee worker) =
+    GROUP SUM calculationAmount(PayrollLine l)
+    IF linePayrollRun(l) == run AND
+       employee(employment(linePayrollAssignment(l))) == worker AND
+       calculationCategory(lineCalculationType(l)) == CalculationCategory.deduction;
+approvedSocialLine(PayrollRun run, Employee worker) =
+    socialPaymentLineByEmployee(approvedSocialPaymentForRun(run), worker);
+approvedTaxLine(PayrollRun run, Employee worker) =
+    taxCalculationLineByEmployee(approvedTaxCalculationForRun(run), worker);
+approvedEnforcementByEmployee(PayrollRun run, Employee worker) = GROUP SUM
+    enforcementWithheldAmount(EnforcementCalculationLine l)
+    IF enforcementCalculationDocument(l) == approvedEnforcementForRun(run) AND
+       enforcementLineEmployee(l) == worker;
+
+calculatedSettlementPayable(PayrollRun run, Employee worker) = taxPositive(
+    (IF payrollAccruedByEmployee(run, worker) THEN payrollAccruedByEmployee(run, worker) ELSE 0.00) -
+    (IF payrollDeductedByEmployee(run, worker) THEN payrollDeductedByEmployee(run, worker) ELSE 0.00) -
+    (IF opvAmount(approvedSocialLine(run, worker)) THEN opvAmount(approvedSocialLine(run, worker)) ELSE 0.00) -
+    (IF vosmsAmount(approvedSocialLine(run, worker)) THEN vosmsAmount(approvedSocialLine(run, worker)) ELSE 0.00) -
+    (IF ipnAmount(approvedTaxLine(run, worker)) THEN ipnAmount(approvedTaxLine(run, worker)) ELSE 0.00) -
+    (IF approvedEnforcementByEmployee(run, worker) THEN approvedEnforcementByEmployee(run, worker) ELSE 0.00));
+
+closePayroll 'Закрыть расчёт' (PayrollRun r) {
+    IF payrollRunStatus(r) != PayrollRunStatus.calculated THEN
+        MESSAGE 'Закрыть можно только рассчитанную зарплату';
+    ELSE IF NOT payrollPaymentDueDate(r) THEN
+        MESSAGE 'Укажите дату выплаты зарплаты';
+    ELSE IF NOT approvedSocialPaymentForRun(r) THEN
+        MESSAGE 'Сначала утвердите социальные платежи';
+    ELSE IF NOT approvedTaxCalculationForRun(r) THEN
+        MESSAGE 'Сначала утвердите ИПН и социальный налог';
+    ELSE IF NOT approvedEnforcementForRun(r) THEN
+        MESSAGE 'Сначала рассчитайте и утвердите исполнительные удержания';
+    ELSE {
+        FOR worker IS Employee AND payrollEmployeeLineCount(r, worker) DO {
+            NEW l = PayrollSettlementLine {
+                settlementPayrollRun(l) <- r;
+                settlementEmployee(l) <- worker;
+                settlementAccrued(l) <- payrollAccruedByEmployee(r, worker);
+                settlementPayrollDeducted(l) <- payrollDeductedByEmployee(r, worker);
+                settlementOpv(l) <- opvAmount(approvedSocialLine(r, worker));
+                settlementOpvr(l) <- opvrAmount(approvedSocialLine(r, worker));
+                settlementSo(l) <- soAmount(approvedSocialLine(r, worker));
+                settlementVosms(l) <- vosmsAmount(approvedSocialLine(r, worker));
+                settlementOosms(l) <- oosmsAmount(approvedSocialLine(r, worker));
+                settlementIpn(l) <- ipnAmount(approvedTaxLine(r, worker));
+                settlementSocialTax(l) <- socialTaxAmount(approvedTaxLine(r, worker));
+                settlementEnforcement(l) <- approvedEnforcementByEmployee(r, worker);
+                settlementPayable(l) <- calculatedSettlementPayable(r, worker);
+                settlementClosedAt(l) <- currentDateTime();
+            }
+        }
+        payrollRunStatus(r) <- PayrollRunStatus.approved;
+        APPLY;
+    }
+}
+
+CLASS PaymentMethod 'Способ выплаты' {
+    bankTransfer 'Банк',
+    cash 'Касса'
+}
+
+CLASS PaymentStatementStatus 'Статус ведомости' {
+    draft 'Черновик',
+    calculated 'Заполнена',
+    approved 'Утверждена',
+    paid 'Выплачена'
+}
+
+CLASS PaymentStatement 'Ведомость выплаты зарплаты';
+
+paymentStatementPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (PaymentStatement);
+paymentStatementNumber 'Номер' = DATA STRING[50] (PaymentStatement);
+paymentStatementDate 'Дата выплаты' = DATA DATE (PaymentStatement);
+paymentStatementMethod 'Способ выплаты' = DATA PaymentMethod (PaymentStatement);
+paymentStatementBankAccount 'Счёт организации' = DATA STRING[34] (PaymentStatement);
+paymentStatementStatus 'Статус' = DATA PaymentStatementStatus (PaymentStatement);
+paymentStatementCalculatedAt 'Заполнена' = DATA DATETIME (PaymentStatement);
+paymentStatementApprovedAt 'Утверждена' = DATA DATETIME (PaymentStatement);
+paymentStatementPaidAt 'Выплачена' = DATA DATETIME (PaymentStatement);
+paymentStatementOverdue 'Просрочена' (PaymentStatement d) =
+    paymentStatementDate(d) > payrollPaymentDueDate(paymentStatementPayrollRun(d));
+
+CLASS PaymentStatementLine 'Строка ведомости';
+
+paymentLineStatement 'Ведомость' = DATA PaymentStatement (PaymentStatementLine);
+paymentLineSettlement 'Расчётный листок' = DATA PayrollSettlementLine (PaymentStatementLine);
+paymentLineAmountDue 'Остаток до выплаты' = DATA NUMERIC[18,2] (PaymentStatementLine);
+paymentLineAmount 'Сумма выплаты' = DATA NUMERIC[18,2] (PaymentStatementLine);
+
+paymentLineEmployee 'Сотрудник' (PaymentStatementLine l) =
+    settlementEmployee(paymentLineSettlement(l));
+paymentLineBySettlement(PaymentStatement statement, PayrollSettlementLine settlement) =
+    GROUP AGGR PaymentStatementLine l BY paymentLineStatement(l), paymentLineSettlement(l);
+committedPaymentAmount(PayrollSettlementLine settlement) = GROUP SUM
+    paymentLineAmount(PaymentStatementLine l)
+    IF paymentLineSettlement(l) == settlement AND
+       (paymentStatementStatus(paymentLineStatement(l)) == PaymentStatementStatus.approved OR
+        paymentStatementStatus(paymentLineStatement(l)) == PaymentStatementStatus.paid);
+paidPaymentAmount(PayrollSettlementLine settlement) = GROUP SUM
+    paymentLineAmount(PaymentStatementLine l)
+    IF paymentLineSettlement(l) == settlement AND
+       paymentStatementStatus(paymentLineStatement(l)) == PaymentStatementStatus.paid;
+remainingSettlementAmount 'Остаток к выплате' (PayrollSettlementLine settlement) = taxPositive(
+    settlementPayable(settlement) -
+    (IF committedPaymentAmount(settlement) THEN committedPaymentAmount(settlement) ELSE 0.00));
+unpaidSettlementAmount 'Фактически не выплачено' (PayrollSettlementLine settlement) = taxPositive(
+    settlementPayable(settlement) -
+    (IF paidPaymentAmount(settlement) THEN paidPaymentAmount(settlement) ELSE 0.00));
+
+calculatePaymentStatement 'Заполнить ведомость' (PaymentStatement d) {
+    IF paymentStatementStatus(d) AND paymentStatementStatus(d) != PaymentStatementStatus.draft THEN
+        MESSAGE 'Ведомость уже заполнена';
+    ELSE IF NOT paymentStatementPayrollRun(d) OR
+            payrollRunStatus(paymentStatementPayrollRun(d)) != PayrollRunStatus.approved THEN
+        MESSAGE 'Выберите закрытый и ещё не выплаченный расчёт зарплаты';
+    ELSE IF NOT paymentStatementNumber(d) OR NOT paymentStatementDate(d) OR
+            NOT paymentStatementMethod(d) THEN
+        MESSAGE 'Укажите номер, дату и способ выплаты';
+    ELSE {
+        FOR settlementPayrollRun(PayrollSettlementLine s) == paymentStatementPayrollRun(d) AND
+            remainingSettlementAmount(s) > 0.00 DO {
+            NEW l = PaymentStatementLine {
+                paymentLineStatement(l) <- d;
+                paymentLineSettlement(l) <- s;
+                paymentLineAmountDue(l) <- remainingSettlementAmount(s);
+                paymentLineAmount(l) <- remainingSettlementAmount(s);
+            }
+        }
+        paymentStatementStatus(d) <- PaymentStatementStatus.calculated;
+        paymentStatementCalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+invalidPaymentLineCount(PaymentStatement d) = GROUP SUM 1
+    IF paymentLineStatement(PaymentStatementLine l) == d AND
+       (NOT paymentLineAmount(l) OR paymentLineAmount(l) <= 0.00 OR
+        paymentLineAmount(l) > paymentLineAmountDue(l));
+paymentStatementLineCount(PaymentStatement d) = GROUP SUM 1
+    IF paymentLineStatement(PaymentStatementLine l) == d;
+
+approvePaymentStatement 'Утвердить ведомость' (PaymentStatement d) {
+    IF paymentStatementStatus(d) != PaymentStatementStatus.calculated THEN
+        MESSAGE 'Сначала заполните ведомость';
+    ELSE IF NOT paymentStatementLineCount(d) THEN
+        MESSAGE 'В ведомости нет сумм к выплате';
+    ELSE IF invalidPaymentLineCount(d) THEN
+        MESSAGE 'Сумма выплаты должна быть положительной и не превышать остаток';
+    ELSE {
+        paymentStatementStatus(d) <- PaymentStatementStatus.approved;
+        paymentStatementApprovedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+remainingPayrollAmount(PayrollRun run) = GROUP SUM remainingSettlementAmount(PayrollSettlementLine s)
+    IF settlementPayrollRun(s) == run;
+unpaidPayrollAmount(PayrollRun run) = GROUP SUM unpaidSettlementAmount(PayrollSettlementLine s)
+    IF settlementPayrollRun(s) == run;
+
+markPaymentStatementPaid 'Отметить выплаченной' (PaymentStatement d) {
+    IF paymentStatementStatus(d) != PaymentStatementStatus.approved THEN
+        MESSAGE 'Сначала утвердите ведомость';
+    ELSE {
+        paymentStatementStatus(d) <- PaymentStatementStatus.paid;
+        paymentStatementPaidAt(d) <- currentDateTime();
+        APPLY;
+        IF NOT unpaidPayrollAmount(paymentStatementPayrollRun(d)) THEN {
+            payrollRunStatus(paymentStatementPayrollRun(d)) <- PayrollRunStatus.paid;
+            APPLY;
+        }
+    }
+}
+
+totalPaymentStatementAmount 'Сумма ведомости' (PaymentStatement d) = GROUP SUM
+    paymentLineAmount(PaymentStatementLine l) IF paymentLineStatement(l) == d;
+
+FORM payrollSettlements 'Расчётные листки'
+    OBJECTS l = PayrollSettlementLine
+    PROPERTIES(l) settlementPayrollRun, settlementEmployee, settlementAccrued,
+                  settlementPayrollDeducted, settlementOpv, settlementVosms,
+                  settlementIpn, settlementEnforcement, settlementPayable,
+                  settlementOpvr, settlementSo, settlementOosms, settlementSocialTax,
+                  settlementClosedAt, settlementLegalSource, remainingSettlementAmount,
+                  unpaidSettlementAmount
+;
+
+FORM paymentStatements 'Ведомости выплаты зарплаты'
+    OBJECTS d = PaymentStatement
+    PROPERTIES(d) paymentStatementPayrollRun, paymentStatementNumber,
+                  paymentStatementDate, paymentStatementMethod, paymentStatementBankAccount,
+                  paymentStatementStatus, paymentStatementCalculatedAt,
+                  paymentStatementApprovedAt, paymentStatementPaidAt,
+                  paymentStatementOverdue, totalPaymentStatementAmount
+    PROPERTIES(d) calculatePaymentStatement, approvePaymentStatement, markPaymentStatementPaid
+;
+
+FORM paymentStatementLines 'Строки ведомостей выплаты'
+    OBJECTS l = PaymentStatementLine
+    PROPERTIES(l) paymentLineStatement, paymentLineSettlement, paymentLineEmployee,
+                  paymentLineAmountDue, paymentLineAmount
+;
+
+EXTEND FORM payrollRuns
+    PROPERTIES(r) payrollPaymentDueDate, latestPayrollPaymentDate, payrollPaymentLegalSource,
+                  remainingPayrollAmount, unpaidPayrollAmount
+    PROPERTIES(r) closePayroll
+;

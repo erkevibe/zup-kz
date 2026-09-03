@@ -20,6 +20,7 @@ payrollFormulaTest() {
                         payrollOrganization(run) <- org;
                         payrollPeriodFrom(run) <- 2026_01_01;
                         payrollPeriodTo(run) <- 2026_01_31;
+                        payrollPaymentDueDate(run) <- 2026_02_10;
                         payrollRunStatus(run) <- PayrollRunStatus.timeCollected;
                         NEW summary = PayrollTimeSummary {
                             summaryPayrollRun(summary) <- run;
@@ -107,6 +108,19 @@ payrollFormulaTest() {
                                                                     NEW enforcement = EnforcementCalculationDocument {
                                                                         enforcementTaxCalculation(enforcement) <- taxes;
                                                                         calculateEnforcement(enforcement);
+                                                                        approveSocialPayments(socialPayments);
+                                                                        approveTaxes(taxes);
+                                                                        approveEnforcement(enforcement);
+                                                                        closePayroll(run);
+
+                                                                        NEW payment = PaymentStatement {
+                                                                            paymentStatementPayrollRun(payment) <- run;
+                                                                            paymentStatementNumber(payment) <- 'PAY-2026-01';
+                                                                            paymentStatementDate(payment) <- 2026_02_11;
+                                                                            paymentStatementMethod(payment) <- PaymentMethod.bankTransfer;
+                                                                            calculatePaymentStatement(payment);
+                                                                            approvePaymentStatement(payment);
+                                                                            markPaymentStatementPaid(payment);
 
                             NEW sickAverage = AverageEarningsDocument {
                                 averageAssignment(sickAverage) <- assignment;
@@ -224,6 +238,24 @@ payrollFormulaTest() {
                                 lowerPriorityWithheld2026 = enforcementWithheldByOrder(enforcement, otherOrder),
                                 totalEnforcementWithheld2026 = totalEnforcementWithheld(enforcement),
                                 payableAfterEnforcement2026 = payableAfterEnforcement(enforcement),
+                                payslipAccrued2026 = settlementAccrued(
+                                    settlementLineByEmployee(run, worker)),
+                                payslipOpv2026 = settlementOpv(
+                                    settlementLineByEmployee(run, worker)),
+                                payslipVosms2026 = settlementVosms(
+                                    settlementLineByEmployee(run, worker)),
+                                payslipIpn2026 = settlementIpn(
+                                    settlementLineByEmployee(run, worker)),
+                                payslipEnforcement2026 = settlementEnforcement(
+                                    settlementLineByEmployee(run, worker)),
+                                payslipPayable2026 = settlementPayable(
+                                    settlementLineByEmployee(run, worker)),
+                                paymentStatementAmount2026 = totalPaymentStatementAmount(payment),
+                                remainingAfterPayment2026 = remainingPayrollAmount(run),
+                                unpaidAfterPayment2026 = unpaidPayrollAmount(run),
+                                payrollMarkedPaid2026 = payrollRunStatus(run) == PayrollRunStatus.paid,
+                                latePaymentDetected2026 = paymentStatementOverdue(payment),
+                                latestPayrollPaymentDate2026 = latestPayrollPaymentDate(run),
                                 ordinaryLowIncomeEnforcementCap = taxMinimum(
                                     socialPaymentAmount(80000.00, 50.000000),
                                     taxPositive(80000.00 - 50851.00)),
@@ -263,6 +295,7 @@ payrollFormulaTest() {
                                 outsideSchedulePaymentDue = thirdNextWorkDate(calendarByYear(2026),
                                                                               LeaveWorkWeek.fiveDay,
                                                                               2026_07_13);
+                                                                            }
                                                             }
                                                         }
                                                     }

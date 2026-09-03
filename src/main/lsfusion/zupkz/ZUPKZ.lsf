@@ -5,7 +5,7 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
         PayrollRecalculation, HRLeave, PayrollSickLeave, PayrollInterimPayment,
         PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax,
-        PayrollEnforcement;
+        PayrollEnforcement, PayrollSettlement;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -58,6 +58,9 @@ NAVIGATOR {
         NEW payrollRecalculationLines;
         NEW interimPayments;
         NEW sickLeaveBenefitLines;
+        NEW payrollSettlements;
+        NEW paymentStatements;
+        NEW paymentStatementLines;
     }
 
     NEW FOLDER taxesKz 'Налоги и взносы РК' WINDOW toolbar {
