@@ -1,0 +1,160 @@
+MODULE PayrollSickLeave;
+
+REQUIRE AverageEarnings;
+NAMESPACE ZUPKZ;
+
+// Приказ № 907 и статья 133 ТК РК. Расчёт разбит по календарным месяцам,
+// потому что ограничение 25 МРП применяется отдельно к каждому месяцу.
+CLASS SickLeaveReason 'Причина нетрудоспособности' {
+    illness 'Заболевание',
+    householdInjury 'Бытовая травма',
+    workInjury 'Трудовое увечье',
+    occupationalDisease 'Профессиональное заболевание',
+    familyCare 'Уход за больным членом семьи',
+    quarantine 'Карантин',
+    prosthetics 'Протезирование',
+    other 'Иная'
+}
+
+CLASS SickLeaveExclusionReason 'Причина неоплаты больничного' {
+    criminalInjury 'Травма при уголовном правонарушении',
+    compulsoryTreatment 'Принудительное лечение по решению суда',
+    detentionOrExamination 'Арест или судебно-медицинская экспертиза',
+    alcoholDrugToxic 'Алкогольное, наркотическое или токсическое воздействие',
+    annualLeave 'Период ежегодного оплачиваемого отпуска',
+    unpaidLeave 'Период отпуска без сохранения зарплаты',
+    childcareLeave 'Период отпуска по уходу за ребёнком до трёх лет'
+}
+
+CLASS SickLeaveStatus 'Статус больничного' {
+    draft 'Черновик',
+    calculated 'Рассчитан',
+    approved 'Утверждён'
+}
+
+CLASS SickLeaveDocument 'Больничный лист';
+
+sickLeaveNumber 'Номер листа' = DATA STRING[80] (SickLeaveDocument);
+sickLeaveIssueDate 'Дата выдачи' = DATA DATE (SickLeaveDocument);
+sickLeaveMedicalOrganization 'Медицинская организация' = DATA STRING[250] (SickLeaveDocument);
+sickLeaveAssignment 'Назначение' = DATA EmploymentAssignment (SickLeaveDocument);
+sickLeaveFrom 'Освобождение с' = DATA DATE (SickLeaveDocument);
+sickLeaveTo 'Освобождение по' = DATA DATE (SickLeaveDocument);
+sickLeaveReason 'Причина' = DATA SickLeaveReason (SickLeaveDocument);
+sickLeaveAverage 'Расчёт среднего заработка' = DATA AverageEarningsDocument (SickLeaveDocument);
+sickLeaveDuplicate 'Дубликат' = DATA BOOLEAN (SickLeaveDocument);
+sickLeaveProductionActNumber 'Акт о несчастном случае' = DATA STRING[80] (SickLeaveDocument);
+sickLeaveVeteranExemption 'Льготная категория ветерана' = DATA BOOLEAN (SickLeaveDocument);
+sickLeaveDiplomaticAbroad 'Дипслужба за рубежом' = DATA BOOLEAN (SickLeaveDocument);
+sickLeaveExclusionReason 'Причина неоплаты' = DATA SickLeaveExclusionReason (SickLeaveDocument);
+sickLeaveStatus 'Статус' = DATA SickLeaveStatus (SickLeaveDocument);
+sickLeaveCalculatedAt 'Рассчитан' = DATA DATETIME (SickLeaveDocument);
+sickLeaveLegalSource 'Нормативное основание' (SickLeaveDocument d) =
+    legalSourceByCode('SICK_LEAVE_RULES_907');
+
+sickLeaveCapExempt 'Без ограничения 25 МРП' (SickLeaveDocument d) =
+    sickLeaveReason(d) == SickLeaveReason.workInjury OR
+    sickLeaveReason(d) == SickLeaveReason.occupationalDisease OR
+    sickLeaveVeteranExemption(d) OR sickLeaveDiplomaticAbroad(d);
+sickLeaveExcluded 'Не оплачивается' (SickLeaveDocument d) =
+    sickLeaveExclusionReason(d) IS SickLeaveExclusionReason;
+
+CONSTRAINT sickLeaveTo(SickLeaveDocument d) < sickLeaveFrom(d)
+    MESSAGE 'Окончание больничного не может быть раньше начала';
+CONSTRAINT sickLeaveAverage(SickLeaveDocument d) AND
+           averageAssignment(sickLeaveAverage(d)) != sickLeaveAssignment(d)
+    MESSAGE 'Средний заработок должен относиться к тому же назначению';
+CONSTRAINT sickLeaveReason(SickLeaveDocument d) == SickLeaveReason.workInjury AND
+           NOT sickLeaveProductionActNumber(d)
+    MESSAGE 'Для трудового увечья укажите акт о несчастном случае';
+
+CLASS SickLeaveBenefitLine 'Помесячный расчёт больничного';
+
+sickBenefitDocument 'Больничный' = DATA SickLeaveDocument (SickLeaveBenefitLine);
+sickBenefitMonth 'Месяц расчёта' = DATA DATE (SickLeaveBenefitLine);
+sickBenefitWorkDays 'Рабочих дней' = DATA NUMERIC[10,2] (SickLeaveBenefitLine);
+sickBenefitMissedHours 'Пропущено часов' = DATA NUMERIC[10,2] (SickLeaveBenefitLine);
+sickBenefitNote 'Примечание' = DATA STRING[500] (SickLeaveBenefitLine);
+
+CONSTRAINT sickBenefitWorkDays(SickLeaveBenefitLine l) < 0.00
+    MESSAGE 'Количество рабочих дней не может быть отрицательным';
+CONSTRAINT sickBenefitMissedHours(SickLeaveBenefitLine l) < 0.00
+    MESSAGE 'Количество часов не может быть отрицательным';
+CONSTRAINT sickBenefitMonth(SickLeaveBenefitLine l) < sickLeaveFrom(sickBenefitDocument(l)) OR
+           sickBenefitMonth(l) > sickLeaveTo(sickBenefitDocument(l))
+    MESSAGE 'Месяц расчёта должен входить в период больничного';
+
+sickBenefitCalculated 'По среднему заработку' (SickLeaveBenefitLine l) =
+    IF averageMode(sickLeaveAverage(sickBenefitDocument(l))) == AverageEarningsMode.daily THEN
+        ROUND(averageDaily(sickLeaveAverage(sickBenefitDocument(l))) * sickBenefitWorkDays(l), 2)
+    ELSE IF averageMode(sickLeaveAverage(sickBenefitDocument(l))) == AverageEarningsMode.hourly OR
+            averageMode(sickLeaveAverage(sickBenefitDocument(l))) == AverageEarningsMode.summarized THEN
+        ROUND(averageHourly(sickLeaveAverage(sickBenefitDocument(l))) * sickBenefitMissedHours(l), 2);
+
+sickLeaveMonthlyCap(DATE benefitDate) =
+    ROUND(numericStatutoryValueOn(statutoryParameterByCode('MRP'), benefitDate) *
+          numericStatutoryValueOn(statutoryParameterByCode('SICK_LEAVE_MONTHLY_CAP_MRP'), benefitDate), 2);
+sickBenefitWithCap(NUMERIC[18,2] calculated, NUMERIC[18,2] cap) =
+    IF calculated > cap THEN cap ELSE calculated;
+sickBenefitCap 'Лимит за месяц' (SickLeaveBenefitLine l) =
+    sickLeaveMonthlyCap(sickBenefitMonth(l));
+sickBenefitPayable 'К оплате' (SickLeaveBenefitLine l) =
+    IF sickLeaveExcluded(sickBenefitDocument(l)) THEN 0.00
+    ELSE IF sickLeaveCapExempt(sickBenefitDocument(l)) THEN sickBenefitCalculated(l)
+    ELSE sickBenefitWithCap(sickBenefitCalculated(l), sickBenefitCap(l));
+
+sickBenefitLineCount(SickLeaveDocument d) = GROUP SUM 1
+    IF sickBenefitDocument(SickLeaveBenefitLine l) == d;
+invalidSickBenefitLineCount(SickLeaveDocument d) = GROUP SUM 1
+    IF sickBenefitDocument(SickLeaveBenefitLine l) == d AND NOT sickBenefitPayable(l);
+sickLeaveGrossAmount 'Сумма пособия' (SickLeaveDocument d) =
+    IF sickLeaveExcluded(d) THEN 0.00
+    ELSE GROUP SUM sickBenefitPayable(SickLeaveBenefitLine l) IF sickBenefitDocument(l) == d;
+
+calculateSickLeave 'Рассчитать' (SickLeaveDocument d) {
+    IF sickLeaveStatus(d) AND sickLeaveStatus(d) != SickLeaveStatus.draft THEN
+        MESSAGE 'Больничный уже рассчитан';
+    ELSE IF NOT sickLeaveNumber(d) OR NOT sickLeaveIssueDate(d) OR NOT sickLeaveAssignment(d) OR
+            NOT sickLeaveFrom(d) OR NOT sickLeaveTo(d) OR NOT sickLeaveReason(d) OR
+            NOT sickLeaveAverage(d) THEN
+        MESSAGE 'Заполните лист нетрудоспособности, назначение, период, причину и средний заработок';
+    ELSE IF averageStatus(sickLeaveAverage(d)) != AverageEarningsStatus.calculated OR
+            averageEventKind(sickLeaveAverage(d)) != AverageEarningsEventKind.sickLeave THEN
+        MESSAGE 'Выберите рассчитанный средний заработок для больничного';
+    ELSE IF NOT sickBenefitLineCount(d) THEN
+        MESSAGE 'Добавьте помесячные строки расчёта';
+    ELSE IF invalidSickBenefitLineCount(d) AND NOT sickLeaveExcluded(d) THEN
+        MESSAGE 'Для каждой строки задайте рабочие дни или часы и действующий лимит';
+    ELSE {
+        sickLeaveStatus(d) <- SickLeaveStatus.calculated;
+        sickLeaveCalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+approveSickLeave 'Утвердить' (SickLeaveDocument d) {
+    IF sickLeaveStatus(d) == SickLeaveStatus.calculated THEN {
+        sickLeaveStatus(d) <- SickLeaveStatus.approved;
+        APPLY;
+    } ELSE
+        MESSAGE 'Сначала рассчитайте больничный';
+}
+
+FORM sickLeaveDocuments 'Больничные листы'
+    OBJECTS d = SickLeaveDocument
+    PROPERTIES(d) sickLeaveNumber, sickLeaveIssueDate, sickLeaveMedicalOrganization,
+                  sickLeaveAssignment, sickLeaveFrom, sickLeaveTo, sickLeaveReason,
+                  sickLeaveAverage, sickLeaveDuplicate, sickLeaveProductionActNumber,
+                  sickLeaveVeteranExemption, sickLeaveDiplomaticAbroad,
+                  sickLeaveExclusionReason, sickLeaveExcluded, sickLeaveCapExempt,
+                  sickLeaveStatus, sickLeaveCalculatedAt, sickLeaveLegalSource,
+                  sickLeaveGrossAmount
+    PROPERTIES(d) calculateSickLeave, approveSickLeave
+;
+
+FORM sickLeaveBenefitLines 'Помесячный расчёт больничных'
+    OBJECTS l = SickLeaveBenefitLine
+    PROPERTIES(l) sickBenefitDocument, sickBenefitMonth, sickBenefitWorkDays,
+                  sickBenefitMissedHours, sickBenefitCalculated, sickBenefitCap,
+                  sickBenefitPayable, sickBenefitNote
+;

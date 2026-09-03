@@ -3,7 +3,7 @@ MODULE ZUPKZ;
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
-        PayrollRecalculation, HRLeave, PayrollInterimPayment;
+        PayrollRecalculation, HRLeave, PayrollSickLeave, PayrollInterimPayment;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -27,6 +27,7 @@ NAVIGATOR {
         NEW personnelEvents;
         NEW leaveEntitlements;
         NEW leaveDocuments;
+        NEW sickLeaveDocuments;
     }
 
     NEW FOLDER workingTime 'Рабочее время' WINDOW toolbar {
@@ -52,5 +53,6 @@ NAVIGATOR {
         NEW payrollRecalculations;
         NEW payrollRecalculationLines;
         NEW interimPayments;
+        NEW sickLeaveBenefitLines;
     }
 }

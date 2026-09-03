@@ -118,6 +118,8 @@ loadBaselineLegalParameters() {
             'https://www.adilet.zan.kz/rus/docs/Z2500000239', 2026_01_01, 2026_08_31);
         ensureLegalSource('AVERAGE_WAGE_RULES_908', 'Единые правила исчисления средней заработной платы',
             'https://www.adilet.zan.kz/rus/docs/V1500012533', 2016_01_01, 2026_09_03);
+        ensureLegalSource('SICK_LEAVE_RULES_907', 'Правила назначения и выплаты социального пособия по временной нетрудоспособности',
+            'https://www.adilet.zan.kz/rus/docs/V1500012521', 2016_01_01, 2026_09_03);
 
         ensureStatutoryParameter('MZP', 'Минимальная заработная плата', 'KZT',
             'Минимальный размер заработной платы на соответствующий год');
@@ -129,6 +131,8 @@ loadBaselineLegalParameters() {
             'Статья 109 Трудового кодекса РК');
         ensureStatutoryParameter('MIN_NIGHT_COEF', 'Минимальный коэффициент ночных часов', 'coefficient',
             'Статья 110 Трудового кодекса РК');
+        ensureStatutoryParameter('SICK_LEAVE_MONTHLY_CAP_MRP', 'Лимит больничного за месяц', 'MRP',
+            'Статья 133 Трудового кодекса РК: предел пособия за календарный месяц');
 
         ensureStatutoryValue(statutoryParameterByCode('MZP'), 2026_01_01, 2026_12_31,
             85000.000000, legalSourceByCode('BUDGET_2026_2028'), 'Закон о республиканском бюджете');
@@ -140,6 +144,8 @@ loadBaselineLegalParameters() {
             1.500000, legalSourceByCode('LABOR_CODE_KZ'), 'Не ниже полуторного размера');
         ensureStatutoryValue(statutoryParameterByCode('MIN_NIGHT_COEF'), 2016_01_01, NULL,
             1.500000, legalSourceByCode('LABOR_CODE_KZ'), 'Не ниже полуторного размера');
+        ensureStatutoryValue(statutoryParameterByCode('SICK_LEAVE_MONTHLY_CAP_MRP'), 2023_07_01, NULL,
+            25.000000, legalSourceByCode('LABOR_CODE_KZ'), 'С 1 июля 2023 года — 25 МРП за месяц');
         APPLY;
     }
 }

@@ -27,6 +27,13 @@ expected = {
     "annualLeaveWithReligiousDay": Decimal("3"),
     "vacationInterimPayment": Decimal("48780.49"),
     "advanceInterimPayment": Decimal("50000.00"),
+    "sickLeaveMonthlyCap2026": Decimal("108125.00"),
+    "sickLeaveBelowCap": Decimal("80000.00"),
+    "sickLeaveAtCap": Decimal("108125.00"),
+    "sickLeaveCapExempt": Decimal("150000.00"),
+    "sickLeaveAcrossMonths": Decimal("158125.00"),
+    "sickLeaveExcluded": Decimal("0.00"),
+    "sickLeaveInterimPayment": Decimal("158125.00"),
 }
 for name, value in expected.items():
     assert Decimal(str(actual[name])) == value, (name, actual[name], value)

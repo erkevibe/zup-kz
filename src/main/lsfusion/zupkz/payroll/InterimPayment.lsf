@@ -1,6 +1,6 @@
 MODULE PayrollInterimPayment;
 
-REQUIRE HRLeave;
+REQUIRE HRLeave, PayrollSickLeave;
 NAMESPACE ZUPKZ;
 
 CLASS InterimPaymentKind 'Вид межрасчётной выплаты' {
@@ -25,6 +25,7 @@ interimPaymentDate 'Дата документа' = DATA DATE (InterimPayment);
 interimPaymentAssignment 'Назначение' = DATA EmploymentAssignment (InterimPayment);
 interimPaymentKind 'Вид выплаты' = DATA InterimPaymentKind (InterimPayment);
 interimPaymentLeave 'Отпуск' = DATA LeaveDocument (InterimPayment);
+interimPaymentSickLeave 'Больничный' = DATA SickLeaveDocument (InterimPayment);
 interimPaymentManualAmount 'Сумма вручную' = DATA NUMERIC[18,2] (InterimPayment);
 interimPaymentManualDueDate 'Срок оплаты вручную' = DATA DATE (InterimPayment);
 interimPaymentPaidDate 'Дата оплаты' = DATA DATE (InterimPayment);
@@ -34,12 +35,19 @@ interimPaymentStatus 'Статус' = DATA InterimPaymentStatus (InterimPayment)
 CONSTRAINT interimPaymentLeave(InterimPayment p) AND
            leaveAssignment(interimPaymentLeave(p)) != interimPaymentAssignment(p)
     MESSAGE 'Отпуск должен принадлежать тому же назначению';
+CONSTRAINT interimPaymentSickLeave(InterimPayment p) AND
+           sickLeaveAssignment(interimPaymentSickLeave(p)) != interimPaymentAssignment(p)
+    MESSAGE 'Больничный должен принадлежать тому же назначению';
 
-interimGrossAmount(InterimPaymentKind kind, NUMERIC[18,2] sourceAmount,
+interimGrossAmount(InterimPaymentKind kind, NUMERIC[18,2] vacationAmount,
+                   NUMERIC[18,2] sickAmount,
                    NUMERIC[18,2] manualAmount) =
-    IF kind == InterimPaymentKind.vacation THEN sourceAmount ELSE manualAmount;
+    IF kind == InterimPaymentKind.vacation THEN vacationAmount
+    ELSE IF kind == InterimPaymentKind.sickLeave THEN sickAmount
+    ELSE manualAmount;
 interimPaymentGross 'Начислено' (InterimPayment p) =
     interimGrossAmount(interimPaymentKind(p), leaveGrossAmount(interimPaymentLeave(p)),
+                       sickLeaveGrossAmount(interimPaymentSickLeave(p)),
                        interimPaymentManualAmount(p));
 interimPaymentDueDate 'Срок оплаты' (InterimPayment p) =
     IF interimPaymentKind(p) == InterimPaymentKind.vacation THEN
@@ -59,6 +67,10 @@ calculateInterimPayment 'Рассчитать' (InterimPayment p) {
     ELSE IF interimPaymentKind(p) == InterimPaymentKind.vacation AND
             (NOT interimPaymentLeave(p) OR leaveStatus(interimPaymentLeave(p)) != LeaveStatus.approved) THEN
         MESSAGE 'Выберите утверждённый отпуск';
+    ELSE IF interimPaymentKind(p) == InterimPaymentKind.sickLeave AND
+            (NOT interimPaymentSickLeave(p) OR
+             sickLeaveStatus(interimPaymentSickLeave(p)) != SickLeaveStatus.approved) THEN
+        MESSAGE 'Выберите утверждённый больничный';
     ELSE IF NOT interimPaymentGross(p) OR interimPaymentGross(p) <= 0.00 OR
             NOT interimPaymentDueDate(p) THEN
         MESSAGE 'Не заданы положительная сумма или срок оплаты';
@@ -90,7 +102,8 @@ markInterimPaymentPaid 'Отметить оплаченной' (InterimPayment p
 FORM interimPayments 'Межрасчётные выплаты'
     OBJECTS p = InterimPayment
     PROPERTIES(p) interimPaymentNumber, interimPaymentDate, interimPaymentAssignment,
-                  interimPaymentKind, interimPaymentLeave, interimPaymentManualAmount,
+                  interimPaymentKind, interimPaymentLeave, interimPaymentSickLeave,
+                  interimPaymentManualAmount,
                   interimPaymentGross, interimPaymentManualDueDate, interimPaymentDueDate,
                   interimPaymentPaidDate, interimPaymentOnTime, interimPaymentReason,
                   interimPaymentStatus

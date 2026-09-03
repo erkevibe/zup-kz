@@ -31,6 +31,58 @@ payrollFormulaTest() {
                             summaryHolidayHours(summary) <- 8.00;
                             calculatePayroll(run);
 
+                            NEW sickAverage = AverageEarningsDocument {
+                                averageAssignment(sickAverage) <- assignment;
+                                averageEventKind(sickAverage) <- AverageEarningsEventKind.sickLeave;
+                                averageMode(sickAverage) <- AverageEarningsMode.daily;
+                                averageStatus(sickAverage) <- AverageEarningsStatus.calculated;
+                                NEW sickAverageBase = AverageEarningsBaseLine {
+                                    baseAverageDocument(sickAverageBase) <- sickAverage;
+                                    baseEarnings(sickAverageBase) <- 1230000.00;
+                                    baseWorkedDays(sickAverageBase) <- 246.00;
+                                    baseIncreaseCoefficient(sickAverageBase) <- 1.000000;
+                                    baseIncluded(sickAverageBase) <- TRUE;
+
+                                    NEW ordinarySick = SickLeaveDocument {
+                                        sickLeaveAssignment(ordinarySick) <- assignment;
+                                        sickLeaveFrom(ordinarySick) <- 2026_01_15;
+                                        sickLeaveTo(ordinarySick) <- 2026_02_10;
+                                        sickLeaveReason(ordinarySick) <- SickLeaveReason.illness;
+                                        sickLeaveAverage(ordinarySick) <- sickAverage;
+                                        NEW januarySick = SickLeaveBenefitLine {
+                                            sickBenefitDocument(januarySick) <- ordinarySick;
+                                            sickBenefitMonth(januarySick) <- 2026_01_15;
+                                            sickBenefitWorkDays(januarySick) <- 30.00;
+                                            NEW februarySick = SickLeaveBenefitLine {
+                                                sickBenefitDocument(februarySick) <- ordinarySick;
+                                                sickBenefitMonth(februarySick) <- 2026_02_01;
+                                                sickBenefitWorkDays(februarySick) <- 10.00;
+
+                                                NEW injurySick = SickLeaveDocument {
+                                                    sickLeaveAssignment(injurySick) <- assignment;
+                                                    sickLeaveFrom(injurySick) <- 2026_01_15;
+                                                    sickLeaveTo(injurySick) <- 2026_01_31;
+                                                    sickLeaveReason(injurySick) <- SickLeaveReason.workInjury;
+                                                    sickLeaveProductionActNumber(injurySick) <- 'N-1';
+                                                    sickLeaveAverage(injurySick) <- sickAverage;
+                                                    NEW injuryLine = SickLeaveBenefitLine {
+                                                        sickBenefitDocument(injuryLine) <- injurySick;
+                                                        sickBenefitMonth(injuryLine) <- 2026_01_15;
+                                                        sickBenefitWorkDays(injuryLine) <- 30.00;
+
+                                                        NEW excludedSick = SickLeaveDocument {
+                                                            sickLeaveAssignment(excludedSick) <- assignment;
+                                                            sickLeaveFrom(excludedSick) <- 2026_01_15;
+                                                            sickLeaveTo(excludedSick) <- 2026_01_31;
+                                                            sickLeaveReason(excludedSick) <- SickLeaveReason.illness;
+                                                            sickLeaveExclusionReason(excludedSick) <-
+                                                                SickLeaveExclusionReason.unpaidLeave;
+                                                            sickLeaveAverage(excludedSick) <- sickAverage;
+                                                            NEW excludedLine = SickLeaveBenefitLine {
+                                                                sickBenefitDocument(excludedLine) <- excludedSick;
+                                                                sickBenefitMonth(excludedLine) <- 2026_01_15;
+                                                                sickBenefitWorkDays(excludedLine) <- 30.00;
+
                             EXPORT JSON FROM
                                 fullMonth = salaryForWorkedHours(100000.00, 168.00, 168.00),
                                 halfMonth = salaryForWorkedHours(100000.00, 168.00, 84.00),
@@ -55,15 +107,36 @@ payrollFormulaTest() {
                                 annualLeaveWithReligiousDay = annualLeaveDays(calendarByYear(2026),
                                                                               2026_01_06, 2026_01_08),
                                 vacationInterimPayment = interimGrossAmount(InterimPaymentKind.vacation,
-                                                                             48780.49, NULL),
+                                                                             48780.49, NULL, NULL),
                                 advanceInterimPayment = interimGrossAmount(InterimPaymentKind.advance,
-                                                                            NULL, 50000.00),
+                                                                            NULL, NULL, 50000.00),
+                                sickLeaveMonthlyCap2026 = sickLeaveMonthlyCap(2026_01_15),
+                                sickLeaveBelowCap = sickBenefitWithCap(80000.00,
+                                                                      sickLeaveMonthlyCap(2026_01_15)),
+                                sickLeaveAtCap = sickBenefitWithCap(150000.00,
+                                                                   sickLeaveMonthlyCap(2026_01_15)),
+                                sickLeaveCapExempt = sickLeaveGrossAmount(injurySick),
+                                sickLeaveAcrossMonths = sickLeaveGrossAmount(ordinarySick),
+                                sickLeaveExcluded = sickLeaveGrossAmount(excludedSick),
+                                sickLeaveInterimPayment = interimGrossAmount(InterimPaymentKind.sickLeave,
+                                                                             NULL,
+                                                                             sickLeaveGrossAmount(ordinarySick),
+                                                                             NULL),
                                 scheduledLeavePaymentDue = thirdPreviousWorkDate(calendarByYear(2026),
                                                                                  LeaveWorkWeek.fiveDay,
                                                                                  2026_07_13),
                                 outsideSchedulePaymentDue = thirdNextWorkDate(calendarByYear(2026),
                                                                               LeaveWorkWeek.fiveDay,
                                                                               2026_07_13);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
