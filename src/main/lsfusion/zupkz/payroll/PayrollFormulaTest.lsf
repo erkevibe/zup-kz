@@ -349,6 +349,15 @@ payrollFormulaTest() {
                                 form200Quarter2026 = form200Quarter(form200),
                                 form200DueDate2026 = form200DueDate(form200),
                                 form200TotalAccrued2026 = form200TotalAccrued(form200),
+                                form200TotalCalculatedIpn2026 = form200TotalCalculatedIpn(form200),
+                                form200TotalPaidIncome2026 = form200TotalPaidIncome(form200),
+                                form200TotalTaxableIncome2026 = form200TotalTaxableIncome(form200),
+                                form200TotalOpvBase2026 = form200TotalOpvBase(form200),
+                                form200TotalOpvrBase2026 = form200TotalOpvrBase(form200),
+                                form200TotalSocialTaxBase2026 = form200TotalSocialTaxBase(form200),
+                                form200TotalSoBase2026 = form200TotalSoBase(form200),
+                                form200TotalOosmsBase2026 = form200TotalOosmsBase(form200),
+                                form200TotalVosmsBase2026 = form200TotalVosmsBase(form200),
                                 form200TotalIpn2026 = form200TotalIpn(form200),
                                 form200TotalOpv2026 = form200TotalOpv(form200),
                                 form200TotalSocialTax2026 = form200TotalSocialTax(form200),
@@ -363,6 +372,10 @@ payrollFormulaTest() {
                                 form200JanuarySocialTax2026 = form200LineSocialTax(
                                     form200LineByMonth(form200, Form200QuarterMonth.first)),
                                 form200FebruaryOpv2026 = form200LineOpv(
+                                    form200LineByMonth(form200, Form200QuarterMonth.second)),
+                                form200JanuaryCalculatedIpn2026 = form200LineCalculatedIpn(
+                                    form200LineByMonth(form200, Form200QuarterMonth.first)),
+                                form200FebruaryPaidIncome2026 = form200LinePaidIncome(
                                     form200LineByMonth(form200, Form200QuarterMonth.second)),
                                 form200Accepted2026 = form200Status(form200) == Form200Status.accepted,
                                 ordinaryLowIncomeEnforcementCap = taxMinimum(

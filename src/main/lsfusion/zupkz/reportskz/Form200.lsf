@@ -72,6 +72,15 @@ form200LineQuarterMonth 'Месяц квартала' = DATA Form200QuarterMonth
 form200LineMonth 'Расчётный месяц' = DATA DATE (Form200MonthLine);
 form200LineEmployeeCount 'Численность работников' = DATA INTEGER (Form200MonthLine);
 form200LineAccruedIncome '200.01.001 Начисленный доход' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineCalculatedIpn '200.01.003 Исчисленный ИПН' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LinePaidIncome '200.01.007 Выплаченный доход' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineTaxableIncome '200.01.008 Облагаемый доход' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineOpvBase '200.01.009 Доход для ОПВ' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineOpvrBase '200.01.011 Доход для ОПВР' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineSocialTaxBase '200.01.016 Объект социального налога' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineSoBase '200.01.017 Доход для СО' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineOosmsBase '200.01.019 Доход для ООСМС' = DATA NUMERIC[18,2] (Form200MonthLine);
+form200LineVosmsBase '200.01.020 Доход для ВОСМС' = DATA NUMERIC[18,2] (Form200MonthLine);
 form200LineIpn '200.00.001 ИПН' = DATA NUMERIC[18,2] (Form200MonthLine);
 form200LineOpv '200.00.002 ОПВ' = DATA NUMERIC[18,2] (Form200MonthLine);
 form200LineSocialTax '200.00.005 Социальный налог' = DATA NUMERIC[18,2] (Form200MonthLine);
@@ -100,6 +109,40 @@ form200MonthlyEmployeeCount(Organization organization, DATE month) = GROUP SUM 1
     IF form200MonthlyEmployee(Employee worker, organization, month);
 form200MonthlyAccrued(Organization organization, DATE month) = GROUP SUM
     settlementAccrued(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyCalculatedIpn(Organization organization, DATE month) = GROUP SUM
+    settlementIpn(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyPaidIncome(Organization organization, DATE month) = GROUP SUM
+    settlementAccrued(PayrollSettlementLine line)
+    IF form200FinalSettlement(line, organization) AND form200PaymentMonth(line) == month;
+form200MonthlyTaxableIncome(Organization organization, DATE month) = GROUP SUM
+    ipnTaxableIncome(approvedTaxLine(settlementPayrollRun(PayrollSettlementLine line),
+                                    settlementEmployee(line)))
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyOpvBase(Organization organization, DATE month) = GROUP SUM
+    opvBase(approvedSocialLine(settlementPayrollRun(PayrollSettlementLine line),
+                              settlementEmployee(line)))
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyOpvrBase(Organization organization, DATE month) = GROUP SUM
+    opvrBase(approvedSocialLine(settlementPayrollRun(PayrollSettlementLine line),
+                               settlementEmployee(line)))
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlySocialTaxBase(Organization organization, DATE month) = GROUP SUM
+    socialTaxBase(approvedTaxLine(settlementPayrollRun(PayrollSettlementLine line),
+                                 settlementEmployee(line)))
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlySoBase(Organization organization, DATE month) = GROUP SUM
+    soBase(approvedSocialLine(settlementPayrollRun(PayrollSettlementLine line),
+                             settlementEmployee(line)))
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyOosmsBase(Organization organization, DATE month) = GROUP SUM
+    oosmsBase(approvedSocialLine(settlementPayrollRun(PayrollSettlementLine line),
+                                settlementEmployee(line)))
+    IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
+form200MonthlyVosmsBase(Organization organization, DATE month) = GROUP SUM
+    vosmsBase(approvedSocialLine(settlementPayrollRun(PayrollSettlementLine line),
+                                settlementEmployee(line)))
     IF form200FinalSettlement(line, organization) AND form200AccrualMonth(line) == month;
 form200MonthlyIpn(Organization organization, DATE month) = GROUP SUM
     settlementIpn(PayrollSettlementLine line)
@@ -153,6 +196,24 @@ generateForm200 'Сформировать 200.00' (Form200Declaration d) {
                     form200Organization(d), form200Month(d, month));
                 form200LineAccruedIncome(line) <- form200MonthlyAccrued(
                     form200Organization(d), form200Month(d, month));
+                form200LineCalculatedIpn(line) <- form200MonthlyCalculatedIpn(
+                    form200Organization(d), form200Month(d, month));
+                form200LinePaidIncome(line) <- form200MonthlyPaidIncome(
+                    form200Organization(d), form200Month(d, month));
+                form200LineTaxableIncome(line) <- form200MonthlyTaxableIncome(
+                    form200Organization(d), form200Month(d, month));
+                form200LineOpvBase(line) <- form200MonthlyOpvBase(
+                    form200Organization(d), form200Month(d, month));
+                form200LineOpvrBase(line) <- form200MonthlyOpvrBase(
+                    form200Organization(d), form200Month(d, month));
+                form200LineSocialTaxBase(line) <- form200MonthlySocialTaxBase(
+                    form200Organization(d), form200Month(d, month));
+                form200LineSoBase(line) <- form200MonthlySoBase(
+                    form200Organization(d), form200Month(d, month));
+                form200LineOosmsBase(line) <- form200MonthlyOosmsBase(
+                    form200Organization(d), form200Month(d, month));
+                form200LineVosmsBase(line) <- form200MonthlyVosmsBase(
+                    form200Organization(d), form200Month(d, month));
                 form200LineIpn(line) <- form200MonthlyIpn(
                     form200Organization(d), form200Month(d, month));
                 form200LineOpv(line) <- form200MonthlyOpv(
@@ -181,6 +242,24 @@ form200LineByMonth(Form200Declaration d, Form200QuarterMonth month) = GROUP AGGR
     Form200MonthLine line BY form200LineDeclaration(line), form200LineQuarterMonth(line);
 form200TotalAccrued '200.01.001 IV' (Form200Declaration d) = GROUP SUM
     form200LineAccruedIncome(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalCalculatedIpn '200.01.003 IV' (Form200Declaration d) = GROUP SUM
+    form200LineCalculatedIpn(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalPaidIncome '200.01.007 IV' (Form200Declaration d) = GROUP SUM
+    form200LinePaidIncome(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalTaxableIncome '200.01.008 IV' (Form200Declaration d) = GROUP SUM
+    form200LineTaxableIncome(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalOpvBase '200.01.009 IV' (Form200Declaration d) = GROUP SUM
+    form200LineOpvBase(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalOpvrBase '200.01.011 IV' (Form200Declaration d) = GROUP SUM
+    form200LineOpvrBase(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalSocialTaxBase '200.01.016 IV' (Form200Declaration d) = GROUP SUM
+    form200LineSocialTaxBase(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalSoBase '200.01.017 IV' (Form200Declaration d) = GROUP SUM
+    form200LineSoBase(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalOosmsBase '200.01.019 IV' (Form200Declaration d) = GROUP SUM
+    form200LineOosmsBase(Form200MonthLine line) IF form200LineDeclaration(line) == d;
+form200TotalVosmsBase '200.01.020 IV' (Form200Declaration d) = GROUP SUM
+    form200LineVosmsBase(Form200MonthLine line) IF form200LineDeclaration(line) == d;
 form200TotalIpn '200.00.001 IV' (Form200Declaration d) = GROUP SUM
     form200LineIpn(Form200MonthLine line) IF form200LineDeclaration(line) == d;
 form200TotalOpv '200.00.002 IV' (Form200Declaration d) = GROUP SUM
@@ -245,6 +324,10 @@ FORM form200Declarations 'Декларации 200.00'
                   form200CalculatedAt, form200ApprovedAt, form200SubmittedAt,
                   form200AcceptedAt, form200ExternalId, form200ReceiptNumber,
                   form200RejectionReason, form200TotalAccrued, form200TotalIpn,
+                  form200TotalCalculatedIpn, form200TotalPaidIncome,
+                  form200TotalTaxableIncome, form200TotalOpvBase, form200TotalOpvrBase,
+                  form200TotalSocialTaxBase, form200TotalSoBase,
+                  form200TotalOosmsBase, form200TotalVosmsBase,
                   form200TotalOpv, form200TotalSocialTax, form200TotalSo,
                   form200TotalOosms, form200TotalVosms, form200TotalOpvr
     PROPERTIES(d) generateForm200, approveForm200, submitForm200, acceptForm200,
@@ -255,7 +338,12 @@ FORM form200MonthLines 'Месячные показатели 200.00'
     OBJECTS line = Form200MonthLine
     PROPERTIES(line) form200LineDeclaration, form200LineQuarterMonth,
                      form200LineMonth, form200LineEmployeeCount,
-                     form200LineAccruedIncome, form200LineIpn, form200LineOpv,
+                     form200LineAccruedIncome, form200LineCalculatedIpn,
+                     form200LinePaidIncome, form200LineTaxableIncome,
+                     form200LineOpvBase, form200LineOpvrBase,
+                     form200LineSocialTaxBase, form200LineSoBase,
+                     form200LineOosmsBase, form200LineVosmsBase,
+                     form200LineIpn, form200LineOpv,
                      form200LineSocialTax, form200LineSo, form200LineOosms,
                      form200LineVosms, form200LineOpvr
 ;
