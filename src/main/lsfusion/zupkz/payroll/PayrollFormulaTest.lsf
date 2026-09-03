@@ -74,6 +74,40 @@ payrollFormulaTest() {
                                                         taxCalculationSocialPayments(taxes) <- socialPayments;
                                                         calculateTaxes(taxes);
 
+                                                        NEW alimonyOrder = EnforcementOrder {
+                                                            enforcementOrganization(alimonyOrder) <- org;
+                                                            enforcementEmployee(alimonyOrder) <- worker;
+                                                            enforcementKind(alimonyOrder) <- EnforcementOrderKind.alimony;
+                                                            enforcementCalculationKind(alimonyOrder) <- EnforcementCalculationKind.incomeShare;
+                                                            enforcementStatus(alimonyOrder) <- EnforcementOrderStatus.active;
+                                                            enforcementValidFrom(alimonyOrder) <- 2026_01_01;
+                                                            enforcementPriority(alimonyOrder) <- 1;
+                                                            enforcementChildCount(alimonyOrder) <- 1;
+
+                                                            NEW damageOrder = EnforcementOrder {
+                                                                enforcementOrganization(damageOrder) <- org;
+                                                                enforcementEmployee(damageOrder) <- worker;
+                                                                enforcementKind(damageOrder) <- EnforcementOrderKind.healthOrSurvivorDamage;
+                                                                enforcementCalculationKind(damageOrder) <- EnforcementCalculationKind.fixedAmount;
+                                                                enforcementStatus(damageOrder) <- EnforcementOrderStatus.active;
+                                                                enforcementValidFrom(damageOrder) <- 2026_01_01;
+                                                                enforcementPriority(damageOrder) <- 1;
+                                                                enforcementFixedAmount(damageOrder) <- 50000.00;
+
+                                                                NEW otherOrder = EnforcementOrder {
+                                                                    enforcementOrganization(otherOrder) <- org;
+                                                                    enforcementEmployee(otherOrder) <- worker;
+                                                                    enforcementKind(otherOrder) <- EnforcementOrderKind.other;
+                                                                    enforcementCalculationKind(otherOrder) <- EnforcementCalculationKind.fixedAmount;
+                                                                    enforcementStatus(otherOrder) <- EnforcementOrderStatus.active;
+                                                                    enforcementValidFrom(otherOrder) <- 2026_01_01;
+                                                                    enforcementPriority(otherOrder) <- 5;
+                                                                    enforcementFixedAmount(otherOrder) <- 10000.00;
+
+                                                                    NEW enforcement = EnforcementCalculationDocument {
+                                                                        enforcementTaxCalculation(enforcement) <- taxes;
+                                                                        calculateEnforcement(enforcement);
+
                             NEW sickAverage = AverageEarningsDocument {
                                 averageAssignment(sickAverage) <- assignment;
                                 averageEventKind(sickAverage) <- AverageEarningsEventKind.sickLeave;
@@ -181,6 +215,20 @@ payrollFormulaTest() {
                                 annualBasicDeductionRemainder = taxMinimum(100000.00,
                                     taxPositive(1557000.00 - 1550000.00)),
                                 agriculturalSocialTax = socialPaymentAmount(130638.09, 1.800000),
+                                enforcementIncomeAfterTaxes2026 = enforcementIncomeAfterTaxes(
+                                    enforcementLineByOrder(enforcement, alimonyOrder)),
+                                defaultOneChildAlimonyPercent = effectiveEnforcementPercent(
+                                    enforcementLineByOrder(enforcement, alimonyOrder)),
+                                alimonyWithheld2026 = enforcementWithheldByOrder(enforcement, alimonyOrder),
+                                damageWithheld2026 = enforcementWithheldByOrder(enforcement, damageOrder),
+                                lowerPriorityWithheld2026 = enforcementWithheldByOrder(enforcement, otherOrder),
+                                totalEnforcementWithheld2026 = totalEnforcementWithheld(enforcement),
+                                payableAfterEnforcement2026 = payableAfterEnforcement(enforcement),
+                                ordinaryLowIncomeEnforcementCap = taxMinimum(
+                                    socialPaymentAmount(80000.00, 50.000000),
+                                    taxPositive(80000.00 - 50851.00)),
+                                protectedLowIncomeEnforcementCap = taxMinimum(
+                                    socialPaymentAmount(80000.00, 50.000000), 80000.00),
                                 averageDaily = averageDailyEarnings(1200000.00, 246.00),
                                 averageHourly = averageHourlyEarnings(1200000.00, 1968.00),
                                 averagePayDays = averagePayByDays(1200000.00, 246.00, 10.00),
@@ -224,6 +272,10 @@ payrollFormulaTest() {
                                     }
                                 }
                             }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                             }
                                             }

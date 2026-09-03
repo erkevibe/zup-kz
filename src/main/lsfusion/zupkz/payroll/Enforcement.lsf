@@ -1,0 +1,255 @@
+MODULE PayrollEnforcement;
+
+REQUIRE TaxesKZIncomeTax;
+NAMESPACE ZUPKZ;
+
+CLASS EnforcementOrderKind 'Вид исполнительного требования' {
+    alimony 'Алименты',
+    healthOrSurvivorDamage 'Вред здоровью / смерть кормильца',
+    employeeClaim 'Требование работника',
+    authorOrPropertyDamage 'Авторское вознаграждение / ущерб имуществу',
+    securedClaim 'Обеспеченное залогом требование',
+    taxOrLegalEntityDamage 'Налоги / ущерб юридическому лицу',
+    other 'Прочее требование'
+}
+
+CLASS EnforcementCalculationKind 'Способ расчёта взыскания' {
+    incomeShare 'Доля дохода',
+    fixedAmount 'Фиксированная сумма'
+}
+
+CLASS EnforcementOrderStatus 'Статус исполнительного документа' {
+    active 'Действует',
+    suspended 'Приостановлен',
+    closed 'Завершён'
+}
+
+CLASS EnforcementOrder 'Исполнительный документ';
+
+enforcementOrganization 'Организация' = DATA Organization (EnforcementOrder);
+enforcementEmployee 'Сотрудник' = DATA Employee (EnforcementOrder);
+enforcementKind 'Вид требования' = DATA EnforcementOrderKind (EnforcementOrder);
+enforcementCalculationKind 'Способ расчёта' = DATA EnforcementCalculationKind (EnforcementOrder);
+enforcementStatus 'Статус' = DATA EnforcementOrderStatus (EnforcementOrder);
+enforcementNumber 'Номер документа' = DATA STRING[80] (EnforcementOrder);
+enforcementDate 'Дата документа' = DATA DATE (EnforcementOrder);
+enforcementValidFrom 'Удерживать с' = DATA DATE (EnforcementOrder);
+enforcementValidTo 'Удерживать по' = DATA DATE (EnforcementOrder);
+enforcementPriority 'Очередь' = DATA INTEGER (EnforcementOrder);
+enforcementPercent 'Доля, %' = DATA NUMERIC[18,6] (EnforcementOrder);
+enforcementFixedAmount 'Фиксированная сумма' = DATA NUMERIC[18,2] (EnforcementOrder);
+enforcementChildCount 'Количество детей' = DATA INTEGER (EnforcementOrder);
+enforcementRemainingDebt 'Остаток задолженности' = DATA NUMERIC[18,2] (EnforcementOrder);
+enforcementRecipient 'Получатель' = DATA STRING[250] (EnforcementOrder);
+enforcementRecipientIin 'ИИН получателя' = DATA STRING[12] (EnforcementOrder);
+enforcementRecipientIban 'IBAN получателя' = DATA STRING[34] (EnforcementOrder);
+enforcementOfficer 'Судебный исполнитель' = DATA STRING[250] (EnforcementOrder);
+enforcementProceedingNumber 'Номер производства' = DATA STRING[80] (EnforcementOrder);
+enforcementBasis 'Основание' = DATA STRING[500] (EnforcementOrder);
+enforcementLegalSource 'Нормативное основание' = DATA LegalSource (EnforcementOrder);
+
+CONSTRAINT enforcementValidTo(EnforcementOrder o) < enforcementValidFrom(o)
+    MESSAGE 'Окончание удержания не может быть раньше начала';
+CONSTRAINT enforcementPriority(EnforcementOrder o) < 1 OR enforcementPriority(o) > 5
+    MESSAGE 'Очередь исполнительного требования должна быть от 1 до 5';
+CONSTRAINT enforcementPercent(EnforcementOrder o) < 0.000000 OR enforcementPercent(o) > 100.000000
+    MESSAGE 'Доля удержания должна быть от 0 до 100 процентов';
+CONSTRAINT enforcementFixedAmount(EnforcementOrder o) < 0.00 OR enforcementRemainingDebt(o) < 0.00
+    MESSAGE 'Сумма взыскания и остаток задолженности не могут быть отрицательными';
+
+protectedMinimumException(EnforcementOrder o) =
+    enforcementKind(o) == EnforcementOrderKind.alimony OR
+    enforcementKind(o) == EnforcementOrderKind.healthOrSurvivorDamage;
+
+CLASS EnforcementCalculationStatus 'Статус расчёта взысканий' {
+    draft 'Черновик',
+    calculated 'Рассчитан',
+    approved 'Утверждён'
+}
+
+CLASS EnforcementCalculationDocument 'Расчёт исполнительных удержаний';
+
+enforcementTaxCalculation 'Расчёт налогов' = DATA TaxCalculationDocument (EnforcementCalculationDocument);
+enforcementCalculationStatus 'Статус' = DATA EnforcementCalculationStatus (EnforcementCalculationDocument);
+enforcementCalculatedAt 'Рассчитан' = DATA DATETIME (EnforcementCalculationDocument);
+
+enforcementPayrollRun(EnforcementCalculationDocument d) =
+    taxCalculationPayrollRun(enforcementTaxCalculation(d));
+enforcementCalculationDate(EnforcementCalculationDocument d) =
+    payrollPeriodTo(enforcementPayrollRun(d));
+enforcementCalculationOrganization(EnforcementCalculationDocument d) =
+    payrollOrganization(enforcementPayrollRun(d));
+
+calculatedEnforcementDocumentCount(TaxCalculationDocument taxDocument) = GROUP SUM 1 IF
+    enforcementTaxCalculation(EnforcementCalculationDocument d) == taxDocument AND
+    (enforcementCalculationStatus(d) == EnforcementCalculationStatus.calculated OR
+     enforcementCalculationStatus(d) == EnforcementCalculationStatus.approved);
+CONSTRAINT calculatedEnforcementDocumentCount(TaxCalculationDocument taxDocument) > 1
+    MESSAGE 'Для налогового расчёта может быть только один рассчитанный документ взысканий';
+
+CLASS EnforcementCalculationLine 'Строка исполнительного удержания';
+
+enforcementCalculationDocument 'Документ' = DATA EnforcementCalculationDocument (EnforcementCalculationLine);
+enforcementCalculationOrder 'Исполнительный документ' = DATA EnforcementOrder (EnforcementCalculationLine);
+enforcementRequestedAmount 'Сумма по документу' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
+enforcementMaximumAmount 'Максимум удержаний' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
+enforcementWithheldAmount 'Удержано' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
+
+enforcementLineEmployee(EnforcementCalculationLine l) =
+    enforcementEmployee(enforcementCalculationOrder(l));
+enforcementLinePriority(EnforcementCalculationLine l) =
+    enforcementPriority(enforcementCalculationOrder(l));
+enforcementLineTaxDocument(EnforcementCalculationLine l) =
+    enforcementTaxCalculation(enforcementCalculationDocument(l));
+enforcementLineByOrder(EnforcementCalculationDocument d, EnforcementOrder o) =
+    GROUP AGGR EnforcementCalculationLine l BY enforcementCalculationDocument(l),
+                                                enforcementCalculationOrder(l);
+taxCalculationLineByEmployee(TaxCalculationDocument d, Employee worker) =
+    GROUP AGGR TaxCalculationLine l BY taxCalculationDocument(l), taxCalculationEmployee(l);
+enforcementTaxLine(EnforcementCalculationLine l) =
+    taxCalculationLineByEmployee(enforcementLineTaxDocument(l), enforcementLineEmployee(l));
+
+enforcementGrossIncome 'Доход для взыскания' (EnforcementCalculationLine l) =
+    payrollAssessmentBase(taxCalculationRun(enforcementTaxLine(l)), enforcementLineEmployee(l),
+                          AssessmentBaseKind.enforcement);
+enforcementIncomeAfterTaxes 'Доход после налогов' (EnforcementCalculationLine l) = taxPositive(
+    enforcementGrossIncome(l) -
+    (IF ipnOpvDeduction(enforcementTaxLine(l)) THEN ipnOpvDeduction(enforcementTaxLine(l)) ELSE 0.00) -
+    (IF ipnVosmsDeduction(enforcementTaxLine(l)) THEN ipnVosmsDeduction(enforcementTaxLine(l)) ELSE 0.00) -
+    (IF ipnAmount(enforcementTaxLine(l)) THEN ipnAmount(enforcementTaxLine(l)) ELSE 0.00));
+
+enforcementParameter(EnforcementCalculationLine l, STRING[50] code) =
+    numericStatutoryValueOn(statutoryParameterByCode(code),
+        enforcementCalculationDate(enforcementCalculationDocument(l)));
+defaultAlimonyPercent(EnforcementCalculationLine l) =
+    IF enforcementChildCount(enforcementCalculationOrder(l)) == 1 THEN
+        enforcementParameter(l, 'ALIMONY_ONE_CHILD_RATE')
+    ELSE IF enforcementChildCount(enforcementCalculationOrder(l)) == 2 THEN
+        enforcementParameter(l, 'ALIMONY_TWO_CHILD_RATE')
+    ELSE IF enforcementChildCount(enforcementCalculationOrder(l)) >= 3 THEN
+        enforcementParameter(l, 'ALIMONY_THREE_CHILD_RATE');
+effectiveEnforcementPercent 'Применённая доля, %' (EnforcementCalculationLine l) =
+    IF enforcementPercent(enforcementCalculationOrder(l)) THEN
+        enforcementPercent(enforcementCalculationOrder(l))
+    ELSE IF enforcementKind(enforcementCalculationOrder(l)) == EnforcementOrderKind.alimony THEN
+        defaultAlimonyPercent(l);
+calculatedEnforcementRequest(EnforcementCalculationLine l) =
+    IF enforcementCalculationKind(enforcementCalculationOrder(l)) == EnforcementCalculationKind.incomeShare THEN
+        socialPaymentAmount(enforcementIncomeAfterTaxes(l), effectiveEnforcementPercent(l))
+    ELSE enforcementFixedAmount(enforcementCalculationOrder(l));
+debtLimitedEnforcementRequest(EnforcementCalculationLine l) =
+    IF enforcementRemainingDebt(enforcementCalculationOrder(l)) THEN
+        taxMinimum(calculatedEnforcementRequest(l), enforcementRemainingDebt(enforcementCalculationOrder(l)))
+    ELSE calculatedEnforcementRequest(l);
+
+employeeHasProtectedMinimumException(EnforcementCalculationDocument d, Employee worker) = GROUP SUM 1 IF
+    enforcementCalculationDocument(EnforcementCalculationLine l) == d AND
+    enforcementLineEmployee(l) == worker AND
+    protectedMinimumException(enforcementCalculationOrder(l));
+livingMinimumOnEnforcementDate(EnforcementCalculationLine l) =
+    numericStatutoryValueOn(statutoryParameterByCode('LIVING_MINIMUM'),
+        enforcementCalculationDate(enforcementCalculationDocument(l)));
+calculatedMaximumEnforcementWithholding(EnforcementCalculationLine l) = taxMinimum(
+    socialPaymentAmount(enforcementIncomeAfterTaxes(l), enforcementParameter(l, 'ENFORCEMENT_MAX_RATE')),
+    IF employeeHasProtectedMinimumException(enforcementCalculationDocument(l), enforcementLineEmployee(l)) THEN
+        enforcementIncomeAfterTaxes(l)
+    ELSE taxPositive(enforcementIncomeAfterTaxes(l) - livingMinimumOnEnforcementDate(l)));
+
+higherPriorityRequested(EnforcementCalculationLine l) = GROUP SUM enforcementRequestedAmount(EnforcementCalculationLine p)
+    IF enforcementCalculationDocument(p) == enforcementCalculationDocument(l) AND
+       enforcementLineEmployee(p) == enforcementLineEmployee(l) AND
+       enforcementLinePriority(p) < enforcementLinePriority(l);
+samePriorityRequested(EnforcementCalculationLine l) = GROUP SUM enforcementRequestedAmount(EnforcementCalculationLine p)
+    IF enforcementCalculationDocument(p) == enforcementCalculationDocument(l) AND
+       enforcementLineEmployee(p) == enforcementLineEmployee(l) AND
+       enforcementLinePriority(p) == enforcementLinePriority(l);
+priorityAvailableAmount(EnforcementCalculationLine l) = taxPositive(
+    enforcementMaximumAmount(l) - taxMinimum(enforcementMaximumAmount(l),
+        IF higherPriorityRequested(l) THEN higherPriorityRequested(l) ELSE 0.00));
+calculatedEnforcementWithholding(EnforcementCalculationLine l) =
+    IF samePriorityRequested(l) <= priorityAvailableAmount(l) THEN enforcementRequestedAmount(l)
+    ELSE ROUND(priorityAvailableAmount(l) * enforcementRequestedAmount(l) /
+               samePriorityRequested(l), 2)
+    IF enforcementRequestedAmount(l) > 0.00 AND samePriorityRequested(l) > 0.00;
+enforcementUnpaidAmount 'Не удержано' (EnforcementCalculationLine l) =
+    enforcementRequestedAmount(l) - enforcementWithheldAmount(l);
+
+activeEnforcementOrder(EnforcementCalculationDocument d, EnforcementOrder o) =
+    enforcementOrganization(o) == enforcementCalculationOrganization(d) AND
+    enforcementStatus(o) == EnforcementOrderStatus.active AND
+    enforcementValidFrom(o) <= enforcementCalculationDate(d) AND
+    (NOT enforcementValidTo(o) OR enforcementValidTo(o) >= enforcementCalculationDate(d));
+
+calculateEnforcement 'Рассчитать' (EnforcementCalculationDocument d) {
+    IF enforcementCalculationStatus(d) AND
+       enforcementCalculationStatus(d) != EnforcementCalculationStatus.draft THEN
+        MESSAGE 'Исполнительные удержания уже рассчитаны';
+    ELSE IF NOT enforcementTaxCalculation(d) OR
+            (taxCalculationStatus(enforcementTaxCalculation(d)) != TaxCalculationStatus.calculated AND
+             taxCalculationStatus(enforcementTaxCalculation(d)) != TaxCalculationStatus.approved) THEN
+        MESSAGE 'Выберите рассчитанный налоговый документ';
+    ELSE {
+        FOR activeEnforcementOrder(d, EnforcementOrder o) DO {
+            NEW l = EnforcementCalculationLine {
+                enforcementCalculationDocument(l) <- d;
+                enforcementCalculationOrder(l) <- o;
+            }
+        }
+        FOR enforcementCalculationDocument(EnforcementCalculationLine l) == d DO
+            enforcementMaximumAmount(l) <- calculatedMaximumEnforcementWithholding(l);
+        FOR enforcementCalculationDocument(EnforcementCalculationLine l) == d DO
+            enforcementRequestedAmount(l) <- debtLimitedEnforcementRequest(l);
+        FOR enforcementCalculationDocument(EnforcementCalculationLine l) == d DO
+            enforcementWithheldAmount(l) <- calculatedEnforcementWithholding(l);
+        enforcementCalculationStatus(d) <- EnforcementCalculationStatus.calculated;
+        enforcementCalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+approveEnforcement 'Утвердить' (EnforcementCalculationDocument d) {
+    IF enforcementCalculationStatus(d) == EnforcementCalculationStatus.calculated THEN {
+        enforcementCalculationStatus(d) <- EnforcementCalculationStatus.approved;
+        APPLY;
+    } ELSE
+        MESSAGE 'Сначала рассчитайте исполнительные удержания';
+}
+
+totalEnforcementWithheld 'Исполнительные удержания' (EnforcementCalculationDocument d) =
+    GROUP SUM enforcementWithheldAmount(EnforcementCalculationLine l)
+    IF enforcementCalculationDocument(l) == d;
+enforcementWithheldByOrder(EnforcementCalculationDocument d, EnforcementOrder o) =
+    GROUP SUM enforcementWithheldAmount(EnforcementCalculationLine l)
+    IF enforcementCalculationDocument(l) == d AND enforcementCalculationOrder(l) == o;
+payableAfterEnforcement 'К выплате после взысканий' (EnforcementCalculationDocument d) = taxPositive(
+    payableAfterTaxes(enforcementTaxCalculation(d)) -
+    (IF totalEnforcementWithheld(d) THEN totalEnforcementWithheld(d) ELSE 0.00));
+
+FORM enforcementOrders 'Исполнительные документы'
+    OBJECTS o = EnforcementOrder
+    PROPERTIES(o) enforcementOrganization, enforcementEmployee, enforcementKind,
+                  enforcementCalculationKind, enforcementStatus, enforcementNumber,
+                  enforcementDate, enforcementValidFrom, enforcementValidTo,
+                  enforcementPriority, enforcementPercent, enforcementFixedAmount,
+                  enforcementChildCount, enforcementRemainingDebt,
+                  enforcementRecipient, enforcementRecipientIin, enforcementRecipientIban,
+                  enforcementOfficer, enforcementProceedingNumber,
+                  enforcementBasis, enforcementLegalSource
+;
+
+FORM enforcementCalculationDocuments 'Расчёт исполнительных удержаний'
+    OBJECTS d = EnforcementCalculationDocument
+    PROPERTIES(d) enforcementTaxCalculation, enforcementCalculationStatus,
+                  enforcementCalculatedAt, totalEnforcementWithheld, payableAfterEnforcement
+    PROPERTIES(d) calculateEnforcement, approveEnforcement
+;
+
+FORM enforcementCalculationLines 'Строки исполнительных удержаний'
+    OBJECTS l = EnforcementCalculationLine
+    PROPERTIES(l) enforcementCalculationDocument, enforcementCalculationOrder,
+                  enforcementLineEmployee, enforcementLinePriority,
+                  enforcementGrossIncome, enforcementIncomeAfterTaxes,
+                  effectiveEnforcementPercent, enforcementRequestedAmount,
+                  enforcementMaximumAmount, enforcementWithheldAmount,
+                  enforcementUnpaidAmount
+;

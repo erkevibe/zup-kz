@@ -12,7 +12,8 @@ CLASS AssessmentBaseKind 'Расчётная база' {
     socialContribution 'Социальные отчисления',
     employeeOsms 'Взносы ОСМС',
     employerOsms 'Отчисления ОСМС',
-    socialTax 'Социальный налог'
+    socialTax 'Социальный налог',
+    enforcement 'Исполнительные удержания'
 }
 
 CLASS CalculationBaseRule 'Включение вида расчёта в базу';
@@ -55,6 +56,8 @@ legalSourceForBase(AssessmentBaseKind kind) =
         legalSourceByCode('TAX_CODE_2026')
     ELSE IF kind == AssessmentBaseKind.employeeOsms OR kind == AssessmentBaseKind.employerOsms THEN
         legalSourceByCode('OSMS_LAW')
+    ELSE IF kind == AssessmentBaseKind.enforcement THEN
+        legalSourceByCode('ALIMONY_INCOME_LIST')
     ELSE legalSourceByCode('SOCIAL_CODE_KZ');
 
 ensureBaseRule(CalculationType type, AssessmentBaseKind kind) {
@@ -78,6 +81,7 @@ ensureStandardBaseRules(CalculationType type) {
     ensureBaseRule(type, AssessmentBaseKind.employeeOsms);
     ensureBaseRule(type, AssessmentBaseKind.employerOsms);
     ensureBaseRule(type, AssessmentBaseKind.socialTax);
+    ensureBaseRule(type, AssessmentBaseKind.enforcement);
 }
 
 loadBaselineAssessmentRules() {

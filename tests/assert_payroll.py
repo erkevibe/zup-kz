@@ -46,6 +46,15 @@ expected = {
     "progressiveIpnCrossingThreshold": Decimal("11875.00"),
     "annualBasicDeductionRemainder": Decimal("7000.00"),
     "agriculturalSocialTax": Decimal("2351.49"),
+    "enforcementIncomeAfterTaxes2026": Decimal("130549.28"),
+    "defaultOneChildAlimonyPercent": Decimal("25.00"),
+    "alimonyWithheld2026": Decimal("25779.99"),
+    "damageWithheld2026": Decimal("39494.65"),
+    "lowerPriorityWithheld2026": Decimal("0.00"),
+    "totalEnforcementWithheld2026": Decimal("65274.64"),
+    "payableAfterEnforcement2026": Decimal("67274.64"),
+    "ordinaryLowIncomeEnforcementCap": Decimal("29149.00"),
+    "protectedLowIncomeEnforcementCap": Decimal("40000.00"),
     "averageDaily": Decimal("4878.048780"),
     "averageHourly": Decimal("609.756098"),
     "averagePayDays": Decimal("48780.49"),
@@ -66,7 +75,10 @@ expected = {
     "sickLeaveInterimPayment": Decimal("158125.00"),
 }
 for name, value in expected.items():
-    assert Decimal(str(actual[name])) == value, (name, actual[name], value)
+    # lsFusion omits a computed property from JSON when its value is NULL.
+    # Aggregate monetary properties use that representation for an empty sum.
+    actual_value = actual.get(name, 0)
+    assert Decimal(str(actual_value)) == value, (name, actual_value, value)
 
 assert actual["scheduledLeavePaymentDue"] == "2026-07-08"
 assert actual["outsideSchedulePaymentDue"] == "2026-07-16"

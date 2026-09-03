@@ -126,6 +126,12 @@ loadBaselineLegalParameters() {
             'https://www.adilet.zan.kz/rus/docs/K2300000224', 2023_07_01, 2026_09_03);
         ensureLegalSource('OSMS_LAW', 'Об обязательном социальном медицинском страховании',
             'https://www.adilet.zan.kz/rus/docs/Z1500000405', 2017_07_01, 2026_09_03);
+        ensureLegalSource('ENFORCEMENT_LAW', 'Об исполнительном производстве и статусе судебных исполнителей',
+            'https://www.adilet.zan.kz/rus/docs/Z100000261_', 2010_08_09, 2026_09_03);
+        ensureLegalSource('FAMILY_CODE_KZ', 'О браке (супружестве) и семье',
+            'https://www.adilet.zan.kz/rus/docs/K1100000518', 2012_01_18, 2026_09_03);
+        ensureLegalSource('ALIMONY_INCOME_LIST', 'Перечень доходов для удержания алиментов',
+            'https://adilet.zan.kz/rus/docs/V14D0010113', 2015_02_08, 2026_09_03);
 
         ensureStatutoryParameter('MZP', 'Минимальная заработная плата', 'KZT',
             'Минимальный размер заработной платы на соответствующий год');
@@ -160,6 +166,11 @@ loadBaselineLegalParameters() {
         ensureStatutoryParameter('IPN_SOCIAL_DISABILITY_MRP', 'Социальный вычет ИПН для инвалидности I–II групп', 'MRP', 'Годовой социальный вычет для лиц с инвалидностью I–II групп');
         ensureStatutoryParameter('SOCIAL_TAX_RATE', 'Ставка социального налога', 'percent', 'Общая ставка социального налога');
         ensureStatutoryParameter('SOCIAL_TAX_AGRI_RATE', 'Ставка социального налога для сельхозпроизводителей', 'percent', 'Льготная ставка по соответствующим объектам');
+        ensureStatutoryParameter('LIVING_MINIMUM', 'Прожиточный минимум', 'KZT', 'Величина прожиточного минимума на соответствующий год');
+        ensureStatutoryParameter('ENFORCEMENT_MAX_RATE', 'Максимум удержаний по исполнительным документам', 'percent', 'Доля дохода, которая может быть удержана');
+        ensureStatutoryParameter('ALIMONY_ONE_CHILD_RATE', 'Алименты на одного ребёнка', 'percent', 'Законная доля дохода при отсутствии иного размера в документе');
+        ensureStatutoryParameter('ALIMONY_TWO_CHILD_RATE', 'Алименты на двух детей', 'percent', 'Законная доля дохода при отсутствии иного размера в документе');
+        ensureStatutoryParameter('ALIMONY_THREE_CHILD_RATE', 'Алименты на трёх и более детей', 'percent', 'Законная доля дохода при отсутствии иного размера в документе');
 
         ensureStatutoryValue(statutoryParameterByCode('MZP'), 2026_01_01, 2026_12_31,
             85000.000000, legalSourceByCode('BUDGET_2026_2028'), 'Закон о республиканском бюджете');
@@ -215,6 +226,16 @@ loadBaselineLegalParameters() {
             6.000000, legalSourceByCode('TAX_CODE_2026'), 'Общая ставка без уменьшения на социальные отчисления');
         ensureStatutoryValue(statutoryParameterByCode('SOCIAL_TAX_AGRI_RATE'), 2026_01_01, NULL,
             1.800000, legalSourceByCode('TAX_CODE_2026'), 'По объектам сельскохозяйственного производства и переработки');
+        ensureStatutoryValue(statutoryParameterByCode('LIVING_MINIMUM'), 2026_01_01, 2026_12_31,
+            50851.000000, legalSourceByCode('BUDGET_2026_2028'), 'Величина прожиточного минимума на 2026 год');
+        ensureStatutoryValue(statutoryParameterByCode('ENFORCEMENT_MAX_RATE'), 2026_01_01, NULL,
+            50.000000, legalSourceByCode('ENFORCEMENT_LAW'), 'За должником сохраняется не менее 50 процентов дохода');
+        ensureStatutoryValue(statutoryParameterByCode('ALIMONY_ONE_CHILD_RATE'), 2026_01_01, NULL,
+            25.000000, legalSourceByCode('FAMILY_CODE_KZ'), 'Одна четверть дохода');
+        ensureStatutoryValue(statutoryParameterByCode('ALIMONY_TWO_CHILD_RATE'), 2026_01_01, NULL,
+            33.333333, legalSourceByCode('FAMILY_CODE_KZ'), 'Одна треть дохода');
+        ensureStatutoryValue(statutoryParameterByCode('ALIMONY_THREE_CHILD_RATE'), 2026_01_01, NULL,
+            50.000000, legalSourceByCode('FAMILY_CODE_KZ'), 'Половина дохода');
         APPLY;
     }
 }
