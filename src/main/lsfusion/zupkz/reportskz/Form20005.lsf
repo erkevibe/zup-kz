@@ -385,7 +385,51 @@ FORM form20005Lines 'Исчисление налогов и социальных
                      form20005LineCountryCode
 ;
 
+// Технический XML формируется нативным EXPORT и служит стабильным внутренним
+// форматом. Преобразование в XSD конкретной версии КНП выполняется адаптером.
+GROUP Form20005Header;
+FORM form20005Xml
+    OBJECTS d = Form200Declaration PANEL
+    PROPERTIES IN Form20005Header organizationBin = bin(form200Organization(d)) EXTID 'BIN',
+                                      year = form200Year(d) EXTID 'Year',
+                                      version = form200Version(d) EXTID 'Version'
+    OBJECTS line = Form20005Line
+    PROPERTIES(line) form20005LineNumber EXTID 'A',
+                     form20005LineName EXTID 'B', form20005LineIin EXTID 'C',
+                     form20005LineIncomeStatus EXTID 'D',
+                     form20005LineCategory EXTID 'E', form20005LineAifc EXTID 'F',
+                     form20005LineUnregisteredDivision EXTID 'G',
+                     form20005LineAccruedIncome EXTID 'H',
+                     form20005LineIncomeReduction EXTID 'J',
+                     form20005LineOpvCalculated EXTID 'K',
+                     form20005LineVosmsCalculated EXTID 'L',
+                     form20005LineTaxDeductionCodes EXTID 'M',
+                     form20005LineTaxDeduction EXTID 'N',
+                     form20005LineIpnCalculated EXTID 'O',
+                     form20005LineUnpaidIncome EXTID 'P',
+                     form20005LinePaidIncome EXTID 'Q',
+                     form20005LineIpnPayable EXTID 'R',
+                     form20005LineOpvPayable EXTID 'S',
+                     form20005LineVosmsPayable EXTID 'T',
+                     form20005LineSocialTaxIncome EXTID 'U',
+                     form20005LineSocialTaxCalculated EXTID 'V',
+                     form20005LineSo EXTID 'W',
+                     form20005LineSocialTaxPayable EXTID 'X',
+                     form20005LineOppv EXTID 'Y', form20005LineOosms EXTID 'Z',
+                     form20005LineOpvr EXTID 'AA', form20005LineCountryCode EXTID 'AB'
+    FILTERS form20005LineDeclaration(line) == d
+;
+
+exportForm20005Xml 'Выгрузить 200.05 XML' (Form200Declaration d) {
+    IF form200Quarter(d) != 4 OR NOT form20005LineCount(d) THEN
+        MESSAGE 'Сначала сформируйте 200.05 за IV квартал';
+    ELSE {
+        EXPORT form20005Xml OBJECTS d = d XML;
+        open(exportFile());
+    }
+}
+
 EXTEND FORM form200Declarations
     PROPERTIES(d) form20005GeneratedAt, form20005LineCount
-    PROPERTIES(d) generateForm20005
+    PROPERTIES(d) generateForm20005, exportForm20005Xml
 ;

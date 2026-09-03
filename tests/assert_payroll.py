@@ -137,6 +137,12 @@ expected = {
     "form20005CivilPaidIncome2026": Decimal("1000000.00"),
     "form20005CivilOosms2026": Decimal("0.00"),
     "form20005CivilOpvr2026": Decimal("0.00"),
+    "civilLiabilityLineCount2026": Decimal("4"),
+    "civilLiabilityTotal2026": Decimal("234775.00"),
+    "civilLiabilityOpv2026": Decimal("100000.00"),
+    "civilLiabilitySo2026": Decimal("29750.00"),
+    "civilLiabilityVosms2026": Decimal("20000.00"),
+    "civilLiabilityIpn2026": Decimal("85025.00"),
     "ordinaryLowIncomeEnforcementCap": Decimal("29149.00"),
     "protectedLowIncomeEnforcementCap": Decimal("40000.00"),
     "averageDaily": Decimal("4878.048780"),
@@ -188,3 +194,5 @@ assert actual["form20005EmployeeIin2026"] == "900101300000"
 assert actual["form20005CategoryCodes2026"] == "3,4"
 assert actual["form20005TaxDeductionCodes2026"] == "1"
 assert actual["civilActPaid2026"] is True
+assert actual["civilLiabilityDueDate2026"] == "2026-03-25"
+assert actual["civilLiabilityPaid2026"] is True

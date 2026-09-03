@@ -53,6 +53,14 @@ payrollFormulaTest() {
                             civilActPaymentDate(civilAct) <- 2026_02_12;
                             civilActPaymentReference(civilAct) <- 'GPH-PAY-2026-01';
                             markCivilActPaid(civilAct);
+                            NEW civilLiabilities = CivilLiabilityDocument {
+                                civilLiabilityAct(civilLiabilities) <- civilAct;
+                                civilLiabilityNumber(civilLiabilities) <- 'GPH-LIAB-2026-01';
+                                generateCivilLiabilities(civilLiabilities);
+                                approveCivilLiabilities(civilLiabilities);
+                                civilLiabilityPaymentDate(civilLiabilities) <- 2026_03_25;
+                                civilLiabilityBankReference(civilLiabilities) <- 'GPH-TAX-BANK-1';
+                                markCivilLiabilitiesPaid(civilLiabilities);
             NEW contract = Employment {
                 employee(contract) <- worker;
                 organization(contract) <- org;
@@ -499,6 +507,26 @@ payrollFormulaTest() {
                                     form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
                                 form20005CivilOpvr2026 = form20005LineOpvr(
                                     form20005LineByEmployeeStatus(form200Annual, contractor, 2)),
+                                civilLiabilityLineCount2026 =
+                                    civilLiabilityLineCount(civilLiabilities),
+                                civilLiabilityTotal2026 = totalCivilLiability(civilLiabilities),
+                                civilLiabilityOpv2026 = civilLiabilityLineAmount(
+                                    civilLiabilityLineByKind(civilLiabilities,
+                                        PayrollLiabilityKind.opv)),
+                                civilLiabilitySo2026 = civilLiabilityLineAmount(
+                                    civilLiabilityLineByKind(civilLiabilities,
+                                        PayrollLiabilityKind.socialContribution)),
+                                civilLiabilityVosms2026 = civilLiabilityLineAmount(
+                                    civilLiabilityLineByKind(civilLiabilities,
+                                        PayrollLiabilityKind.vosms)),
+                                civilLiabilityIpn2026 = civilLiabilityLineAmount(
+                                    civilLiabilityLineByKind(civilLiabilities,
+                                        PayrollLiabilityKind.ipn)),
+                                civilLiabilityDueDate2026 = civilLiabilityLineDueDate(
+                                    civilLiabilityLineByKind(civilLiabilities,
+                                        PayrollLiabilityKind.opv)),
+                                civilLiabilityPaid2026 = civilLiabilityStatus(civilLiabilities) ==
+                                    PayrollLiabilityStatus.paid,
                                 ordinaryLowIncomeEnforcementCap = taxMinimum(
                                     socialPaymentAmount(80000.00, 50.000000),
                                     taxPositive(80000.00 - 50851.00)),
@@ -567,6 +595,7 @@ payrollFormulaTest() {
                 }
             }
         }
+    }
     }
     }
     }

@@ -1,0 +1,137 @@
+MODULE PayrollCivilContractPayments;
+
+REQUIRE PayrollCivilContract, PayrollPayments;
+NAMESPACE ZUPKZ;
+
+CLASS CivilLiabilityDocument 'Перечисление платежей ГПХ';
+
+civilLiabilityAct 'Акт ГПХ' = DATA CivilContractAct (CivilLiabilityDocument);
+civilLiabilityNumber 'Номер документа' = DATA STRING[50] (CivilLiabilityDocument);
+civilLiabilityStatus 'Статус' = DATA PayrollLiabilityStatus (CivilLiabilityDocument);
+civilLiabilityGeneratedAt 'Сформирован' = DATA DATETIME (CivilLiabilityDocument);
+civilLiabilityPaymentDate 'Дата перечисления' = DATA DATE (CivilLiabilityDocument);
+civilLiabilityBankReference 'Банковская ссылка' = DATA STRING[100] (CivilLiabilityDocument);
+civilLiabilityPaidAt 'Перечислен' = DATA DATETIME (CivilLiabilityDocument);
+
+activeCivilLiabilityCount(CivilContractAct act) = GROUP SUM 1 IF
+    civilLiabilityAct(CivilLiabilityDocument d) == act AND
+    (civilLiabilityStatus(d) == PayrollLiabilityStatus.calculated OR
+     civilLiabilityStatus(d) == PayrollLiabilityStatus.approved OR
+     civilLiabilityStatus(d) == PayrollLiabilityStatus.paid);
+CONSTRAINT activeCivilLiabilityCount(CivilContractAct act) > 1
+    MESSAGE 'Для акта ГПХ может быть только один действующий документ платежей';
+
+CLASS CivilLiabilityLine 'Строка обязательного платежа ГПХ';
+
+civilLiabilityLineDocument 'Документ' = DATA CivilLiabilityDocument (CivilLiabilityLine);
+civilLiabilityLineKind 'Вид платежа' = DATA PayrollLiabilityKind (CivilLiabilityLine);
+civilLiabilityLineEmployee 'Физическое лицо' = DATA Employee (CivilLiabilityLine);
+civilLiabilityLineIin 'ИИН' = DATA STRING[12] (CivilLiabilityLine);
+civilLiabilityLineLastName 'Фамилия' = DATA STRING[100] (CivilLiabilityLine);
+civilLiabilityLineFirstName 'Имя' = DATA STRING[100] (CivilLiabilityLine);
+civilLiabilityLineMiddleName 'Отчество' = DATA STRING[100] (CivilLiabilityLine);
+civilLiabilityLineBirthDate 'Дата рождения' = DATA DATE (CivilLiabilityLine);
+civilLiabilityLinePeriod 'Период' = DATA DATE (CivilLiabilityLine);
+civilLiabilityLineAmount 'Сумма' = DATA NUMERIC[18,2] (CivilLiabilityLine);
+civilLiabilityLineDueDate 'Срок перечисления' = DATA DATE (CivilLiabilityLine);
+civilLiabilityLineLegalSource 'Нормативное основание' = DATA LegalSource (CivilLiabilityLine);
+
+civilLiabilityAmount(CivilContractAct act, PayrollLiabilityKind kind) =
+    IF kind == PayrollLiabilityKind.opv THEN civilActOpv(act)
+    ELSE IF kind == PayrollLiabilityKind.socialContribution THEN civilActSo(act)
+    ELSE IF kind == PayrollLiabilityKind.vosms THEN civilActVosms(act)
+    ELSE IF kind == PayrollLiabilityKind.ipn THEN civilActIpn(act);
+isCivilLiabilityKind(PayrollLiabilityKind kind) =
+    kind == PayrollLiabilityKind.opv OR
+    kind == PayrollLiabilityKind.socialContribution OR
+    kind == PayrollLiabilityKind.vosms OR kind == PayrollLiabilityKind.ipn;
+civilLiabilityDueDate(CivilContractAct act) =
+    firstDayOfMonth(sumMonth(civilActPaymentDate(act), 1)) + 24;
+
+generateCivilLiabilities 'Сформировать платежи' (CivilLiabilityDocument d) {
+    IF civilLiabilityStatus(d) AND civilLiabilityStatus(d) != PayrollLiabilityStatus.draft THEN
+        MESSAGE 'Документ платежей уже сформирован';
+    ELSE IF NOT civilLiabilityNumber(d) OR NOT civilLiabilityAct(d) OR
+            civilActStatus(civilLiabilityAct(d)) != CivilContractActStatus.paid THEN
+        MESSAGE 'Укажите номер и выберите выплаченный акт ГПХ';
+    ELSE IF activeCivilLiabilityCount(civilLiabilityAct(d)) > 1 THEN
+        MESSAGE 'Для акта уже существует действующий документ платежей';
+    ELSE {
+        FOR kind IS PayrollLiabilityKind AND isCivilLiabilityKind(kind) AND
+            civilLiabilityAmount(civilLiabilityAct(d), kind) > 0.00 DO {
+            NEW line = CivilLiabilityLine {
+                civilLiabilityLineDocument(line) <- d;
+                civilLiabilityLineKind(line) <- kind;
+                civilLiabilityLineEmployee(line) <- civilActContractor(civilLiabilityAct(d));
+                civilLiabilityLineIin(line) <- iin(civilActContractor(civilLiabilityAct(d)));
+                civilLiabilityLineLastName(line) <-
+                    lastName(civilActContractor(civilLiabilityAct(d)));
+                civilLiabilityLineFirstName(line) <-
+                    firstName(civilActContractor(civilLiabilityAct(d)));
+                civilLiabilityLineMiddleName(line) <-
+                    middleName(civilActContractor(civilLiabilityAct(d)));
+                civilLiabilityLineBirthDate(line) <-
+                    birthDate(civilActContractor(civilLiabilityAct(d)));
+                civilLiabilityLinePeriod(line) <- firstDayOfMonth(civilActDate(civilLiabilityAct(d)));
+                civilLiabilityLineAmount(line) <- civilLiabilityAmount(civilLiabilityAct(d), kind);
+                civilLiabilityLineDueDate(line) <- civilLiabilityDueDate(civilLiabilityAct(d));
+                civilLiabilityLineLegalSource(line) <- liabilityLegalSource(kind);
+            }
+        }
+        civilLiabilityStatus(d) <- PayrollLiabilityStatus.calculated;
+        civilLiabilityGeneratedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+civilLiabilityLineCount(CivilLiabilityDocument d) = GROUP SUM 1 IF
+    civilLiabilityLineDocument(CivilLiabilityLine l) == d;
+totalCivilLiability 'Всего к перечислению' (CivilLiabilityDocument d) = GROUP SUM
+    civilLiabilityLineAmount(CivilLiabilityLine l) IF civilLiabilityLineDocument(l) == d;
+civilLiabilityLineByKind(CivilLiabilityDocument d, PayrollLiabilityKind kind) = GROUP AGGR
+    CivilLiabilityLine l BY civilLiabilityLineDocument(l), civilLiabilityLineKind(l);
+overdueCivilLiabilityCount 'Просрочено платежей' (CivilLiabilityDocument d) = GROUP SUM 1 IF
+    civilLiabilityLineDocument(CivilLiabilityLine l) == d AND
+    civilLiabilityPaymentDate(d) > civilLiabilityLineDueDate(l);
+
+approveCivilLiabilities 'Утвердить' (CivilLiabilityDocument d) {
+    IF civilLiabilityStatus(d) != PayrollLiabilityStatus.calculated OR
+       NOT civilLiabilityLineCount(d) THEN
+        MESSAGE 'Сначала сформируйте обязательные платежи ГПХ';
+    ELSE {
+        civilLiabilityStatus(d) <- PayrollLiabilityStatus.approved;
+        APPLY;
+    }
+}
+
+markCivilLiabilitiesPaid 'Отметить перечисленными' (CivilLiabilityDocument d) {
+    IF civilLiabilityStatus(d) != PayrollLiabilityStatus.approved THEN
+        MESSAGE 'Сначала утвердите обязательные платежи ГПХ';
+    ELSE IF NOT civilLiabilityPaymentDate(d) OR NOT civilLiabilityBankReference(d) THEN
+        MESSAGE 'Укажите дату перечисления и банковскую ссылку';
+    ELSE {
+        civilLiabilityStatus(d) <- PayrollLiabilityStatus.paid;
+        civilLiabilityPaidAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM civilLiabilityDocuments 'Перечисление обязательных платежей ГПХ'
+    OBJECTS d = CivilLiabilityDocument
+    PROPERTIES(d) civilLiabilityAct, civilLiabilityNumber, civilLiabilityStatus,
+                  civilLiabilityGeneratedAt, civilLiabilityPaymentDate,
+                  civilLiabilityBankReference, civilLiabilityPaidAt,
+                  totalCivilLiability, overdueCivilLiabilityCount
+    PROPERTIES(d) generateCivilLiabilities, approveCivilLiabilities,
+                  markCivilLiabilitiesPaid
+;
+
+FORM civilLiabilityLines 'Строки обязательных платежей ГПХ'
+    OBJECTS l = CivilLiabilityLine
+    PROPERTIES(l) civilLiabilityLineDocument, civilLiabilityLineKind,
+                  civilLiabilityLineEmployee, civilLiabilityLineIin,
+                  civilLiabilityLineLastName, civilLiabilityLineFirstName,
+                  civilLiabilityLineMiddleName, civilLiabilityLineBirthDate,
+                  civilLiabilityLinePeriod, civilLiabilityLineAmount,
+                  civilLiabilityLineDueDate, civilLiabilityLineLegalSource
+;
