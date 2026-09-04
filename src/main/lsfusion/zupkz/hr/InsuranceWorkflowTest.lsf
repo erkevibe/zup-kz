@@ -84,6 +84,41 @@ insuranceWorkflowTest() {
                                         payInsuranceClaim(claim);
                                         closeWorkAccident(accident);
 
+                                        insurancePolicyTerminationDate(policy) <- 2026_06_30;
+                                        insurancePolicyTerminationReason(policy) <-
+                                            'Досрочное прекращение по соглашению сторон';
+                                        cancelInsurancePolicy(policy);
+
+                                        NEW retrospectiveAccident = WorkAccident {
+                                            workAccidentOrganization(retrospectiveAccident) <- org;
+                                            workAccidentEmployee(retrospectiveAccident) <- worker;
+                                            workAccidentAssignment(retrospectiveAccident) <- assignment;
+                                            workAccidentNumber(retrospectiveAccident) <-
+                                                'ACCIDENT-RETROSPECTIVE';
+                                            workAccidentDate(retrospectiveAccident) <- 2026_05_10;
+                                            workAccidentPlace(retrospectiveAccident) <- 'Цех';
+                                            workAccidentDescription(retrospectiveAccident) <-
+                                                'Ретроспективная регистрация после прекращения полиса';
+                                            workAccidentSeverity(retrospectiveAccident) <-
+                                                WorkAccidentSeverity.minor;
+                                            workAccidentStatus(retrospectiveAccident) <-
+                                                WorkAccidentStatus.draft;
+                                            registerWorkAccident(retrospectiveAccident);
+
+                                        NEW replacementPolicy = AccidentInsurancePolicy {
+                                            insurancePolicyOrganization(replacementPolicy) <- org;
+                                            insurancePolicyInsurer(replacementPolicy) <-
+                                                'Новая тестовая страховая компания';
+                                            insurancePolicyNumber(replacementPolicy) <- 'POLICY-2026-2';
+                                            insurancePolicyDate(replacementPolicy) <- 2026_06_25;
+                                            insurancePolicyValidFrom(replacementPolicy) <- 2026_07_01;
+                                            insurancePolicyValidTo(replacementPolicy) <- 2026_12_31;
+                                            insurancePolicyRiskClass(replacementPolicy) <- risk;
+                                            insurancePolicyPayrollBase(replacementPolicy) <- 12000000.00;
+                                            insurancePolicyStatus(replacementPolicy) <-
+                                                AccidentInsurancePolicyStatus.draft;
+                                            activateInsurancePolicy(replacementPolicy);
+
                                         NEW uninsuredOrg = Organization {
                                             name(uninsuredOrg) <- 'Без Полиса Тест';
                                             bin(uninsuredOrg) <- '161616161616';
@@ -124,8 +159,17 @@ insuranceWorkflowTest() {
                                                                 rateSnapshot =
                                                                     insurancePolicyRatePercent(policy),
                                                                 premium = insurancePolicyPremium(policy),
-                                                                policyActive = insurancePolicyStatus(policy) ==
-                                                                    AccidentInsurancePolicyStatus.active,
+                                                                policyCancelled =
+                                                                    insurancePolicyStatus(policy) ==
+                                                                        AccidentInsurancePolicyStatus.cancelled,
+                                                                policyEffectiveTo =
+                                                                    insurancePolicyEffectiveValidTo(policy),
+                                                                retrospectiveCoverage =
+                                                                    workAccidentPolicy(
+                                                                        retrospectiveAccident) == policy,
+                                                                replacementCoverage =
+                                                                    insurancePolicyOn(org, 2026_07_01) ==
+                                                                        replacementPolicy,
                                                                 accidentCovered = workAccidentPolicy(accident) ==
                                                                     policy,
                                                                 accidentClosed = workAccidentStatus(accident) ==
@@ -148,6 +192,8 @@ insuranceWorkflowTest() {
                                                     }
                                                 }
                                             }
+                                        }
+                                        }
                                         }
                                     }
                                 }

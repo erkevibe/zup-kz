@@ -8,7 +8,10 @@ with open(sys.argv[1], encoding="utf-8") as result_file:
 expected = {
     "rateSnapshot": 1.5,
     "premium": 150000.0,
-    "policyActive": True,
+    "policyCancelled": True,
+    "policyEffectiveTo": "2026-06-30",
+    "retrospectiveCoverage": True,
+    "replacementCoverage": True,
     "accidentCovered": True,
     "accidentClosed": True,
     "accidentWorkRelated": True,

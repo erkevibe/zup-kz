@@ -67,25 +67,38 @@ insurancePolicyPremium 'Страховая премия' = DATA NUMERIC[16,2] (A
 insurancePolicyStatus 'Статус' = DATA AccidentInsurancePolicyStatus (AccidentInsurancePolicy);
 insurancePolicyActivatedAt 'Введён в действие' = DATA DATETIME (AccidentInsurancePolicy);
 insurancePolicyCancelledAt 'Прекращён' = DATA DATETIME (AccidentInsurancePolicy);
+insurancePolicyTerminationDate 'Действовал по при прекращении' =
+    DATA DATE (AccidentInsurancePolicy);
+insurancePolicyTerminationReason 'Основание прекращения' =
+    DATA STRING[500] (AccidentInsurancePolicy);
 
 CONSTRAINT insurancePolicyValidTo(AccidentInsurancePolicy p) < insurancePolicyValidFrom(p)
     MESSAGE 'Окончание договора не может быть раньше начала';
 CONSTRAINT insurancePolicyPayrollBase(AccidentInsurancePolicy p) <= 0.00
     MESSAGE 'Страховая база должна быть положительной';
+CONSTRAINT insurancePolicyTerminationDate(AccidentInsurancePolicy p) AND
+           (insurancePolicyTerminationDate(p) < insurancePolicyValidFrom(p) OR
+            insurancePolicyTerminationDate(p) > insurancePolicyValidTo(p))
+    MESSAGE 'Дата прекращения должна находиться внутри периода договора';
 insurancePolicyKeyCount(Organization org, STRING[80] number) = GROUP SUM 1 IF
     insurancePolicyOrganization(AccidentInsurancePolicy p) == org AND
     insurancePolicyNumber(p) == number;
 CONSTRAINT insurancePolicyKeyCount(insurancePolicyOrganization(AccidentInsurancePolicy p),
                                    insurancePolicyNumber(p)) > 1
     MESSAGE 'Номер договора страхования должен быть уникальным в организации';
-overlappingActiveInsurancePolicyCount(AccidentInsurancePolicy p) = GROUP SUM 1 IF
+insurancePolicyEffectiveValidTo(AccidentInsurancePolicy p) =
+    IF insurancePolicyStatus(p) == AccidentInsurancePolicyStatus.cancelled AND
+       insurancePolicyTerminationDate(p) THEN insurancePolicyTerminationDate(p)
+    ELSE insurancePolicyValidTo(p);
+overlappingRecordedInsurancePolicyCount(AccidentInsurancePolicy p) = GROUP SUM 1 IF
     insurancePolicyOrganization(AccidentInsurancePolicy other) == insurancePolicyOrganization(p) AND
-    insurancePolicyStatus(other) == AccidentInsurancePolicyStatus.active AND
-    insurancePolicyValidFrom(other) <= insurancePolicyValidTo(p) AND
-    insurancePolicyValidTo(other) >= insurancePolicyValidFrom(p);
+    (insurancePolicyStatus(other) == AccidentInsurancePolicyStatus.active OR
+     insurancePolicyStatus(other) == AccidentInsurancePolicyStatus.cancelled) AND
+    insurancePolicyValidFrom(other) <= insurancePolicyEffectiveValidTo(p) AND
+    insurancePolicyEffectiveValidTo(other) >= insurancePolicyValidFrom(p);
 CONSTRAINT insurancePolicyStatus(AccidentInsurancePolicy p) == AccidentInsurancePolicyStatus.active AND
-           overlappingActiveInsurancePolicyCount(p) > 1
-    MESSAGE 'Периоды действующих договоров страхования одной организации не должны пересекаться';
+           overlappingRecordedInsurancePolicyCount(p) > 1
+    MESSAGE 'Фактические периоды договоров страхования одной организации не должны пересекаться';
 CONSTRAINT (CHANGED(insurancePolicyOrganization(AccidentInsurancePolicy p)) OR
             CHANGED(insurancePolicyInsurer(p)) OR CHANGED(insurancePolicyInsurerBin(p)) OR
             CHANGED(insurancePolicyNumber(p)) OR CHANGED(insurancePolicyDate(p)) OR
@@ -93,11 +106,16 @@ CONSTRAINT (CHANGED(insurancePolicyOrganization(AccidentInsurancePolicy p)) OR
             CHANGED(insurancePolicyRiskClass(p)) OR CHANGED(insurancePolicyPayrollBase(p))) AND
            PREV(insurancePolicyStatus(p)) != AccidentInsurancePolicyStatus.draft
     MESSAGE 'Нельзя изменить введённый в действие договор страхования';
+CONSTRAINT (CHANGED(insurancePolicyTerminationDate(AccidentInsurancePolicy p)) OR
+            CHANGED(insurancePolicyTerminationReason(p))) AND
+           PREV(insurancePolicyStatus(p)) != AccidentInsurancePolicyStatus.active
+    MESSAGE 'Нельзя изменить реквизиты прекращённого договора страхования';
 
 insurancePolicyOn(Organization org, DATE date) = GROUP LAST AccidentInsurancePolicy p IF
     insurancePolicyOrganization(p) == org AND
-    insurancePolicyStatus(p) == AccidentInsurancePolicyStatus.active AND
-    insurancePolicyValidFrom(p) <= date AND insurancePolicyValidTo(p) >= date
+    (insurancePolicyStatus(p) == AccidentInsurancePolicyStatus.active OR
+     insurancePolicyStatus(p) == AccidentInsurancePolicyStatus.cancelled) AND
+    insurancePolicyValidFrom(p) <= date AND insurancePolicyEffectiveValidTo(p) >= date
     ORDER insurancePolicyValidFrom(p), p;
 
 activateInsurancePolicy 'Ввести в действие' (AccidentInsurancePolicy p) {
@@ -127,6 +145,9 @@ activateInsurancePolicy 'Ввести в действие' (AccidentInsurancePol
 cancelInsurancePolicy 'Прекратить' (AccidentInsurancePolicy p) {
     IF insurancePolicyStatus(p) != AccidentInsurancePolicyStatus.active THEN
         MESSAGE 'Прекратить можно только действующий договор';
+    ELSE IF NOT insurancePolicyTerminationDate(p) OR
+            NOT insurancePolicyTerminationReason(p) THEN
+        MESSAGE 'Укажите фактическую дату и основание прекращения договора';
     ELSE {
         insurancePolicyStatus(p) <- AccidentInsurancePolicyStatus.cancelled;
         insurancePolicyCancelledAt(p) <- currentDateTime();
@@ -204,7 +225,8 @@ CONSTRAINT (CHANGED(workAccidentOrganization(WorkAccident a)) OR
             CHANGED(workAccidentEmployee(a)) OR CHANGED(workAccidentAssignment(a)) OR
             CHANGED(workAccidentNumber(a)) OR CHANGED(workAccidentDate(a)) OR
             CHANGED(workAccidentTime(a)) OR CHANGED(workAccidentPlace(a)) OR
-            CHANGED(workAccidentDescription(a)) OR CHANGED(workAccidentSeverity(a))) AND
+            CHANGED(workAccidentDescription(a)) OR CHANGED(workAccidentSeverity(a)) OR
+            CHANGED(workAccidentPolicy(a))) AND
            PREV(workAccidentStatus(a)) != WorkAccidentStatus.draft
     MESSAGE 'Нельзя изменить зарегистрированное происшествие';
 CONSTRAINT (CHANGED(workAccidentInsurerNotifiedDate(WorkAccident a)) OR
@@ -392,7 +414,9 @@ FORM accidentInsurancePolicies 'Договоры страхования рабо
                   insurancePolicyRiskClass, insurancePolicyPayrollBase,
                   insurancePolicyRateRule, insurancePolicyRatePercent,
                   insurancePolicyPremium, insurancePolicyStatus,
-                  insurancePolicyActivatedAt, insurancePolicyCancelledAt
+                  insurancePolicyActivatedAt, insurancePolicyCancelledAt,
+                  insurancePolicyTerminationDate, insurancePolicyTerminationReason,
+                  insurancePolicyEffectiveValidTo
     PROPERTIES(p) activateInsurancePolicy, cancelInsurancePolicy
 ;
 

@@ -247,12 +247,17 @@ calculatedIpnBasicDeduction(TaxCalculationLine l) =
                    taxMinimum(ipnBasicMonthlyLimit(l), ipnBasicAnnualAvailable(l)))
     ELSE 0.00;
 
-ipnSocialAnnualLimit(TaxCalculationLine l) =
-    IF taxProfileSocialDeduction(taxCalculationProfile(l)) == IpnSocialDeductionKind.disabilityOneTwo THEN
-        taxMrp(l) * taxParameter(l, 'IPN_SOCIAL_DISABILITY_MRP')
-    ELSE IF taxProfileSocialDeduction(taxCalculationProfile(l)) == IpnSocialDeductionKind.protectedCategory THEN
-        taxMrp(l) * taxParameter(l, 'IPN_SOCIAL_STANDARD_MRP')
+ipnSocialAnnualLimitAmount(IpnSocialDeductionKind kind, NUMERIC[16,6] mrp,
+                           NUMERIC[16,6] standardLimit,
+                           NUMERIC[16,6] disabilityLimit) =
+    IF kind == IpnSocialDeductionKind.disabilityOneTwo THEN mrp * disabilityLimit
+    ELSE IF kind == IpnSocialDeductionKind.protectedCategory OR
+            kind == IpnSocialDeductionKind.protectedDependent THEN mrp * standardLimit
     ELSE 0.00;
+ipnSocialAnnualLimit(TaxCalculationLine l) = ipnSocialAnnualLimitAmount(
+    taxProfileSocialDeduction(taxCalculationProfile(l)), taxMrp(l),
+    taxParameter(l, 'IPN_SOCIAL_STANDARD_MRP'),
+    taxParameter(l, 'IPN_SOCIAL_DISABILITY_MRP'));
 priorSocialDeduction(TaxCalculationLine l) = GROUP SUM
     taxLedgerSocialDeduction(PersonalTaxLedgerEntry e) IF
     taxLedgerOrganization(e) == taxCalculationOrganization(l) AND

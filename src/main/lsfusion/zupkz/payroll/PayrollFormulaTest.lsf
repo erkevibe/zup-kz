@@ -337,6 +337,22 @@ payrollFormulaTest() {
                                                                                          10.000000, 15.000000),
                                 annualBasicDeductionRemainder = taxMinimum(100000.00,
                                     taxPositive(1557000.00 - 1550000.00)),
+                                noSocialDeductionLimit = ipnSocialAnnualLimitAmount(
+                                    IpnSocialDeductionKind.none, 4325.000000,
+                                    882.000000, 5000.000000),
+                                protectedCategoryLimit = ipnSocialAnnualLimitAmount(
+                                    IpnSocialDeductionKind.protectedCategory, 4325.000000,
+                                    882.000000, 5000.000000),
+                                disabilityOneTwoLimit = ipnSocialAnnualLimitAmount(
+                                    IpnSocialDeductionKind.disabilityOneTwo, 4325.000000,
+                                    882.000000, 5000.000000),
+                                protectedDependentLimit = ipnSocialAnnualLimitAmount(
+                                    IpnSocialDeductionKind.protectedDependent, 4325.000000,
+                                    882.000000, 5000.000000),
+                                protectedDependentRemainder = taxPositive(
+                                    ipnSocialAnnualLimitAmount(
+                                        IpnSocialDeductionKind.protectedDependent,
+                                        4325.000000, 882.000000, 5000.000000) - 3810000.00),
                                 agriculturalSocialTax = socialPaymentAmount(130638.09, 1.800000),
                                 enforcementIncomeAfterTaxes2026 = enforcementIncomeAfterTaxes(
                                     enforcementLineByOrder(enforcement, alimonyOrder)),
