@@ -6,7 +6,8 @@ NAMESPACE ZUPKZ;
 CLASS TimesheetStatus 'Статус табеля' {
     draft 'Черновик',
     approved 'Утверждён',
-    closed 'Закрыт для изменений'
+    closed 'Закрыт для изменений',
+    cancelled 'Отменён'
 }
 
 CLASS AttendanceKind 'Основной вид времени' {
@@ -30,9 +31,17 @@ timesheetPeriodTo 'Период по' = DATA DATE (Timesheet);
 timesheetStatus 'Статус' = DATA TimesheetStatus (Timesheet);
 approvedAt 'Утверждён' = DATA DATETIME (Timesheet);
 approvedBy 'Кем утверждён' = DATA STRING[150] (Timesheet);
+cancelledAt 'Отменён' = DATA DATETIME (Timesheet);
+cancelledBy 'Кем отменён' = DATA STRING[150] (Timesheet);
 
 CONSTRAINT timesheetPeriodTo(Timesheet t) < timesheetPeriodFrom(t)
     MESSAGE 'Окончание периода табеля не может быть раньше начала';
+CONSTRAINT (CHANGED(timesheetOrganization(Timesheet t)) OR
+            CHANGED(timesheetPeriodFrom(t)) OR CHANGED(timesheetPeriodTo(t))) AND
+           (PREV(timesheetStatus(t)) == TimesheetStatus.approved OR
+            PREV(timesheetStatus(t)) == TimesheetStatus.closed OR
+            PREV(timesheetStatus(t)) == TimesheetStatus.cancelled)
+    MESSAGE 'Нельзя изменить организацию или период проведённого табеля';
 
 CLASS TimesheetLine 'Строка табеля';
 
@@ -70,6 +79,49 @@ CONSTRAINT overtimeHours(TimesheetLine l) > 0.00 AND
     MESSAGE 'Праздничные и выходные часы не должны повторно отмечаться как сверхурочные';
 CONSTRAINT holidayHours(TimesheetLine l) > 0.00 AND weekendHours(l) > 0.00
     MESSAGE 'Один час нельзя одновременно отметить праздничным и выходным';
+CONSTRAINT lineEmploymentAssignment(TimesheetLine l) AND
+           organization(employment(lineEmploymentAssignment(l))) !=
+               timesheetOrganization(lineTimesheet(l))
+    MESSAGE 'Назначение должно принадлежать организации табеля';
+CONSTRAINT lineEmploymentAssignment(TimesheetLine l) AND lineDate(l) AND
+           (lineDate(l) < assignmentFrom(lineEmploymentAssignment(l)) OR
+            (assignmentTo(lineEmploymentAssignment(l)) AND
+             lineDate(l) > assignmentTo(lineEmploymentAssignment(l))))
+    MESSAGE 'Дата строки не входит в период назначения';
+
+timesheetLineCount(Timesheet t) = GROUP SUM 1 IF lineTimesheet(TimesheetLine l) == t;
+invalidTimesheetLineCount(Timesheet t) = GROUP SUM 1 IF
+    lineTimesheet(TimesheetLine l) == t AND
+    (NOT lineEmploymentAssignment(l) OR NOT lineDate(l) OR NOT attendanceKind(l));
+timesheetLineKeyCount(Timesheet t, EmploymentAssignment assignment, DATE date) = GROUP SUM 1 IF
+    lineTimesheet(TimesheetLine l) == t AND lineEmploymentAssignment(l) == assignment AND
+    lineDate(l) == date;
+CONSTRAINT timesheetLineKeyCount(Timesheet t, EmploymentAssignment assignment, DATE date) > 1
+    MESSAGE 'В табеле может быть только одна строка назначения за день';
+approvedTimesheetLineCount(EmploymentAssignment assignment, DATE date) = GROUP SUM 1 IF
+    lineEmploymentAssignment(TimesheetLine l) == assignment AND lineDate(l) == date AND
+    timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved;
+CONSTRAINT approvedTimesheetLineCount(EmploymentAssignment assignment, DATE date) > 1
+    MESSAGE 'Один день назначения нельзя утвердить в двух табелях';
+
+CONSTRAINT (CHANGED(lineTimesheet(TimesheetLine l)) OR
+            CHANGED(lineEmploymentAssignment(l)) OR CHANGED(lineDate(l)) OR
+            CHANGED(attendanceKind(l)) OR CHANGED(actualStartTime(l)) OR
+            CHANGED(actualEndTime(l)) OR CHANGED(plannedHoursLine(l)) OR
+            CHANGED(workedHours(l)) OR CHANGED(nightHours(l)) OR
+            CHANGED(overtimeHours(l)) OR CHANGED(holidayHours(l)) OR
+            CHANGED(weekendHours(l)) OR CHANGED(businessTripHours(l)) OR
+            CHANGED(absenceHours(l)) OR CHANGED(overtimeConsentDocument(l)) OR
+            CHANGED(employerAct(l)) OR CHANGED(lineComment(l))) AND
+           (PREV(timesheetStatus(lineTimesheet(l))) == TimesheetStatus.approved OR
+            PREV(timesheetStatus(lineTimesheet(l))) == TimesheetStatus.closed OR
+            PREV(timesheetStatus(lineTimesheet(l))) == TimesheetStatus.cancelled)
+    MESSAGE 'Нельзя изменить строку проведённого табеля';
+CONSTRAINT DROPPED(TimesheetLine l IS TimesheetLine) AND
+           (PREV(timesheetStatus(lineTimesheet(l))) == TimesheetStatus.approved OR
+            PREV(timesheetStatus(lineTimesheet(l))) == TimesheetStatus.closed OR
+            PREV(timesheetStatus(lineTimesheet(l))) == TimesheetStatus.cancelled)
+    MESSAGE 'Нельзя удалить строку проведённого табеля';
 
 plannedHoursForAssignment(EmploymentAssignment assignment, DATE date) = CASE
     WHEN scheduleType(workScheduleOn(assignment, date)) == WorkScheduleType.fiveDay THEN
@@ -139,15 +191,25 @@ fillTimesheet 'Заполнить по графику' (Timesheet t) {
 }
 
 approveTimesheet 'Утвердить табель' (Timesheet t) {
-    timesheetStatus(t) <- TimesheetStatus.approved;
-    approvedAt(t) <- currentDateTime();
-    APPLY;
+    IF timesheetStatus(t) AND timesheetStatus(t) != TimesheetStatus.draft THEN
+        MESSAGE 'Табель уже проведён';
+    ELSE IF NOT timesheetOrganization(t) OR NOT timesheetPeriodFrom(t) OR
+            NOT timesheetPeriodTo(t) OR NOT timesheetLineCount(t) THEN
+        MESSAGE 'Заполните организацию, период и строки табеля';
+    ELSE IF invalidTimesheetLineCount(t) THEN
+        MESSAGE 'Во всех строках заполните назначение, дату и вид времени';
+    ELSE {
+        timesheetStatus(t) <- TimesheetStatus.approved;
+        approvedAt(t) <- currentDateTime();
+        APPLY;
+    }
 }
 
 FORM timesheets 'Табели рабочего времени'
     OBJECTS t = Timesheet
     PROPERTIES(t) timesheetOrganization, timesheetNumber, timesheetPeriodFrom,
                   timesheetPeriodTo, timesheetStatus, approvedAt, approvedBy
+    PROPERTIES(t) cancelledAt, cancelledBy
     PROPERTIES(t) fillTimesheet, approveTimesheet
 ;
 

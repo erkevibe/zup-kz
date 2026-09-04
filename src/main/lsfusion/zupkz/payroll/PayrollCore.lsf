@@ -296,6 +296,39 @@ approvedAbsenceHours(EmploymentAssignment assignment, DATE dateFrom, DATE dateTo
 
 payrollTimeSummaryByKey(PayrollRun run, EmploymentAssignment assignment) =
     GROUP AGGR PayrollTimeSummary s BY summaryPayrollRun(s), summaryAssignment(s);
+approvedTimesheetForPayrollCount(PayrollRun run) = GROUP SUM 1 IF
+    timesheetOrganization(Timesheet t) == payrollOrganization(run) AND
+    timesheetPeriodFrom(t) == payrollPeriodFrom(run) AND
+    timesheetPeriodTo(t) == payrollPeriodTo(run) AND
+    timesheetStatus(t) == TimesheetStatus.approved;
+timesheetUsedInPayrollCount(Timesheet t) = GROUP SUM 1 IF
+    payrollOrganization(PayrollRun run) == timesheetOrganization(t) AND
+    payrollPeriodFrom(run) == timesheetPeriodFrom(t) AND
+    payrollPeriodTo(run) == timesheetPeriodTo(t) AND
+    (payrollRunStatus(run) == PayrollRunStatus.timeCollected OR
+     payrollRunStatus(run) == PayrollRunStatus.calculated OR
+     payrollRunStatus(run) == PayrollRunStatus.approved OR
+     payrollRunStatus(run) == PayrollRunStatus.paid);
+CONSTRAINT CHANGED(timesheetStatus(Timesheet t)) AND
+           PREV(timesheetStatus(t)) == TimesheetStatus.approved AND
+           timesheetStatus(t) == TimesheetStatus.cancelled AND timesheetUsedInPayrollCount(t)
+    MESSAGE 'Нельзя отменить табель, уже собранный в расчёт зарплаты';
+
+cancelTimesheet 'Отменить табель' (Timesheet t) {
+    IF timesheetStatus(t) != TimesheetStatus.approved THEN
+        MESSAGE 'Отменить можно только утверждённый табель';
+    ELSE IF timesheetUsedInPayrollCount(t) THEN
+        MESSAGE 'Нельзя отменить табель, уже собранный в расчёт зарплаты';
+    ELSE {
+        timesheetStatus(t) <- TimesheetStatus.cancelled;
+        cancelledAt(t) <- currentDateTime();
+        APPLY;
+    }
+}
+
+EXTEND FORM timesheets
+    PROPERTIES(t) cancelTimesheet
+;
 
 collectApprovedTime 'Собрать утверждённый табель' (PayrollRun r) {
     IF payrollRunStatus(r) == PayrollRunStatus.timeCollected OR
@@ -303,6 +336,8 @@ collectApprovedTime 'Собрать утверждённый табель' (Payr
        payrollRunStatus(r) == PayrollRunStatus.approved OR
        payrollRunStatus(r) == PayrollRunStatus.paid THEN
         MESSAGE 'Табель уже собран. Для исправления создайте новый расчёт или документ перерасчёта';
+    ELSE IF NOT approvedTimesheetForPayrollCount(r) THEN
+        MESSAGE 'За период расчёта нет утверждённого табеля';
     ELSE {
         FOR assignment IS EmploymentAssignment AND
             organization(employment(assignment)) == payrollOrganization(r) AND

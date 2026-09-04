@@ -1,0 +1,82 @@
+MODULE TimeWorkflowTest;
+
+REQUIRE HRWorkflowTest;
+NAMESPACE ZUPKZ;
+
+timeWorkflowTest() {
+    NEW org = Organization {
+        bin(org) <- '666666666666';
+        NEW worker = Employee {
+            iin(worker) <- '940404300004';
+            lastName(worker) <- 'Табельный';
+            firstName(worker) <- 'Тест';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                hireDate(contract) <- 2026_01_01;
+                salary(contract) <- 168000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    assignmentSalary(assignment) <- 168000.00;
+                    NEW january = Timesheet {
+                        timesheetOrganization(january) <- org;
+                        timesheetNumber(january) <- 'TS-2026-01';
+                        timesheetPeriodFrom(january) <- 2026_01_01;
+                        timesheetPeriodTo(january) <- 2026_01_31;
+                        timesheetStatus(january) <- TimesheetStatus.draft;
+                        NEW januaryLine = TimesheetLine {
+                            lineTimesheet(januaryLine) <- january;
+                            lineEmploymentAssignment(januaryLine) <- assignment;
+                            lineDate(januaryLine) <- 2026_01_05;
+                            attendanceKind(januaryLine) <- AttendanceKind.worked;
+                            plannedHoursLine(januaryLine) <- 8.00;
+                            workedHours(januaryLine) <- 8.00;
+                            approveTimesheet(january);
+                            NEW run = PayrollRun {
+                                payrollOrganization(run) <- org;
+                                payrollNumber(run) <- 'TIME-TEST-2026-01';
+                                payrollPeriodFrom(run) <- 2026_01_01;
+                                payrollPeriodTo(run) <- 2026_01_31;
+                                payrollRunStatus(run) <- PayrollRunStatus.draft;
+                                collectApprovedTime(run);
+                                cancelTimesheet(january);
+                                NEW february = Timesheet {
+                                    timesheetOrganization(february) <- org;
+                                    timesheetNumber(february) <- 'TS-2026-02';
+                                    timesheetPeriodFrom(february) <- 2026_02_01;
+                                    timesheetPeriodTo(february) <- 2026_02_28;
+                                    timesheetStatus(february) <- TimesheetStatus.draft;
+                                    NEW februaryLine = TimesheetLine {
+                                        lineTimesheet(februaryLine) <- february;
+                                        lineEmploymentAssignment(februaryLine) <- assignment;
+                                        lineDate(februaryLine) <- 2026_02_02;
+                                        attendanceKind(februaryLine) <- AttendanceKind.worked;
+                                        plannedHoursLine(februaryLine) <- 8.00;
+                                        workedHours(februaryLine) <- 8.00;
+                                        approveTimesheet(february);
+                                        cancelTimesheet(february);
+
+                                        EXPORT JSON FROM
+                                            januaryApproved = timesheetStatus(january) ==
+                                                TimesheetStatus.approved,
+                                            usedTimesheetCancellationRejected = timesheetStatus(january) ==
+                                                TimesheetStatus.approved,
+                                            februaryCancelled = timesheetStatus(february) ==
+                                                TimesheetStatus.cancelled,
+                                            payrollTimeCollected = payrollRunStatus(run) ==
+                                                PayrollRunStatus.timeCollected,
+                                            summaryPlannedHoursResult = summaryPlannedHours(
+                                                payrollTimeSummaryByKey(run, assignment)),
+                                            summaryWorkedHoursResult = summaryWorkedHours(
+                                                payrollTimeSummaryByKey(run, assignment));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
