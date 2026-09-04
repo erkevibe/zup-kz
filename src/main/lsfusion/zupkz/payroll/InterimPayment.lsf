@@ -83,6 +83,33 @@ EXTEND FORM leaveDocuments
     PROPERTIES(l) cancelLeave
 ;
 
+activeInterimPaymentForSickLeaveCount(SickLeaveDocument d) = GROUP SUM 1 IF
+    interimPaymentSickLeave(InterimPayment p) == d AND
+    (interimPaymentStatus(p) == InterimPaymentStatus.calculated OR
+     interimPaymentStatus(p) == InterimPaymentStatus.approved OR
+     interimPaymentStatus(p) == InterimPaymentStatus.paid);
+CONSTRAINT CHANGED(sickLeaveStatus(SickLeaveDocument d)) AND
+           PREV(sickLeaveStatus(d)) == SickLeaveStatus.approved AND
+           sickLeaveStatus(d) == SickLeaveStatus.cancelled AND
+           activeInterimPaymentForSickLeaveCount(d)
+    MESSAGE 'Нельзя отменить больничный, уже включённый в межрасчётную выплату';
+
+cancelSickLeave 'Отменить больничный' (SickLeaveDocument d) {
+    IF sickLeaveStatus(d) != SickLeaveStatus.approved THEN
+        MESSAGE 'Отменить можно только утверждённый больничный';
+    ELSE IF activeInterimPaymentForSickLeaveCount(d) THEN
+        MESSAGE 'Нельзя отменить больничный, уже включённый в межрасчётную выплату';
+    ELSE {
+        sickLeaveStatus(d) <- SickLeaveStatus.cancelled;
+        sickLeaveCancelledAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+EXTEND FORM sickLeaveDocuments
+    PROPERTIES(d) cancelSickLeave
+;
+
 calculateInterimPayment 'Рассчитать' (InterimPayment p) {
     IF interimPaymentStatus(p) AND interimPaymentStatus(p) != InterimPaymentStatus.draft THEN
         MESSAGE 'Выплата уже рассчитана';

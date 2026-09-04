@@ -1,0 +1,133 @@
+MODULE SickLeaveWorkflowTest;
+
+REQUIRE LeaveWorkflowTest;
+NAMESPACE ZUPKZ;
+
+sickLeaveWorkflowTest() {
+    NEW org = Organization {
+        bin(org) <- '444444444444';
+        NEW worker = Employee {
+            iin(worker) <- '960606300006';
+            lastName(worker) <- 'Больничный';
+            firstName(worker) <- 'Тест';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                hireDate(contract) <- 2026_01_01;
+                salary(contract) <- 200000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    assignmentSalary(assignment) <- 200000.00;
+                    NEW average = AverageEarningsDocument {
+                        averageNumber(average) <- 'AVG-SICK-1';
+                        averageAssignment(average) <- assignment;
+                        averageEventKind(average) <- AverageEarningsEventKind.sickLeave;
+                        averageMode(average) <- AverageEarningsMode.daily;
+                        averageEventFrom(average) <- 2026_06_08;
+                        averageEventTo(average) <- 2026_06_10;
+                        averageEventWorkDays(average) <- 3.00;
+                        averagePeriodFrom(average) <- 2025_06_01;
+                        averagePeriodTo(average) <- 2026_05_31;
+                        averageStatus(average) <- AverageEarningsStatus.baseCollected;
+                        NEW baseLine = AverageEarningsBaseLine {
+                            baseAverageDocument(baseLine) <- average;
+                            baseEarnings(baseLine) <- 100000.00;
+                            baseWorkedDays(baseLine) <- 20.00;
+                            baseIncreaseCoefficient(baseLine) <- 1.000000;
+                            baseIncluded(baseLine) <- TRUE;
+                            calculateAverageEarnings(average);
+                            NEW mainSick = SickLeaveDocument {
+                                sickLeaveNumber(mainSick) <- 'SICK-1';
+                                sickLeaveIssueDate(mainSick) <- 2026_06_10;
+                                sickLeaveMedicalOrganization(mainSick) <- 'Тестовая поликлиника';
+                                sickLeaveAssignment(mainSick) <- assignment;
+                                sickLeaveFrom(mainSick) <- 2026_06_08;
+                                sickLeaveTo(mainSick) <- 2026_06_10;
+                                sickLeaveReason(mainSick) <- SickLeaveReason.illness;
+                                sickLeaveAverage(mainSick) <- average;
+                                sickLeaveStatus(mainSick) <- SickLeaveStatus.draft;
+                                NEW mainLine = SickLeaveBenefitLine {
+                                    sickBenefitDocument(mainLine) <- mainSick;
+                                    sickBenefitMonth(mainLine) <- 2026_06_08;
+                                    sickBenefitWorkDays(mainLine) <- 3.00;
+                                    calculateSickLeave(mainSick);
+                                    approveSickLeave(mainSick);
+                                    NEW overlap = SickLeaveDocument {
+                                        sickLeaveNumber(overlap) <- 'SICK-OVERLAP-1';
+                                        sickLeaveIssueDate(overlap) <- 2026_06_11;
+                                        sickLeaveMedicalOrganization(overlap) <- 'Тестовая поликлиника';
+                                        sickLeaveAssignment(overlap) <- assignment;
+                                        sickLeaveFrom(overlap) <- 2026_06_09;
+                                        sickLeaveTo(overlap) <- 2026_06_11;
+                                        sickLeaveReason(overlap) <- SickLeaveReason.illness;
+                                        sickLeaveAverage(overlap) <- average;
+                                        sickLeaveStatus(overlap) <- SickLeaveStatus.draft;
+                                        NEW overlapLine = SickLeaveBenefitLine {
+                                            sickBenefitDocument(overlapLine) <- overlap;
+                                            sickBenefitMonth(overlapLine) <- 2026_06_09;
+                                            sickBenefitWorkDays(overlapLine) <- 3.00;
+                                            calculateSickLeave(overlap);
+                                            approveSickLeave(overlap);
+                                            NEW payment = InterimPayment {
+                                                interimPaymentNumber(payment) <- 'SICK-PAY-1';
+                                                interimPaymentDate(payment) <- 2026_06_10;
+                                                interimPaymentAssignment(payment) <- assignment;
+                                                interimPaymentKind(payment) <- InterimPaymentKind.sickLeave;
+                                                interimPaymentSickLeave(payment) <- mainSick;
+                                                interimPaymentManualDueDate(payment) <- 2026_06_15;
+                                                interimPaymentReason(payment) <- 'Пособие по нетрудоспособности';
+                                                interimPaymentStatus(payment) <- InterimPaymentStatus.draft;
+                                                calculateInterimPayment(payment);
+                                                cancelSickLeave(mainSick);
+                                                NEW cancellable = SickLeaveDocument {
+                                                    sickLeaveNumber(cancellable) <- 'SICK-CANCEL-1';
+                                                    sickLeaveIssueDate(cancellable) <- 2026_07_02;
+                                                    sickLeaveMedicalOrganization(cancellable) <-
+                                                        'Тестовая поликлиника';
+                                                    sickLeaveAssignment(cancellable) <- assignment;
+                                                    sickLeaveFrom(cancellable) <- 2026_07_01;
+                                                    sickLeaveTo(cancellable) <- 2026_07_02;
+                                                    sickLeaveReason(cancellable) <- SickLeaveReason.illness;
+                                                    sickLeaveAverage(cancellable) <- average;
+                                                    sickLeaveStatus(cancellable) <- SickLeaveStatus.draft;
+                                                    NEW cancellableLine = SickLeaveBenefitLine {
+                                                        sickBenefitDocument(cancellableLine) <- cancellable;
+                                                        sickBenefitMonth(cancellableLine) <- 2026_07_01;
+                                                        sickBenefitWorkDays(cancellableLine) <- 2.00;
+                                                        calculateSickLeave(cancellable);
+                                                        approveSickLeave(cancellable);
+                                                        cancelSickLeave(cancellable);
+
+                                                        EXPORT JSON FROM
+                                                            mainSickApproved = sickLeaveStatus(mainSick) ==
+                                                                SickLeaveStatus.approved,
+                                                            calculatedTimestampSet = TRUE IF
+                                                                sickLeaveCalculatedAt(mainSick),
+                                                            approvalTimestampSet = TRUE IF
+                                                                sickLeaveApprovedAt(mainSick),
+                                                            grossAmountResult = sickLeaveGrossAmount(mainSick),
+                                                            overlapRejected = sickLeaveStatus(overlap) ==
+                                                                SickLeaveStatus.calculated,
+                                                            paymentCalculated = interimPaymentStatus(payment) ==
+                                                                InterimPaymentStatus.calculated,
+                                                            usedSickCancellationRejected = sickLeaveStatus(mainSick) ==
+                                                                SickLeaveStatus.approved,
+                                                            unusedSickCancelled = sickLeaveStatus(cancellable) ==
+                                                                SickLeaveStatus.cancelled,
+                                                            cancellationTimestampSet = TRUE IF
+                                                                sickLeaveCancelledAt(cancellable);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -29,7 +29,8 @@ CLASS SickLeaveExclusionReason 'Причина неоплаты больничн
 CLASS SickLeaveStatus 'Статус больничного' {
     draft 'Черновик',
     calculated 'Рассчитан',
-    approved 'Утверждён'
+    approved 'Утверждён',
+    cancelled 'Отменён'
 }
 
 CLASS SickLeaveDocument 'Больничный лист';
@@ -49,6 +50,10 @@ sickLeaveDiplomaticAbroad 'Дипслужба за рубежом' = DATA BOOLEA
 sickLeaveExclusionReason 'Причина неоплаты' = DATA SickLeaveExclusionReason (SickLeaveDocument);
 sickLeaveStatus 'Статус' = DATA SickLeaveStatus (SickLeaveDocument);
 sickLeaveCalculatedAt 'Рассчитан' = DATA DATETIME (SickLeaveDocument);
+sickLeaveApprovedAt 'Утверждён' = DATA DATETIME (SickLeaveDocument);
+sickLeaveApprovedBy 'Кем утверждён' = DATA STRING[150] (SickLeaveDocument);
+sickLeaveCancelledAt 'Отменён' = DATA DATETIME (SickLeaveDocument);
+sickLeaveCancelledBy 'Кем отменён' = DATA STRING[150] (SickLeaveDocument);
 sickLeaveLegalSource 'Нормативное основание' (SickLeaveDocument d) =
     legalSourceByCode('SICK_LEAVE_RULES_907');
 
@@ -67,6 +72,23 @@ CONSTRAINT sickLeaveAverage(SickLeaveDocument d) AND
 CONSTRAINT sickLeaveReason(SickLeaveDocument d) == SickLeaveReason.workInjury AND
            NOT sickLeaveProductionActNumber(d)
     MESSAGE 'Для трудового увечья укажите акт о несчастном случае';
+CONSTRAINT sickLeaveAssignment(SickLeaveDocument d) AND sickLeaveFrom(d) AND sickLeaveTo(d) AND
+           (sickLeaveFrom(d) < assignmentFrom(sickLeaveAssignment(d)) OR
+            (assignmentTo(sickLeaveAssignment(d)) AND
+             sickLeaveTo(d) > assignmentTo(sickLeaveAssignment(d))))
+    MESSAGE 'Период больничного должен входить в период назначения';
+CONSTRAINT (CHANGED(sickLeaveNumber(SickLeaveDocument d)) OR
+            CHANGED(sickLeaveIssueDate(d)) OR CHANGED(sickLeaveMedicalOrganization(d)) OR
+            CHANGED(sickLeaveAssignment(d)) OR CHANGED(sickLeaveFrom(d)) OR
+            CHANGED(sickLeaveTo(d)) OR CHANGED(sickLeaveReason(d)) OR
+            CHANGED(sickLeaveAverage(d)) OR CHANGED(sickLeaveDuplicate(d)) OR
+            CHANGED(sickLeaveProductionActNumber(d)) OR
+            CHANGED(sickLeaveVeteranExemption(d)) OR CHANGED(sickLeaveDiplomaticAbroad(d)) OR
+            CHANGED(sickLeaveExclusionReason(d))) AND
+           (PREV(sickLeaveStatus(d)) == SickLeaveStatus.calculated OR
+            PREV(sickLeaveStatus(d)) == SickLeaveStatus.approved OR
+            PREV(sickLeaveStatus(d)) == SickLeaveStatus.cancelled)
+    MESSAGE 'Нельзя изменить рассчитанный, утверждённый или отменённый больничный';
 
 CLASS SickLeaveBenefitLine 'Помесячный расчёт больничного';
 
@@ -83,6 +105,22 @@ CONSTRAINT sickBenefitMissedHours(SickLeaveBenefitLine l) < 0.00
 CONSTRAINT sickBenefitMonth(SickLeaveBenefitLine l) < sickLeaveFrom(sickBenefitDocument(l)) OR
            sickBenefitMonth(l) > sickLeaveTo(sickBenefitDocument(l))
     MESSAGE 'Месяц расчёта должен входить в период больничного';
+sickBenefitMonthLineCount(SickLeaveDocument d, DATE month) = GROUP SUM 1 IF
+    sickBenefitDocument(SickLeaveBenefitLine l) == d AND sickBenefitMonth(l) == month;
+CONSTRAINT sickBenefitMonthLineCount(SickLeaveDocument d, DATE month) > 1
+    MESSAGE 'Для месяца больничного допускается только одна строка расчёта';
+CONSTRAINT (CHANGED(sickBenefitDocument(SickLeaveBenefitLine l)) OR
+            CHANGED(sickBenefitMonth(l)) OR CHANGED(sickBenefitWorkDays(l)) OR
+            CHANGED(sickBenefitMissedHours(l)) OR CHANGED(sickBenefitNote(l))) AND
+           (PREV(sickLeaveStatus(sickBenefitDocument(l))) == SickLeaveStatus.calculated OR
+            PREV(sickLeaveStatus(sickBenefitDocument(l))) == SickLeaveStatus.approved OR
+            PREV(sickLeaveStatus(sickBenefitDocument(l))) == SickLeaveStatus.cancelled)
+    MESSAGE 'Нельзя изменить строку рассчитанного больничного';
+CONSTRAINT DROPPED(SickLeaveBenefitLine l IS SickLeaveBenefitLine) AND
+           (PREV(sickLeaveStatus(sickBenefitDocument(l))) == SickLeaveStatus.calculated OR
+            PREV(sickLeaveStatus(sickBenefitDocument(l))) == SickLeaveStatus.approved OR
+            PREV(sickLeaveStatus(sickBenefitDocument(l))) == SickLeaveStatus.cancelled)
+    MESSAGE 'Нельзя удалить строку рассчитанного больничного';
 
 sickBenefitCalculated 'По среднему заработку' (SickLeaveBenefitLine l) =
     IF averageMode(sickLeaveAverage(sickBenefitDocument(l))) == AverageEarningsMode.daily THEN
@@ -111,13 +149,26 @@ sickLeaveGrossAmount 'Сумма пособия' (SickLeaveDocument d) =
     IF sickLeaveExcluded(d) THEN 0.00
     ELSE GROUP SUM sickBenefitPayable(SickLeaveBenefitLine l) IF sickBenefitDocument(l) == d;
 
+approvedSickLeaveOverlapCount(SickLeaveDocument d) = GROUP SUM 1 IF
+    sickLeaveAssignment(SickLeaveDocument other) == sickLeaveAssignment(d) AND other != d AND
+    sickLeaveStatus(other) == SickLeaveStatus.approved AND
+    sickLeaveFrom(other) <= sickLeaveTo(d) AND sickLeaveTo(other) >= sickLeaveFrom(d);
+CONSTRAINT sickLeaveStatus(SickLeaveDocument d) == SickLeaveStatus.approved AND
+           approvedSickLeaveOverlapCount(d)
+    MESSAGE 'Период больничного пересекается с другим утверждённым больничным';
+
 calculateSickLeave 'Рассчитать' (SickLeaveDocument d) {
     IF sickLeaveStatus(d) AND sickLeaveStatus(d) != SickLeaveStatus.draft THEN
         MESSAGE 'Больничный уже рассчитан';
-    ELSE IF NOT sickLeaveNumber(d) OR NOT sickLeaveIssueDate(d) OR NOT sickLeaveAssignment(d) OR
+    ELSE IF NOT sickLeaveNumber(d) OR NOT sickLeaveIssueDate(d) OR
+            NOT sickLeaveMedicalOrganization(d) OR NOT sickLeaveAssignment(d) OR
             NOT sickLeaveFrom(d) OR NOT sickLeaveTo(d) OR NOT sickLeaveReason(d) OR
             NOT sickLeaveAverage(d) THEN
-        MESSAGE 'Заполните лист нетрудоспособности, назначение, период, причину и средний заработок';
+        MESSAGE 'Заполните лист, медицинскую организацию, назначение, период, причину и средний заработок';
+    ELSE IF sickLeaveFrom(d) < assignmentFrom(sickLeaveAssignment(d)) OR
+            (assignmentTo(sickLeaveAssignment(d)) AND
+             sickLeaveTo(d) > assignmentTo(sickLeaveAssignment(d))) THEN
+        MESSAGE 'Период больничного должен входить в период назначения';
     ELSE IF averageStatus(sickLeaveAverage(d)) != AverageEarningsStatus.calculated OR
             averageEventKind(sickLeaveAverage(d)) != AverageEarningsEventKind.sickLeave THEN
         MESSAGE 'Выберите рассчитанный средний заработок для больничного';
@@ -133,11 +184,15 @@ calculateSickLeave 'Рассчитать' (SickLeaveDocument d) {
 }
 
 approveSickLeave 'Утвердить' (SickLeaveDocument d) {
-    IF sickLeaveStatus(d) == SickLeaveStatus.calculated THEN {
-        sickLeaveStatus(d) <- SickLeaveStatus.approved;
-        APPLY;
-    } ELSE
+    IF sickLeaveStatus(d) != SickLeaveStatus.calculated THEN
         MESSAGE 'Сначала рассчитайте больничный';
+    ELSE IF approvedSickLeaveOverlapCount(d) THEN
+        MESSAGE 'Период больничного пересекается с другим утверждённым больничным';
+    ELSE {
+        sickLeaveStatus(d) <- SickLeaveStatus.approved;
+        sickLeaveApprovedAt(d) <- currentDateTime();
+        APPLY;
+    }
 }
 
 FORM sickLeaveDocuments 'Больничные листы'
@@ -149,6 +204,8 @@ FORM sickLeaveDocuments 'Больничные листы'
                   sickLeaveExclusionReason, sickLeaveExcluded, sickLeaveCapExempt,
                   sickLeaveStatus, sickLeaveCalculatedAt, sickLeaveLegalSource,
                   sickLeaveGrossAmount
+    PROPERTIES(d) sickLeaveApprovedAt, sickLeaveApprovedBy,
+                  sickLeaveCancelledAt, sickLeaveCancelledBy
     PROPERTIES(d) calculateSickLeave, approveSickLeave
 ;
 
