@@ -36,7 +36,8 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: erkevibe/platform
-          ref: develop
+          # Last upstream-compatible revision verified by this application.
+          ref: 68d154cb90
           path: platform
 
       - name: Set up Java 21
@@ -71,6 +72,12 @@ jobs:
                 --output payroll-result.json
 
               python3 tests/assert_payroll.py payroll-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollStage0Test' \
+                --output stage0-result.json
+
+              python3 tests/assert_stage0.py stage0-result.json
 
               kill -TERM "$server_pid"
               wait "$server_pid" || true

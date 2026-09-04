@@ -21,6 +21,16 @@ socialProfileLegalSource 'Нормативное основание' = DATA Lega
 
 CONSTRAINT socialProfileValidTo(SocialPaymentProfile p) < socialProfileValidFrom(p)
     MESSAGE 'Окончание профиля не может быть раньше начала';
+overlappingSocialProfileCount(SocialPaymentProfile p) = GROUP SUM 1 IF
+    socialProfileOrganization(SocialPaymentProfile other) == socialProfileOrganization(p) AND
+    socialProfileEmployee(other) == socialProfileEmployee(p) AND
+    socialProfileValidFrom(other) <=
+        (IF socialProfileValidTo(p) THEN socialProfileValidTo(p) ELSE 9999_12_31) AND
+    (IF socialProfileValidTo(other) THEN socialProfileValidTo(other) ELSE 9999_12_31) >=
+        socialProfileValidFrom(p);
+CONSTRAINT socialProfileOrganization(SocialPaymentProfile p) AND socialProfileEmployee(p) AND
+           socialProfileValidFrom(p) AND overlappingSocialProfileCount(p) > 1
+    MESSAGE 'Периоды профилей социальных платежей сотрудника не должны пересекаться';
 
 socialPaymentProfileOn(Organization organization, Employee worker, DATE date) =
     GROUP LAST SocialPaymentProfile p
@@ -40,7 +50,8 @@ socialPaymentAmount(NUMERIC[18,2] base, NUMERIC[18,6] rate) =
 CLASS SocialPaymentStatus 'Статус социальных платежей' {
     draft 'Черновик',
     calculated 'Рассчитан',
-    approved 'Утверждён'
+    approved 'Утверждён',
+    cancelled 'Отменён'
 }
 
 CLASS SocialPaymentDocument 'Расчёт социальных платежей';
@@ -54,6 +65,43 @@ CLASS SocialPaymentLine 'Социальные платежи сотрудник�
 socialPaymentDocument 'Документ' = DATA SocialPaymentDocument (SocialPaymentLine);
 socialPaymentEmployee 'Сотрудник' = DATA Employee (SocialPaymentLine);
 
+// Все входы и результаты сохраняются снимком. Изменение ставок, состава базы
+// или профиля льгот не должно менять уже рассчитанный документ.
+socialPaymentMZP 'МЗП' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvGrossBase 'Доход для ОПВ' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvMaximum 'Предел базы ОПВ' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvRate 'Ставка ОПВ' = DATA NUMERIC[18,6] (SocialPaymentLine);
+opvExempt 'Освобождение от ОПВ' = DATA BOOLEAN (SocialPaymentLine);
+opvBase 'База ОПВ' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvAmount 'ОПВ' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvrGrossBase 'Доход для ОПВР' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvrMinimum 'Минимальная база ОПВР' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvrMaximum 'Максимальная база ОПВР' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvrRate 'Ставка ОПВР' = DATA NUMERIC[18,6] (SocialPaymentLine);
+opvrExempt 'Освобождение от ОПВР' = DATA BOOLEAN (SocialPaymentLine);
+opvrBase 'База ОПВР' = DATA NUMERIC[18,2] (SocialPaymentLine);
+opvrAmount 'ОПВР' = DATA NUMERIC[18,2] (SocialPaymentLine);
+soGrossBase 'Доход для СО' = DATA NUMERIC[18,2] (SocialPaymentLine);
+soIncomeAfterOpv 'Доход после ОПВ' = DATA NUMERIC[18,2] (SocialPaymentLine);
+soMinimum 'Минимальная база СО' = DATA NUMERIC[18,2] (SocialPaymentLine);
+soMaximum 'Максимальная база СО' = DATA NUMERIC[18,2] (SocialPaymentLine);
+soRate 'Ставка СО' = DATA NUMERIC[18,6] (SocialPaymentLine);
+soExempt 'Освобождение от СО' = DATA BOOLEAN (SocialPaymentLine);
+soBase 'База СО' = DATA NUMERIC[18,2] (SocialPaymentLine);
+soAmount 'Социальные отчисления' = DATA NUMERIC[18,2] (SocialPaymentLine);
+vosmsGrossBase 'Доход для ВОСМС' = DATA NUMERIC[18,2] (SocialPaymentLine);
+vosmsMaximum 'Предел базы ВОСМС' = DATA NUMERIC[18,2] (SocialPaymentLine);
+vosmsRate 'Ставка ВОСМС' = DATA NUMERIC[18,6] (SocialPaymentLine);
+vosmsExempt 'Освобождение от ВОСМС' = DATA BOOLEAN (SocialPaymentLine);
+vosmsBase 'База ВОСМС' = DATA NUMERIC[18,2] (SocialPaymentLine);
+vosmsAmount 'ВОСМС' = DATA NUMERIC[18,2] (SocialPaymentLine);
+oosmsGrossBase 'Доход для ООСМС' = DATA NUMERIC[18,2] (SocialPaymentLine);
+oosmsMaximum 'Предел базы ООСМС' = DATA NUMERIC[18,2] (SocialPaymentLine);
+oosmsRate 'Ставка ООСМС' = DATA NUMERIC[18,6] (SocialPaymentLine);
+oosmsExempt 'Освобождение от ООСМС' = DATA BOOLEAN (SocialPaymentLine);
+oosmsBase 'База ООСМС' = DATA NUMERIC[18,2] (SocialPaymentLine);
+oosmsAmount 'ООСМС' = DATA NUMERIC[18,2] (SocialPaymentLine);
+
 socialPaymentRun(SocialPaymentLine l) = socialPaymentPayrollRun(socialPaymentDocument(l));
 socialPaymentDate(SocialPaymentLine l) = payrollPeriodTo(socialPaymentRun(l));
 socialPaymentOrganization(SocialPaymentLine l) = payrollOrganization(socialPaymentRun(l));
@@ -64,57 +112,57 @@ mzpOnSocialPaymentDate(SocialPaymentLine l) =
 socialParameter(SocialPaymentLine l, STRING[50] code) =
     numericStatutoryValueOn(statutoryParameterByCode(code), socialPaymentDate(l));
 
-opvGrossBase 'Доход для ОПВ' (SocialPaymentLine l) =
+calculatedOpvGrossBase(SocialPaymentLine l) =
     payrollAssessmentBase(socialPaymentRun(l), socialPaymentEmployee(l), AssessmentBaseKind.opv);
-opvBase 'База ОПВ' (SocialPaymentLine l) =
-    socialCappedBase(opvGrossBase(l), mzpOnSocialPaymentDate(l) * socialParameter(l, 'OPV_MAX_MZP'));
-opvAmount 'ОПВ' (SocialPaymentLine l) =
+calculatedOpvBase(SocialPaymentLine l) =
+    socialCappedBase(calculatedOpvGrossBase(l), mzpOnSocialPaymentDate(l) * socialParameter(l, 'OPV_MAX_MZP'));
+calculatedOpvAmount(SocialPaymentLine l) =
     IF socialProfileOpvExempt(socialProfile(l)) THEN 0.00
-    ELSE socialPaymentAmount(opvBase(l), socialParameter(l, 'OPV_RATE'));
+    ELSE socialPaymentAmount(calculatedOpvBase(l), socialParameter(l, 'OPV_RATE'));
 
-opvrGrossBase 'Доход для ОПВР' (SocialPaymentLine l) =
+calculatedOpvrGrossBase(SocialPaymentLine l) =
     payrollAssessmentBase(socialPaymentRun(l), socialPaymentEmployee(l), AssessmentBaseKind.opvr);
 opvrBirthExempt(SocialPaymentLine l) = birthDate(socialPaymentEmployee(l)) <= 1975_01_01;
-opvrExempt 'Освобождение от ОПВР' (SocialPaymentLine l) =
+calculatedOpvrExempt(SocialPaymentLine l) =
     opvrBirthExempt(l) OR socialProfileOpvrExempt(socialProfile(l));
-opvrBase 'База ОПВР' (SocialPaymentLine l) =
-    socialBoundedBase(opvrGrossBase(l),
+calculatedOpvrBase(SocialPaymentLine l) =
+    socialBoundedBase(calculatedOpvrGrossBase(l),
         mzpOnSocialPaymentDate(l) * socialParameter(l, 'OPVR_MIN_MZP'),
         mzpOnSocialPaymentDate(l) * socialParameter(l, 'OPVR_MAX_MZP'));
-opvrAmount 'ОПВР' (SocialPaymentLine l) =
-    IF opvrExempt(l) THEN 0.00
-    ELSE socialPaymentAmount(opvrBase(l), socialParameter(l, 'OPVR_RATE'));
+calculatedOpvrAmount(SocialPaymentLine l) =
+    IF calculatedOpvrExempt(l) THEN 0.00
+    ELSE socialPaymentAmount(calculatedOpvrBase(l), socialParameter(l, 'OPVR_RATE'));
 
-soGrossBase 'Доход для СО' (SocialPaymentLine l) =
+calculatedSoGrossBase(SocialPaymentLine l) =
     payrollAssessmentBase(socialPaymentRun(l), socialPaymentEmployee(l),
                           AssessmentBaseKind.socialContribution);
-soIncomeAfterOpv 'Доход после ОПВ' (SocialPaymentLine l) =
-    soGrossBase(l) - (IF opvAmount(l) THEN opvAmount(l) ELSE 0.00);
-soBase 'База СО' (SocialPaymentLine l) =
-    socialBoundedBase(soIncomeAfterOpv(l),
+calculatedSoIncomeAfterOpv(SocialPaymentLine l) =
+    calculatedSoGrossBase(l) - calculatedOpvAmount(l);
+calculatedSoBase(SocialPaymentLine l) =
+    socialBoundedBase(calculatedSoIncomeAfterOpv(l),
         mzpOnSocialPaymentDate(l) * socialParameter(l, 'SO_MIN_MZP'),
         mzpOnSocialPaymentDate(l) * socialParameter(l, 'SO_MAX_MZP'));
-soAmount 'Социальные отчисления' (SocialPaymentLine l) =
+calculatedSoAmount(SocialPaymentLine l) =
     IF socialProfileSoExempt(socialProfile(l)) THEN 0.00
-    ELSE socialPaymentAmount(soBase(l), socialParameter(l, 'SO_RATE'));
+    ELSE socialPaymentAmount(calculatedSoBase(l), socialParameter(l, 'SO_RATE'));
 
-vosmsGrossBase 'Доход для ВОСМС' (SocialPaymentLine l) =
+calculatedVosmsGrossBase(SocialPaymentLine l) =
     payrollAssessmentBase(socialPaymentRun(l), socialPaymentEmployee(l), AssessmentBaseKind.employeeOsms);
-vosmsBase 'База ВОСМС' (SocialPaymentLine l) =
-    socialCappedBase(vosmsGrossBase(l),
+calculatedVosmsBase(SocialPaymentLine l) =
+    socialCappedBase(calculatedVosmsGrossBase(l),
         mzpOnSocialPaymentDate(l) * socialParameter(l, 'VOSMS_MAX_MZP'));
-vosmsAmount 'ВОСМС' (SocialPaymentLine l) =
+calculatedVosmsAmount(SocialPaymentLine l) =
     IF socialProfileVosmsExempt(socialProfile(l)) THEN 0.00
-    ELSE socialPaymentAmount(vosmsBase(l), socialParameter(l, 'VOSMS_RATE'));
+    ELSE socialPaymentAmount(calculatedVosmsBase(l), socialParameter(l, 'VOSMS_RATE'));
 
-oosmsGrossBase 'Доход для ООСМС' (SocialPaymentLine l) =
+calculatedOosmsGrossBase(SocialPaymentLine l) =
     payrollAssessmentBase(socialPaymentRun(l), socialPaymentEmployee(l), AssessmentBaseKind.employerOsms);
-oosmsBase 'База ООСМС' (SocialPaymentLine l) =
-    socialCappedBase(oosmsGrossBase(l),
+calculatedOosmsBase(SocialPaymentLine l) =
+    socialCappedBase(calculatedOosmsGrossBase(l),
         mzpOnSocialPaymentDate(l) * socialParameter(l, 'OOSMS_MAX_MZP'));
-oosmsAmount 'ООСМС' (SocialPaymentLine l) =
+calculatedOosmsAmount(SocialPaymentLine l) =
     IF socialProfileOosmsExempt(socialProfile(l)) THEN 0.00
-    ELSE socialPaymentAmount(oosmsBase(l), socialParameter(l, 'OOSMS_RATE'));
+    ELSE socialPaymentAmount(calculatedOosmsBase(l), socialParameter(l, 'OOSMS_RATE'));
 
 employeeSocialWithholding 'Удержания сотрудника' (SocialPaymentLine l) =
     (IF opvAmount(l) THEN opvAmount(l) ELSE 0.00) +
@@ -130,6 +178,35 @@ payrollEmployeeLineCount(PayrollRun run, Employee worker) = GROUP SUM 1
 missingSocialPaymentBirthDateCount(PayrollRun run) = GROUP SUM 1
     IF linePayrollRun(PayrollLine l) == run AND
        NOT birthDate(employee(employment(linePayrollAssignment(l))));
+socialPaymentLineCount(SocialPaymentDocument d, Employee worker) = GROUP SUM 1 IF
+    socialPaymentDocument(SocialPaymentLine l) == d AND socialPaymentEmployee(l) == worker;
+CONSTRAINT socialPaymentLineCount(SocialPaymentDocument d, Employee worker) > 1
+    MESSAGE 'В документе социальных платежей сотрудник может присутствовать только один раз';
+
+CONSTRAINT CHANGED(socialPaymentPayrollRun(SocialPaymentDocument d)) AND
+           PREV(socialPaymentStatus(d)) != SocialPaymentStatus.draft
+    MESSAGE 'Нельзя изменить расчёт зарплаты проведённого документа социальных платежей';
+CONSTRAINT DROPPED(SocialPaymentLine l IS SocialPaymentLine) AND
+           PREV(socialPaymentStatus(socialPaymentDocument(l))) != SocialPaymentStatus.draft
+    MESSAGE 'Нельзя удалить строку проведённого документа социальных платежей';
+CONSTRAINT (CHANGED(socialPaymentDocument(SocialPaymentLine l)) OR
+            CHANGED(socialPaymentEmployee(l)) OR CHANGED(socialPaymentMZP(l)) OR
+            CHANGED(opvGrossBase(l)) OR CHANGED(opvMaximum(l)) OR CHANGED(opvRate(l)) OR
+            CHANGED(opvExempt(l)) OR CHANGED(opvBase(l)) OR CHANGED(opvAmount(l)) OR
+            CHANGED(opvrGrossBase(l)) OR CHANGED(opvrMinimum(l)) OR CHANGED(opvrMaximum(l)) OR
+            CHANGED(opvrRate(l)) OR CHANGED(opvrExempt(l)) OR
+            CHANGED(opvrBase(l)) OR CHANGED(opvrAmount(l)) OR
+            CHANGED(soGrossBase(l)) OR CHANGED(soIncomeAfterOpv(l)) OR
+            CHANGED(soMinimum(l)) OR CHANGED(soMaximum(l)) OR CHANGED(soRate(l)) OR
+            CHANGED(soExempt(l)) OR CHANGED(soBase(l)) OR CHANGED(soAmount(l)) OR
+            CHANGED(vosmsGrossBase(l)) OR CHANGED(vosmsMaximum(l)) OR CHANGED(vosmsRate(l)) OR
+            CHANGED(vosmsExempt(l)) OR CHANGED(vosmsBase(l)) OR CHANGED(vosmsAmount(l)) OR
+            CHANGED(oosmsGrossBase(l)) OR CHANGED(oosmsMaximum(l)) OR CHANGED(oosmsRate(l)) OR
+            CHANGED(oosmsExempt(l)) OR CHANGED(oosmsBase(l)) OR CHANGED(oosmsAmount(l))) AND
+           (PREV(socialPaymentStatus(socialPaymentDocument(l))) == SocialPaymentStatus.calculated OR
+            PREV(socialPaymentStatus(socialPaymentDocument(l))) == SocialPaymentStatus.approved OR
+            PREV(socialPaymentStatus(socialPaymentDocument(l))) == SocialPaymentStatus.cancelled)
+    MESSAGE 'Нельзя изменить снимок рассчитанных социальных платежей';
 
 calculateSocialPayments 'Рассчитать' (SocialPaymentDocument d) {
     IF socialPaymentStatus(d) AND socialPaymentStatus(d) != SocialPaymentStatus.draft THEN
@@ -144,10 +221,56 @@ calculateSocialPayments 'Рассчитать' (SocialPaymentDocument d) {
             NEW l = SocialPaymentLine {
                 socialPaymentDocument(l) <- d;
                 socialPaymentEmployee(l) <- worker;
+                socialPaymentMZP(l) <- mzpOnSocialPaymentDate(l);
+                opvGrossBase(l) <- calculatedOpvGrossBase(l);
+                opvMaximum(l) <- mzpOnSocialPaymentDate(l) * socialParameter(l, 'OPV_MAX_MZP');
+                opvRate(l) <- socialParameter(l, 'OPV_RATE');
+                opvExempt(l) <- socialProfileOpvExempt(socialProfile(l));
+                opvBase(l) <- calculatedOpvBase(l);
+                opvAmount(l) <- calculatedOpvAmount(l);
+                opvrGrossBase(l) <- calculatedOpvrGrossBase(l);
+                opvrMinimum(l) <- mzpOnSocialPaymentDate(l) * socialParameter(l, 'OPVR_MIN_MZP');
+                opvrMaximum(l) <- mzpOnSocialPaymentDate(l) * socialParameter(l, 'OPVR_MAX_MZP');
+                opvrRate(l) <- socialParameter(l, 'OPVR_RATE');
+                opvrExempt(l) <- calculatedOpvrExempt(l);
+                opvrBase(l) <- calculatedOpvrBase(l);
+                opvrAmount(l) <- calculatedOpvrAmount(l);
+                soGrossBase(l) <- calculatedSoGrossBase(l);
+                soIncomeAfterOpv(l) <- calculatedSoIncomeAfterOpv(l);
+                soMinimum(l) <- mzpOnSocialPaymentDate(l) * socialParameter(l, 'SO_MIN_MZP');
+                soMaximum(l) <- mzpOnSocialPaymentDate(l) * socialParameter(l, 'SO_MAX_MZP');
+                soRate(l) <- socialParameter(l, 'SO_RATE');
+                soExempt(l) <- socialProfileSoExempt(socialProfile(l));
+                soBase(l) <- calculatedSoBase(l);
+                soAmount(l) <- calculatedSoAmount(l);
+                vosmsGrossBase(l) <- calculatedVosmsGrossBase(l);
+                vosmsMaximum(l) <- mzpOnSocialPaymentDate(l) * socialParameter(l, 'VOSMS_MAX_MZP');
+                vosmsRate(l) <- socialParameter(l, 'VOSMS_RATE');
+                vosmsExempt(l) <- socialProfileVosmsExempt(socialProfile(l));
+                vosmsBase(l) <- calculatedVosmsBase(l);
+                vosmsAmount(l) <- calculatedVosmsAmount(l);
+                oosmsGrossBase(l) <- calculatedOosmsGrossBase(l);
+                oosmsMaximum(l) <- mzpOnSocialPaymentDate(l) * socialParameter(l, 'OOSMS_MAX_MZP');
+                oosmsRate(l) <- socialParameter(l, 'OOSMS_RATE');
+                oosmsExempt(l) <- socialProfileOosmsExempt(socialProfile(l));
+                oosmsBase(l) <- calculatedOosmsBase(l);
+                oosmsAmount(l) <- calculatedOosmsAmount(l);
             }
         }
         socialPaymentStatus(d) <- SocialPaymentStatus.calculated;
         socialPaymentCalculatedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+cancelSocialPayments 'Отменить' (SocialPaymentDocument d) {
+    IF socialPaymentStatus(d) != SocialPaymentStatus.calculated AND
+       socialPaymentStatus(d) != SocialPaymentStatus.approved THEN
+        MESSAGE 'Отменить можно только рассчитанный или утверждённый документ';
+    ELSE IF payrollRunStatus(socialPaymentPayrollRun(d)) != PayrollRunStatus.calculated THEN
+        MESSAGE 'Социальные платежи закрытого расчёта отменять нельзя';
+    ELSE {
+        socialPaymentStatus(d) <- SocialPaymentStatus.cancelled;
         APPLY;
     }
 }
@@ -189,16 +312,17 @@ FORM socialPaymentDocuments 'Расчёт социальных платежей'
     PROPERTIES(d) socialPaymentPayrollRun, socialPaymentStatus, socialPaymentCalculatedAt,
                   totalOpv, totalOpvr, totalSo, totalVosms, totalOosms,
                   payableAfterSocialPayments
-    PROPERTIES(d) calculateSocialPayments, approveSocialPayments
+    PROPERTIES(d) calculateSocialPayments, approveSocialPayments, cancelSocialPayments
 ;
 
 FORM socialPaymentLines 'Социальные платежи сотрудников'
     OBJECTS l = SocialPaymentLine
     PROPERTIES(l) socialPaymentDocument, socialPaymentEmployee,
-                  opvGrossBase, opvBase, opvAmount,
-                  opvrGrossBase, opvrExempt, opvrBase, opvrAmount,
-                  soGrossBase, soIncomeAfterOpv, soBase, soAmount,
-                  vosmsGrossBase, vosmsBase, vosmsAmount,
-                  oosmsGrossBase, oosmsBase, oosmsAmount,
+                  socialPaymentMZP,
+                  opvGrossBase, opvMaximum, opvRate, opvExempt, opvBase, opvAmount,
+                  opvrGrossBase, opvrMinimum, opvrMaximum, opvrRate, opvrExempt, opvrBase, opvrAmount,
+                  soGrossBase, soIncomeAfterOpv, soMinimum, soMaximum, soRate, soExempt, soBase, soAmount,
+                  vosmsGrossBase, vosmsMaximum, vosmsRate, vosmsExempt, vosmsBase, vosmsAmount,
+                  oosmsGrossBase, oosmsMaximum, oosmsRate, oosmsExempt, oosmsBase, oosmsAmount,
                   employeeSocialWithholding, employerSocialCharge
 ;

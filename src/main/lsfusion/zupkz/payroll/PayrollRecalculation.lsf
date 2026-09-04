@@ -14,6 +14,7 @@ CLASS PayrollRecalculation 'Перерасчёт зарплаты';
 recalculationNumber 'Номер' = DATA STRING[50] (PayrollRecalculation);
 recalculationDate 'Дата' = DATA DATE (PayrollRecalculation);
 recalculationOriginalRun 'Исходный расчёт' = DATA PayrollRun (PayrollRecalculation);
+recalculationTargetRun 'Расчёт регистрации' = DATA PayrollRun (PayrollRecalculation);
 recalculationReason 'Причина' = DATA STRING[500] (PayrollRecalculation);
 recalculationStatus 'Статус' = DATA PayrollRecalculationStatus (PayrollRecalculation);
 recalculationCalculatedAt 'Рассчитан' = DATA DATETIME (PayrollRecalculation);
@@ -25,6 +26,7 @@ lineOriginalPayrollLine 'Исходная строка' = DATA PayrollLine (Payr
 lineOriginalAmount 'Исходная сумма' = DATA NUMERIC[18,2] (PayrollRecalculationLine);
 lineCorrectedAmount 'Исправленная сумма' = DATA NUMERIC[18,2] (PayrollRecalculationLine);
 lineRecalculationNote 'Комментарий' = DATA STRING[500] (PayrollRecalculationLine);
+lineRecalculationInput 'Строка регистрации' = DATA PayrollInput (PayrollRecalculationLine);
 
 payrollRecalculationDelta(NUMERIC[18,2] originalAmount, NUMERIC[18,2] correctedAmount) =
     ROUND(correctedAmount - originalAmount, 2) IF originalAmount AND correctedAmount;
@@ -36,12 +38,18 @@ recalculationLineCount(PayrollRecalculation d) = GROUP SUM 1
     IF lineRecalculation(PayrollRecalculationLine l) == d;
 invalidRecalculationLineCount(PayrollRecalculation d) = GROUP SUM 1
     IF lineRecalculation(PayrollRecalculationLine l) == d AND
-       (NOT lineOriginalAmount(l) OR NOT lineCorrectedAmount(l));
+       (NOT lineOriginalAmount(l) OR NOT lineCorrectedAmount(l) OR
+        lineOriginalAmount(l) == lineCorrectedAmount(l));
 
 CONSTRAINT lineOriginalPayrollLine(PayrollRecalculationLine l) AND
            linePayrollRun(lineOriginalPayrollLine(l)) !=
            recalculationOriginalRun(lineRecalculation(l))
     MESSAGE 'Исходная строка должна принадлежать выбранному расчёту';
+CONSTRAINT recalculationOriginalRun(PayrollRecalculation d) AND recalculationTargetRun(d) AND
+           payrollOrganization(recalculationOriginalRun(d)) != payrollOrganization(recalculationTargetRun(d))
+    MESSAGE 'Исходный и регистрирующий расчёты должны принадлежать одной организации';
+CONSTRAINT recalculationOriginalRun(PayrollRecalculation d) == recalculationTargetRun(d)
+    MESSAGE 'Перерасчёт должен регистрироваться в другом расчётном периоде';
 
 captureOriginalAmount 'Заполнить исходную сумму' (PayrollRecalculationLine l) {
     IF lineOriginalPayrollLine(l) THEN
@@ -51,8 +59,15 @@ captureOriginalAmount 'Заполнить исходную сумму' (PayrollR
 calculateRecalculation 'Рассчитать перерасчёт' (PayrollRecalculation d) {
     IF recalculationStatus(d) != PayrollRecalculationStatus.draft THEN
         MESSAGE 'Документ уже рассчитан';
-    ELSE IF NOT recalculationOriginalRun(d) OR NOT recalculationReason(d) THEN
-        MESSAGE 'Заполните исходный расчёт и причину';
+    ELSE IF NOT recalculationOriginalRun(d) OR NOT recalculationTargetRun(d) OR
+            NOT recalculationDate(d) OR NOT recalculationReason(d) THEN
+        MESSAGE 'Заполните исходный расчёт, расчёт регистрации, дату и причину';
+    ELSE IF payrollRunStatus(recalculationOriginalRun(d)) != PayrollRunStatus.approved AND
+            payrollRunStatus(recalculationOriginalRun(d)) != PayrollRunStatus.paid THEN
+        MESSAGE 'Перерасчитывать можно только закрытый расчёт зарплаты';
+    ELSE IF payrollRunStatus(recalculationTargetRun(d)) != PayrollRunStatus.draft AND
+            payrollRunStatus(recalculationTargetRun(d)) != PayrollRunStatus.timeCollected THEN
+        MESSAGE 'Расчёт регистрации уже рассчитан';
     ELSE IF NOT recalculationLineCount(d) OR invalidRecalculationLineCount(d) THEN
         MESSAGE 'Заполните исходные и исправленные суммы';
     ELSE {
@@ -62,17 +77,45 @@ calculateRecalculation 'Рассчитать перерасчёт' (PayrollRecal
     }
 }
 
+postRecalculation 'Зарегистрировать в зарплате' (PayrollRecalculation d) {
+    IF recalculationStatus(d) != PayrollRecalculationStatus.calculated THEN
+        MESSAGE 'Сначала рассчитайте перерасчёт';
+    ELSE IF payrollRunStatus(recalculationTargetRun(d)) != PayrollRunStatus.draft AND
+            payrollRunStatus(recalculationTargetRun(d)) != PayrollRunStatus.timeCollected THEN
+        MESSAGE 'Расчёт регистрации уже рассчитан';
+    ELSE {
+        FOR lineRecalculation(PayrollRecalculationLine l) == d AND
+            lineRecalculationDelta(l) != 0.00 AND NOT lineRecalculationInput(l) DO {
+            NEW i = PayrollInput {
+                inputPayrollRun(i) <- recalculationTargetRun(d);
+                inputAssignment(i) <- linePayrollAssignment(lineOriginalPayrollLine(l));
+                inputCalculationType(i) <-
+                    IF lineRecalculationDelta(l) > 0.00 THEN calculationTypeByCode('RECALC_ACCRUAL')
+                    ELSE calculationTypeByCode('RECALC_DEDUCTION');
+                inputManualAmount(i) <- IF lineRecalculationDelta(l) > 0.00 THEN
+                    lineRecalculationDelta(l) ELSE -lineRecalculationDelta(l);
+                inputBasis(i) <- recalculationReason(d);
+                lineRecalculationInput(l) <- i;
+            }
+        }
+        recalculationStatus(d) <- PayrollRecalculationStatus.approved;
+        APPLY;
+    }
+}
+
 FORM payrollRecalculations 'Перерасчёты зарплаты'
     OBJECTS d = PayrollRecalculation
     PROPERTIES(d) recalculationNumber, recalculationDate, recalculationOriginalRun,
+                  recalculationTargetRun,
                   recalculationReason, recalculationStatus, recalculationCalculatedAt,
                   totalRecalculationDelta
-    PROPERTIES(d) calculateRecalculation
+    PROPERTIES(d) calculateRecalculation, postRecalculation
 ;
 
 FORM payrollRecalculationLines 'Строки перерасчёта'
     OBJECTS l = PayrollRecalculationLine
     PROPERTIES(l) lineRecalculation, lineOriginalPayrollLine, lineOriginalAmount,
-                  lineCorrectedAmount, lineRecalculationDelta, lineRecalculationNote
+                  lineCorrectedAmount, lineRecalculationDelta, lineRecalculationNote,
+                  lineRecalculationInput
     PROPERTIES(l) captureOriginalAmount
 ;

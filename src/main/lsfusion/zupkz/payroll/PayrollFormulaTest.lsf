@@ -1,6 +1,6 @@
 MODULE PayrollFormulaTest;
 
-REQUIRE ZUPKZ;
+REQUIRE PayrollStage0Test;
 NAMESPACE ZUPKZ;
 
 // Headless smoke-test endpoint. The production top module does not require this module.
@@ -297,6 +297,12 @@ payrollFormulaTest() {
                                 opvAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.opv),
                                 osmsAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.employeeOsms),
                                 opv2026 = totalOpv(socialPayments),
+                                socialSnapshotMzp2026 = socialPaymentMZP(
+                                    socialPaymentLineByEmployee(socialPayments, worker)),
+                                socialSnapshotOpvBase2026 = opvBase(
+                                    socialPaymentLineByEmployee(socialPayments, worker)),
+                                socialSnapshotOpvRate2026 = opvRate(
+                                    socialPaymentLineByEmployee(socialPayments, worker)),
                                 opvr2026 = totalOpvr(socialPayments),
                                 socialContribution2026 = totalSo(socialPayments),
                                 employeeOsms2026 = totalVosms(socialPayments),

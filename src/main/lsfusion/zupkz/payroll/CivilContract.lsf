@@ -70,6 +70,28 @@ civilActIpnHighRate 'Повышенная ставка ИПН, %' = DATA NUMERIC
 civilActIpn 'ИПН' = DATA NUMERIC[18,2] (CivilContractAct);
 civilActPayable 'К выплате' = DATA NUMERIC[18,2] (CivilContractAct);
 civilActTaxLedgerEntry 'Запись регистра ИПН' = DATA PersonalTaxLedgerEntry (CivilContractAct);
+civilActTaxReversalLedgerEntry 'Сторнирующая запись регистра ИПН' =
+    DATA PersonalTaxLedgerEntry (CivilContractAct);
+
+CONSTRAINT CHANGED(civilActContract(CivilContractAct a)) AND
+           PREV(civilActStatus(a)) != CivilContractActStatus.draft
+    MESSAGE 'Нельзя изменить договор проведённого акта ГПХ';
+CONSTRAINT CHANGED(civilActGrossIncome(CivilContractAct a)) AND
+           PREV(civilActStatus(a)) != CivilContractActStatus.draft
+    MESSAGE 'Нельзя изменить доход проведённого акта ГПХ';
+CONSTRAINT (CHANGED(civilActDate(CivilContractAct a)) OR
+            CHANGED(civilActResident(a)) OR CHANGED(civilActCategoryCodes(a)) OR
+            CHANGED(civilActAifc(a)) OR CHANGED(civilActUnregisteredDivision(a)) OR
+            CHANGED(civilActOpvBase(a)) OR CHANGED(civilActOpv(a)) OR
+            CHANGED(civilActVosmsBase(a)) OR CHANGED(civilActVosms(a)) OR
+            CHANGED(civilActSoBase(a)) OR CHANGED(civilActSo(a)) OR
+            CHANGED(civilActBasicDeduction(a)) OR CHANGED(civilActSocialDeduction(a)) OR
+            CHANGED(civilActDeductionCodes(a)) OR CHANGED(civilActTaxableIncome(a)) OR
+            CHANGED(civilActIpnThreshold(a)) OR CHANGED(civilActIpnBaseRate(a)) OR
+            CHANGED(civilActIpnHighRate(a)) OR CHANGED(civilActIpn(a)) OR
+            CHANGED(civilActPayable(a)) OR CHANGED(civilActTaxLedgerEntry(a))) AND
+           PREV(civilActStatus(a)) != CivilContractActStatus.draft
+    MESSAGE 'Нельзя изменить снимок рассчитанного акта ГПХ';
 
 civilActOrganization(CivilContractAct a) = civilContractOrganization(civilActContract(a));
 civilActContractor(CivilContractAct a) = civilContractContractor(civilActContract(a));
@@ -244,6 +266,29 @@ approveCivilAct 'Утвердить акт' (CivilContractAct a) {
     } ELSE MESSAGE 'Сначала рассчитайте акт';
 }
 
+cancelCivilAct 'Отменить и сторнировать' (CivilContractAct a) {
+    IF civilActStatus(a) != CivilContractActStatus.calculated AND
+       civilActStatus(a) != CivilContractActStatus.approved THEN
+        MESSAGE 'Отменить можно только рассчитанный или утверждённый акт';
+    ELSE IF civilActTaxReversalLedgerEntry(a) THEN
+        MESSAGE 'Акт уже сторнирован';
+    ELSE {
+        NEW reversal = PersonalTaxLedgerEntry {
+            taxLedgerOrganization(reversal) <- taxLedgerOrganization(civilActTaxLedgerEntry(a));
+            taxLedgerEmployee(reversal) <- taxLedgerEmployee(civilActTaxLedgerEntry(a));
+            taxLedgerDate(reversal) <- taxLedgerDate(civilActTaxLedgerEntry(a));
+            taxLedgerBasicDeduction(reversal) <- -taxLedgerBasicDeduction(civilActTaxLedgerEntry(a));
+            taxLedgerSocialDeduction(reversal) <- -taxLedgerSocialDeduction(civilActTaxLedgerEntry(a));
+            taxLedgerTaxableIncome(reversal) <- -taxLedgerTaxableIncome(civilActTaxLedgerEntry(a));
+            taxLedgerIpn(reversal) <- -taxLedgerIpn(civilActTaxLedgerEntry(a));
+            taxLedgerReversalOf(reversal) <- civilActTaxLedgerEntry(a);
+            civilActTaxReversalLedgerEntry(a) <- reversal;
+        }
+        civilActStatus(a) <- CivilContractActStatus.cancelled;
+        APPLY;
+    }
+}
+
 markCivilActPaid 'Отметить выплаченным' (CivilContractAct a) {
     IF civilActStatus(a) != CivilContractActStatus.approved THEN
         MESSAGE 'Выплатить можно только утверждённый акт';
@@ -277,5 +322,5 @@ FORM civilContractActs 'Акты ГПХ'
                   civilActSocialDeduction, civilActDeductionCodes,
                   civilActTaxableIncome, civilActIpnThreshold, civilActIpnBaseRate,
                   civilActIpnHighRate, civilActIpn, civilActPayable
-    PROPERTIES(a) calculateCivilAct, approveCivilAct, markCivilActPaid
+    PROPERTIES(a) calculateCivilAct, approveCivilAct, cancelCivilAct, markCivilActPaid
 ;

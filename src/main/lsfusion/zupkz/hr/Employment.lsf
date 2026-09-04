@@ -46,6 +46,17 @@ assignmentSalary 'Оклад' = DATA NUMERIC[16,2] (EmploymentAssignment);
 
 CONSTRAINT assignmentTo(EmploymentAssignment a) < assignmentFrom(a)
     MESSAGE 'Дата окончания назначения не может быть раньше даты начала';
+CONSTRAINT fte(EmploymentAssignment a) <= 0.0000
+    MESSAGE 'Доля ставки должна быть положительной';
+CONSTRAINT employment(EmploymentAssignment a) AND staffPosition(a) AND
+           organization(employment(a)) != organization(staffPosition(a))
+    MESSAGE 'Договор и штатная единица должны принадлежать одной организации';
+CONSTRAINT assignmentSalary(EmploymentAssignment a) AND staffPosition(a) AND
+           salaryMin(staffPosition(a)) AND assignmentSalary(a) < salaryMin(staffPosition(a))
+    MESSAGE 'Оклад назначения ниже диапазона штатной единицы';
+CONSTRAINT assignmentSalary(EmploymentAssignment a) AND staffPosition(a) AND
+           salaryMax(staffPosition(a)) AND assignmentSalary(a) > salaryMax(staffPosition(a))
+    MESSAGE 'Оклад назначения выше диапазона штатной единицы';
 
 CLASS PersonnelEventKind 'Вид кадрового события' {
     hire 'Приём',

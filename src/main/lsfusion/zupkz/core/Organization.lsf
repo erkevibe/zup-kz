@@ -1,5 +1,6 @@
 MODULE KZOrganization;
 
+REQUIRE Utils;
 NAMESPACE ZUPKZ;
 
 CLASS Organization 'Организация';
@@ -8,8 +9,13 @@ name 'Наименование' = DATA STRING[200] (Organization);
 shortName 'Краткое наименование' = DATA STRING[100] (Organization);
 bin 'БИН' = DATA STRING[12] (Organization);
 
+organizationBinCount(STRING[12] value) = GROUP SUM 1 IF bin(Organization o) == value;
+CONSTRAINT bin(Organization o) AND length(bin(o)) != 12
+    MESSAGE 'БИН должен содержать 12 символов';
+CONSTRAINT organizationBinCount(STRING[12] value) > 1
+    MESSAGE 'БИН должен быть уникальным';
+
 FORM organizations 'Организации'
     OBJECTS o = Organization
     PROPERTIES(o) name, shortName, bin
 ;
-

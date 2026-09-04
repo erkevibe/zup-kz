@@ -56,6 +56,14 @@ taxProfileLegalSource 'Нормативное основание' = DATA LegalSo
 
 CONSTRAINT taxProfileValidTo(EmployeeTaxProfile p) < taxProfileValidFrom(p)
     MESSAGE 'Окончание налогового профиля не может быть раньше начала';
+overlappingEmployeeTaxProfileCount(EmployeeTaxProfile p) = GROUP SUM 1 IF
+    taxProfileOrganization(EmployeeTaxProfile other) == taxProfileOrganization(p) AND
+    taxProfileEmployee(other) == taxProfileEmployee(p) AND
+    taxProfileValidFrom(other) <= (IF taxProfileValidTo(p) THEN taxProfileValidTo(p) ELSE 9999_12_31) AND
+    (IF taxProfileValidTo(other) THEN taxProfileValidTo(other) ELSE 9999_12_31) >= taxProfileValidFrom(p);
+CONSTRAINT taxProfileOrganization(EmployeeTaxProfile p) AND taxProfileEmployee(p) AND
+           taxProfileValidFrom(p) AND overlappingEmployeeTaxProfileCount(p) > 1
+    MESSAGE 'Периоды налоговых профилей сотрудника не должны пересекаться';
 
 employeeTaxProfileOn(Organization organization, Employee worker, DATE date) =
     GROUP LAST EmployeeTaxProfile p
@@ -77,6 +85,16 @@ organizationTaxProfileLegalSource 'Нормативное основание' = 
 
 CONSTRAINT organizationTaxProfileValidTo(OrganizationTaxProfile p) < organizationTaxProfileValidFrom(p)
     MESSAGE 'Окончание налогового профиля организации не может быть раньше начала';
+overlappingOrganizationTaxProfileCount(OrganizationTaxProfile p) = GROUP SUM 1 IF
+    organizationTaxProfileOrganization(OrganizationTaxProfile other) ==
+        organizationTaxProfileOrganization(p) AND
+    organizationTaxProfileValidFrom(other) <=
+        (IF organizationTaxProfileValidTo(p) THEN organizationTaxProfileValidTo(p) ELSE 9999_12_31) AND
+    (IF organizationTaxProfileValidTo(other) THEN organizationTaxProfileValidTo(other) ELSE 9999_12_31) >=
+        organizationTaxProfileValidFrom(p);
+CONSTRAINT organizationTaxProfileOrganization(OrganizationTaxProfile p) AND
+           organizationTaxProfileValidFrom(p) AND overlappingOrganizationTaxProfileCount(p) > 1
+    MESSAGE 'Периоды налоговых профилей организации не должны пересекаться';
 
 organizationTaxProfileOn(Organization organization, DATE date) =
     GROUP LAST OrganizationTaxProfile p
@@ -99,7 +117,8 @@ progressiveIpn(NUMERIC[18,2] base, NUMERIC[18,2] threshold,
 CLASS TaxCalculationStatus 'Статус налогового расчёта' {
     draft 'Черновик',
     calculated 'Рассчитан',
-    approved 'Утверждён'
+    approved 'Утверждён',
+    cancelled 'Отменён'
 }
 
 CLASS TaxCalculationDocument 'Расчёт ИПН и социального налога';
@@ -129,8 +148,21 @@ taxLedgerBasicDeduction 'Базовый вычет' = DATA NUMERIC[18,2] (Person
 taxLedgerSocialDeduction 'Социальный вычет' = DATA NUMERIC[18,2] (PersonalTaxLedgerEntry);
 taxLedgerTaxableIncome 'Облагаемый доход' = DATA NUMERIC[18,2] (PersonalTaxLedgerEntry);
 taxLedgerIpn 'ИПН' = DATA NUMERIC[18,2] (PersonalTaxLedgerEntry);
+taxLedgerReversalOf 'Сторнирует запись' = DATA PersonalTaxLedgerEntry (PersonalTaxLedgerEntry);
+
+CONSTRAINT (CHANGED(taxLedgerOrganization(PersonalTaxLedgerEntry e)) OR
+            CHANGED(taxLedgerEmployee(e)) OR CHANGED(taxLedgerDate(e)) OR
+            CHANGED(taxLedgerBasicDeduction(e)) OR CHANGED(taxLedgerSocialDeduction(e)) OR
+            CHANGED(taxLedgerTaxableIncome(e)) OR CHANGED(taxLedgerIpn(e)) OR
+            CHANGED(taxLedgerReversalOf(e))) AND PREV(taxLedgerOrganization(e))
+    MESSAGE 'Нельзя изменить проведённую запись регистра ИПН';
+CONSTRAINT DROPPED(PersonalTaxLedgerEntry e IS PersonalTaxLedgerEntry) AND
+           PREV(taxLedgerOrganization(e))
+    MESSAGE 'Нельзя удалить проведённую запись регистра ИПН';
 
 taxCalculationLedgerEntry 'Запись регистра ИПН' =
+    DATA PersonalTaxLedgerEntry (TaxCalculationLine);
+taxCalculationReversalLedgerEntry 'Сторнирующая запись регистра ИПН' =
     DATA PersonalTaxLedgerEntry (TaxCalculationLine);
 
 taxCalculationDocument 'Документ' = DATA TaxCalculationDocument (TaxCalculationLine);
@@ -154,6 +186,20 @@ socialPaymentLineByEmployee(SocialPaymentDocument d, Employee worker) =
     GROUP AGGR SocialPaymentLine s BY socialPaymentDocument(s), socialPaymentEmployee(s);
 taxCalculationSocialLine(TaxCalculationLine l) =
     socialPaymentLineByEmployee(taxCalculationSocialDocument(l), taxCalculationEmployee(l));
+
+taxCalculationLineCount(TaxCalculationDocument d, Employee worker) = GROUP SUM 1 IF
+    taxCalculationDocument(TaxCalculationLine l) == d AND taxCalculationEmployee(l) == worker;
+CONSTRAINT taxCalculationLineCount(TaxCalculationDocument d, Employee worker) > 1
+    MESSAGE 'В налоговом документе сотрудник может присутствовать только один раз';
+CONSTRAINT CHANGED(taxCalculationPayrollRun(TaxCalculationDocument d)) AND
+           PREV(taxCalculationStatus(d)) != TaxCalculationStatus.draft
+    MESSAGE 'Нельзя изменить расчёт зарплаты проведённого налогового документа';
+CONSTRAINT CHANGED(taxCalculationSocialPayments(TaxCalculationDocument d)) AND
+           PREV(taxCalculationStatus(d)) != TaxCalculationStatus.draft
+    MESSAGE 'Нельзя изменить социальные платежи проведённого налогового документа';
+CONSTRAINT DROPPED(TaxCalculationLine l IS TaxCalculationLine) AND
+           PREV(taxCalculationStatus(taxCalculationDocument(l))) != TaxCalculationStatus.draft
+    MESSAGE 'Нельзя удалить строку проведённого налогового документа';
 taxMrp(TaxCalculationLine l) =
     numericStatutoryValueOn(statutoryParameterByCode('MRP'), taxCalculationDate(l));
 taxParameter(TaxCalculationLine l, STRING[50] code) =
@@ -172,6 +218,16 @@ ipnSocialDeduction 'Социальный вычет' = DATA NUMERIC[18,2] (TaxCa
 ipnTaxableIncome 'Облагаемый доход ИПН' = DATA NUMERIC[18,2] (TaxCalculationLine);
 ipnAmount 'ИПН' = DATA NUMERIC[18,2] (TaxCalculationLine);
 socialTaxAmount 'Социальный налог' = DATA NUMERIC[18,2] (TaxCalculationLine);
+
+CONSTRAINT (CHANGED(ipnBasicDeduction(TaxCalculationLine l)) OR
+            CHANGED(taxCalculationDocument(l)) OR CHANGED(taxCalculationEmployee(l)) OR
+            CHANGED(taxCalculationLedgerEntry(l)) OR
+            CHANGED(ipnSocialDeduction(l)) OR CHANGED(ipnTaxableIncome(l)) OR
+            CHANGED(ipnAmount(l)) OR CHANGED(socialTaxAmount(l))) AND
+           (PREV(taxCalculationStatus(taxCalculationDocument(l))) == TaxCalculationStatus.calculated OR
+            PREV(taxCalculationStatus(taxCalculationDocument(l))) == TaxCalculationStatus.approved OR
+            PREV(taxCalculationStatus(taxCalculationDocument(l))) == TaxCalculationStatus.cancelled)
+    MESSAGE 'Нельзя изменить снимок рассчитанных налогов';
 
 priorBasicDeduction(TaxCalculationLine l) = GROUP SUM
     taxLedgerBasicDeduction(PersonalTaxLedgerEntry e) IF
@@ -316,6 +372,32 @@ approveTaxes 'Утвердить' (TaxCalculationDocument d) {
         MESSAGE 'Сначала рассчитайте налоги';
 }
 
+cancelTaxes 'Отменить и сторнировать' (TaxCalculationDocument d) {
+    IF taxCalculationStatus(d) != TaxCalculationStatus.calculated AND
+       taxCalculationStatus(d) != TaxCalculationStatus.approved THEN
+        MESSAGE 'Отменить можно только рассчитанный или утверждённый налоговый документ';
+    ELSE IF payrollRunStatus(taxCalculationPayrollRun(d)) != PayrollRunStatus.calculated THEN
+        MESSAGE 'Налоги закрытого расчёта отменять нельзя';
+    ELSE {
+        FOR taxCalculationDocument(TaxCalculationLine l) == d AND
+            taxCalculationLedgerEntry(l) AND NOT taxCalculationReversalLedgerEntry(l) DO {
+            NEW reversal = PersonalTaxLedgerEntry {
+                taxLedgerOrganization(reversal) <- taxLedgerOrganization(taxCalculationLedgerEntry(l));
+                taxLedgerEmployee(reversal) <- taxLedgerEmployee(taxCalculationLedgerEntry(l));
+                taxLedgerDate(reversal) <- taxLedgerDate(taxCalculationLedgerEntry(l));
+                taxLedgerBasicDeduction(reversal) <- -taxLedgerBasicDeduction(taxCalculationLedgerEntry(l));
+                taxLedgerSocialDeduction(reversal) <- -taxLedgerSocialDeduction(taxCalculationLedgerEntry(l));
+                taxLedgerTaxableIncome(reversal) <- -taxLedgerTaxableIncome(taxCalculationLedgerEntry(l));
+                taxLedgerIpn(reversal) <- -taxLedgerIpn(taxCalculationLedgerEntry(l));
+                taxLedgerReversalOf(reversal) <- taxCalculationLedgerEntry(l);
+                taxCalculationReversalLedgerEntry(l) <- reversal;
+            }
+        }
+        taxCalculationStatus(d) <- TaxCalculationStatus.cancelled;
+        APPLY;
+    }
+}
+
 totalIpn 'ИПН' (TaxCalculationDocument d) = GROUP SUM ipnAmount(TaxCalculationLine l)
     IF taxCalculationDocument(l) == d;
 totalIpnBasicDeduction 'Базовый вычет' (TaxCalculationDocument d) =
@@ -351,7 +433,7 @@ FORM taxCalculationDocuments 'Расчёт ИПН и социального на
                   taxCalculationStatus, taxCalculationCalculatedAt,
                   totalIpnBasicDeduction, totalIpnTaxableIncome,
                   totalIpn, totalSocialTax, payableAfterTaxes
-    PROPERTIES(d) calculateTaxes, approveTaxes
+    PROPERTIES(d) calculateTaxes, approveTaxes, cancelTaxes
 ;
 
 FORM taxCalculationLines 'Налоги сотрудников'

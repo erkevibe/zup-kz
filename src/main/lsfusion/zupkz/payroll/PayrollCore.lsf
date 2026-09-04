@@ -47,6 +47,13 @@ ruleConditionDescription 'Условие применения' = DATA STRING[500
 
 CONSTRAINT ruleValidTo(PayrollRule r) < ruleValidFrom(r)
     MESSAGE 'Дата окончания правила не может быть раньше даты начала';
+overlappingPayrollRuleCount(PayrollRule r) = GROUP SUM 1 IF
+    ruleCalculationType(PayrollRule other) == ruleCalculationType(r) AND
+    ruleValidFrom(other) <= (IF ruleValidTo(r) THEN ruleValidTo(r) ELSE 9999_12_31) AND
+    (IF ruleValidTo(other) THEN ruleValidTo(other) ELSE 9999_12_31) >= ruleValidFrom(r);
+CONSTRAINT ruleCalculationType(PayrollRule r) AND ruleValidFrom(r) AND
+           overlappingPayrollRuleCount(r) > 1
+    MESSAGE 'Периоды правил одного вида расчёта не должны пересекаться';
 
 CLASS PayrollRun 'Расчёт зарплаты';
 
@@ -59,6 +66,15 @@ payrollCalculatedAt 'Рассчитан' = DATA DATETIME (PayrollRun);
 
 CONSTRAINT payrollPeriodTo(PayrollRun r) < payrollPeriodFrom(r)
     MESSAGE 'Окончание расчётного периода не может быть раньше начала';
+CONSTRAINT CHANGED(payrollOrganization(PayrollRun r)) AND
+           PREV(payrollRunStatus(r)) != PayrollRunStatus.draft
+    MESSAGE 'Нельзя изменить организацию начатого расчёта зарплаты';
+CONSTRAINT CHANGED(payrollPeriodFrom(PayrollRun r)) AND
+           PREV(payrollRunStatus(r)) != PayrollRunStatus.draft
+    MESSAGE 'Нельзя изменить период начатого расчёта зарплаты';
+CONSTRAINT CHANGED(payrollPeriodTo(PayrollRun r)) AND
+           PREV(payrollRunStatus(r)) != PayrollRunStatus.draft
+    MESSAGE 'Нельзя изменить период начатого расчёта зарплаты';
 
 // Снимок утверждённого табеля. После расчёта он сохраняет исходные показатели,
 // даже если следующий табель будет исправлен отдельным документом перерасчёта.
@@ -96,6 +112,20 @@ payrollInputAmount(CalculationType type, NUMERIC[18,2] base,
 inputAmount 'Сумма к расчёту' (PayrollInput i) =
     payrollInputAmount(inputCalculationType(i), inputBase(i), inputPercent(i), inputManualAmount(i));
 
+CONSTRAINT (CHANGED(inputAssignment(PayrollInput i)) OR
+            CHANGED(inputPayrollRun(i)) OR
+            CHANGED(inputCalculationType(i)) OR CHANGED(inputBase(i)) OR
+            CHANGED(inputPercent(i)) OR CHANGED(inputManualAmount(i))) AND
+           (PREV(payrollRunStatus(inputPayrollRun(i))) == PayrollRunStatus.calculated OR
+            PREV(payrollRunStatus(inputPayrollRun(i))) == PayrollRunStatus.approved OR
+            PREV(payrollRunStatus(inputPayrollRun(i))) == PayrollRunStatus.paid)
+    MESSAGE 'Нельзя изменить входные начисления рассчитанной зарплаты';
+CONSTRAINT DROPPED(PayrollInput i IS PayrollInput) AND
+           (PREV(payrollRunStatus(inputPayrollRun(i))) == PayrollRunStatus.calculated OR
+            PREV(payrollRunStatus(inputPayrollRun(i))) == PayrollRunStatus.approved OR
+            PREV(payrollRunStatus(inputPayrollRun(i))) == PayrollRunStatus.paid)
+    MESSAGE 'Нельзя удалить входные начисления рассчитанной зарплаты';
+
 CONSTRAINT inputPayrollRun(PayrollInput i) AND inputAssignment(i) AND
            organization(employment(inputAssignment(i))) != payrollOrganization(inputPayrollRun(i))
     MESSAGE 'Назначение сотрудника должно принадлежать организации расчёта';
@@ -117,6 +147,19 @@ calculationRate 'Ставка' = DATA NUMERIC[18,6] (PayrollLine);
 calculationCoefficient 'Коэффициент' = DATA NUMERIC[18,6] (PayrollLine);
 calculationAmount 'Сумма' = DATA NUMERIC[18,2] (PayrollLine);
 calculationNote 'Комментарий' = DATA STRING[500] (PayrollLine);
+
+CONSTRAINT (CHANGED(calculationBase(PayrollLine l)) OR
+            CHANGED(calculationQuantity(l)) OR CHANGED(calculationRate(l)) OR
+            CHANGED(calculationCoefficient(l)) OR CHANGED(calculationAmount(l))) AND
+           (PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.calculated OR
+            PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.approved OR
+            PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.paid)
+    MESSAGE 'Нельзя изменить строку рассчитанной зарплаты';
+CONSTRAINT DROPPED(PayrollLine l IS PayrollLine) AND
+           (PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.calculated OR
+            PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.approved OR
+            PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.paid)
+    MESSAGE 'Нельзя удалить строку рассчитанной зарплаты';
 
 // Оклад покрывает каждый фактически отработанный час по одинарной ставке.
 // Доплата за особые часы доводит полную оплату часа до нормативного коэффициента.
@@ -197,6 +240,10 @@ loadBaselineCalculationTypes() {
             FormulaKind.manual, NULL, 'Начисление с ручным вводом суммы');
         ensureCalculationType('OTHER_DEDUCTION', 'Прочее удержание', CalculationCategory.deduction,
             FormulaKind.manual, NULL, 'Удержание с ручным вводом суммы и основания');
+        ensureCalculationType('RECALC_ACCRUAL', 'Доначисление прошлого периода', CalculationCategory.accrual,
+            FormulaKind.manual, NULL, 'Положительная корректировка зарегистрированного расчёта');
+        ensureCalculationType('RECALC_DEDUCTION', 'Удержание перерасчёта', CalculationCategory.deduction,
+            FormulaKind.manual, NULL, 'Отрицательная корректировка зарегистрированного расчёта');
         includeInAverageEarnings(calculationTypeByCode('BASE_SALARY')) <- TRUE;
         includeInAverageEarnings(calculationTypeByCode('NIGHT_ADDITIONAL')) <- TRUE;
         includeInAverageEarnings(calculationTypeByCode('OVERTIME_ADDITIONAL')) <- TRUE;

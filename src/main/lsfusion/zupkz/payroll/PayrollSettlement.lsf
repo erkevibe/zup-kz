@@ -45,6 +45,20 @@ settlementClosedAt 'Закрыт' = DATA DATETIME (PayrollSettlementLine);
 settlementLegalSource 'Нормативное основание' (PayrollSettlementLine l) =
     payrollPaymentLegalSource(settlementPayrollRun(l));
 
+CONSTRAINT (CHANGED(settlementAccrued(PayrollSettlementLine l)) OR
+            CHANGED(settlementPayrollDeducted(l)) OR CHANGED(settlementOpv(l)) OR
+            CHANGED(settlementOpvr(l)) OR CHANGED(settlementSo(l)) OR
+            CHANGED(settlementVosms(l)) OR CHANGED(settlementOosms(l)) OR
+            CHANGED(settlementIpn(l)) OR CHANGED(settlementSocialTax(l)) OR
+            CHANGED(settlementEnforcement(l)) OR CHANGED(settlementPayable(l))) AND
+           (PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.approved OR
+            PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.paid)
+    MESSAGE 'Нельзя изменить закрытый расчётный листок';
+CONSTRAINT DROPPED(PayrollSettlementLine l IS PayrollSettlementLine) AND
+           (PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.approved OR
+            PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.paid)
+    MESSAGE 'Нельзя удалить закрытый расчётный листок';
+
 settlementLineByEmployee(PayrollRun run, Employee worker) =
     GROUP AGGR PayrollSettlementLine l BY settlementPayrollRun(l), settlementEmployee(l);
 payrollAccruedByEmployee(PayrollRun run, Employee worker) =

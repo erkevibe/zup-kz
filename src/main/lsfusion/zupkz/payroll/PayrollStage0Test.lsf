@@ -1,0 +1,116 @@
+MODULE PayrollStage0Test;
+
+REQUIRE ZUPKZ;
+NAMESPACE ZUPKZ;
+
+stage0TaxLedgerIpn(Organization org, Employee worker) = GROUP SUM
+    taxLedgerIpn(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == org AND taxLedgerEmployee(e) == worker;
+
+// Integration checks for the Stage 0 invariants that cannot be covered by
+// the pure formula assertions: posting a recalculation and reversing IPN.
+payrollStage0Test() {
+    NEW org = Organization {
+        bin(org) <- '987654321098';
+        NEW worker = Employee {
+            iin(worker) <- '910101300001';
+            lastName(worker) <- 'Этапов';
+            firstName(worker) <- 'Нулевой';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                salary(contract) <- 100000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    assignmentSalary(assignment) <- 100000.00;
+                    NEW originalRun = PayrollRun {
+                        payrollOrganization(originalRun) <- org;
+                        payrollNumber(originalRun) <- 'STAGE0-ORIGINAL';
+                        payrollPeriodFrom(originalRun) <- 2026_01_01;
+                        payrollPeriodTo(originalRun) <- 2026_01_31;
+                        payrollRunStatus(originalRun) <- PayrollRunStatus.draft;
+                        NEW originalLine = PayrollLine {
+                            linePayrollRun(originalLine) <- originalRun;
+                            linePayrollAssignment(originalLine) <- assignment;
+                            lineCalculationType(originalLine) <- calculationTypeByCode('BASE_SALARY');
+                            calculationAmount(originalLine) <- 100000.00;
+                            payrollRunStatus(originalRun) <- PayrollRunStatus.approved;
+                            NEW targetRun = PayrollRun {
+                                payrollOrganization(targetRun) <- org;
+                                payrollNumber(targetRun) <- 'STAGE0-TARGET';
+                                payrollPeriodFrom(targetRun) <- 2026_02_01;
+                                payrollPeriodTo(targetRun) <- 2026_02_28;
+                                payrollRunStatus(targetRun) <- PayrollRunStatus.draft;
+                                NEW recalculation = PayrollRecalculation {
+                                    recalculationNumber(recalculation) <- 'STAGE0-RECALC';
+                                    recalculationDate(recalculation) <- 2026_02_05;
+                                    recalculationOriginalRun(recalculation) <- originalRun;
+                                    recalculationTargetRun(recalculation) <- targetRun;
+                                    recalculationReason(recalculation) <- 'Исправление оклада';
+                                    recalculationStatus(recalculation) <- PayrollRecalculationStatus.draft;
+                                    NEW recalculationLine = PayrollRecalculationLine {
+                                        lineRecalculation(recalculationLine) <- recalculation;
+                                        lineOriginalPayrollLine(recalculationLine) <- originalLine;
+                                        lineOriginalAmount(recalculationLine) <- 100000.00;
+                                        lineCorrectedAmount(recalculationLine) <- 110000.00;
+                                        calculateRecalculation(recalculation);
+                                        postRecalculation(recalculation);
+                                        NEW cancellationRun = PayrollRun {
+                                            payrollOrganization(cancellationRun) <- org;
+                                            payrollNumber(cancellationRun) <- 'STAGE0-CANCEL';
+                                            payrollPeriodFrom(cancellationRun) <- 2026_03_01;
+                                            payrollPeriodTo(cancellationRun) <- 2026_03_31;
+                                            payrollRunStatus(cancellationRun) <- PayrollRunStatus.calculated;
+                                            NEW taxes = TaxCalculationDocument {
+                                                taxCalculationPayrollRun(taxes) <- cancellationRun;
+                                                taxCalculationStatus(taxes) <- TaxCalculationStatus.draft;
+                                                NEW taxLine = TaxCalculationLine {
+                                                    taxCalculationDocument(taxLine) <- taxes;
+                                                    taxCalculationEmployee(taxLine) <- worker;
+                                                    ipnBasicDeduction(taxLine) <- 10000.00;
+                                                    ipnTaxableIncome(taxLine) <- 90000.00;
+                                                    ipnAmount(taxLine) <- 9000.00;
+                                                    NEW ledger = PersonalTaxLedgerEntry {
+                                                        taxLedgerOrganization(ledger) <- org;
+                                                        taxLedgerEmployee(ledger) <- worker;
+                                                        taxLedgerDate(ledger) <- 2026_03_31;
+                                                        taxLedgerBasicDeduction(ledger) <- 10000.00;
+                                                        taxLedgerTaxableIncome(ledger) <- 90000.00;
+                                                        taxLedgerIpn(ledger) <- 9000.00;
+                                                        taxCalculationLedgerEntry(taxLine) <- ledger;
+                                                        taxCalculationStatus(taxes) <- TaxCalculationStatus.calculated;
+                                                        cancelTaxes(taxes);
+
+                                                        EXPORT JSON FROM
+                                                            recalculationDelta = lineRecalculationDelta(recalculationLine),
+                                                            registeredAmount = inputManualAmount(
+                                                                lineRecalculationInput(recalculationLine)),
+                                                            registeredAsAccrual = calculationCategory(inputCalculationType(
+                                                                lineRecalculationInput(recalculationLine))) ==
+                                                                CalculationCategory.accrual,
+                                                            registeredInTargetRun = inputPayrollRun(
+                                                                lineRecalculationInput(recalculationLine)) == targetRun,
+                                                            recalculationPosted = recalculationStatus(recalculation) ==
+                                                                PayrollRecalculationStatus.approved,
+                                                            taxesCancelled = taxCalculationStatus(taxes) ==
+                                                                TaxCalculationStatus.cancelled,
+                                                            reversalAmount = taxLedgerIpn(
+                                                                taxCalculationReversalLedgerEntry(taxLine)),
+                                                            reversalLinked = taxLedgerReversalOf(
+                                                                taxCalculationReversalLedgerEntry(taxLine)) == ledger,
+                                                            ledgerNetIpn = stage0TaxLedgerIpn(org, worker);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

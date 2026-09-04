@@ -28,6 +28,14 @@ baseRuleNote 'Примечание' = DATA STRING[500] (CalculationBaseRule);
 
 CONSTRAINT baseRuleValidTo(CalculationBaseRule r) < baseRuleValidFrom(r)
     MESSAGE 'Дата окончания правила базы не может быть раньше даты начала';
+overlappingBaseRuleCount(CalculationBaseRule r) = GROUP SUM 1 IF
+    baseRuleCalculationType(CalculationBaseRule other) == baseRuleCalculationType(r) AND
+    baseRuleKind(other) == baseRuleKind(r) AND
+    baseRuleValidFrom(other) <= (IF baseRuleValidTo(r) THEN baseRuleValidTo(r) ELSE 9999_12_31) AND
+    (IF baseRuleValidTo(other) THEN baseRuleValidTo(other) ELSE 9999_12_31) >= baseRuleValidFrom(r);
+CONSTRAINT baseRuleCalculationType(CalculationBaseRule r) AND baseRuleKind(r) AND
+           baseRuleValidFrom(r) AND overlappingBaseRuleCount(r) > 1
+    MESSAGE 'Периоды правил одной расчётной базы не должны пересекаться';
 
 calculationBaseRuleOn(CalculationType type, AssessmentBaseKind kind, DATE date) =
     GROUP LAST CalculationBaseRule r
@@ -92,6 +100,7 @@ loadBaselineAssessmentRules() {
         ensureStandardBaseRules(calculationTypeByCode('HOLIDAY_ADDITIONAL'));
         ensureStandardBaseRules(calculationTypeByCode('FIXED_BONUS'));
         ensureStandardBaseRules(calculationTypeByCode('PERCENT_ALLOWANCE'));
+        ensureStandardBaseRules(calculationTypeByCode('RECALC_ACCRUAL'));
         APPLY;
     }
 }

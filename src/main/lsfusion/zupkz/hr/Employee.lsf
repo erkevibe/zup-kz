@@ -1,5 +1,6 @@
 MODULE HREmployee;
 
+REQUIRE Utils;
 NAMESPACE ZUPKZ;
 
 CLASS Employee 'Сотрудник';
@@ -18,6 +19,12 @@ gender 'Пол' = DATA Gender (Employee);
 citizenshipCode 'Код страны гражданства' = DATA STRING[3] (Employee);
 personalDataConsentDate 'Дата согласия на обработку ПД' = DATA DATE (Employee);
 personalDataPurpose 'Цель обработки ПД' = DATA STRING[250] (Employee);
+
+employeeIinCount(STRING[12] value) = GROUP SUM 1 IF iin(Employee e) == value;
+CONSTRAINT iin(Employee e) AND length(iin(e)) != 12
+    MESSAGE 'ИИН должен содержать 12 символов';
+CONSTRAINT employeeIinCount(STRING[12] value) > 1
+    MESSAGE 'ИИН должен быть уникальным';
 
 FORM employees 'Сотрудники'
     OBJECTS e = Employee

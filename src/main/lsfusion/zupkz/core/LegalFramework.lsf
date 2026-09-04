@@ -40,6 +40,21 @@ note 'Примечание' = DATA STRING[500] (StatutoryParameterValue);
 CONSTRAINT validTo(StatutoryParameterValue v) < validFrom(v)
     MESSAGE 'Дата окончания значения не может быть раньше даты начала';
 
+legalSourceCodeCount(STRING[50] value) = GROUP SUM 1 IF code(LegalSource s) == value;
+CONSTRAINT legalSourceCodeCount(STRING[50] value) > 1
+    MESSAGE 'Код нормативного источника должен быть уникальным';
+statutoryParameterCodeCount(STRING[50] value) = GROUP SUM 1 IF
+    parameterCode(StatutoryParameter p) == value;
+CONSTRAINT statutoryParameterCodeCount(STRING[50] value) > 1
+    MESSAGE 'Код параметра законодательства должен быть уникальным';
+overlappingStatutoryValueCount(StatutoryParameterValue v) = GROUP SUM 1 IF
+    parameter(StatutoryParameterValue other) == parameter(v) AND
+    validFrom(other) <= (IF validTo(v) THEN validTo(v) ELSE 9999_12_31) AND
+    (IF validTo(other) THEN validTo(other) ELSE 9999_12_31) >= validFrom(v);
+CONSTRAINT parameter(StatutoryParameterValue v) AND validFrom(v) AND
+           overlappingStatutoryValueCount(v) > 1
+    MESSAGE 'Периоды значений одного параметра законодательства не должны пересекаться';
+
 FORM legalSources 'Нормативные источники'
     OBJECTS s = LegalSource
     PROPERTIES(s) code, title, documentNumber, sourceUrl, adoptedDate,
