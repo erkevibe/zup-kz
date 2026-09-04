@@ -1,0 +1,516 @@
+MODULE HRApproval;
+
+REQUIRE HRBusinessTrip, Security;
+NAMESPACE ZUPKZ;
+
+CLASS PersonnelNoticeKind 'Вид уведомления работника' {
+    workConditions 'Изменение условий труда',
+    staffReduction 'Ликвидация или сокращение',
+    economicDeterioration 'Снижение объёма производства',
+    vacationScheduleChange 'Изменение графика отпусков',
+    other 'Другое уведомление'
+}
+
+noticeKindCode 'Код' = DATA STRING[50] (PersonnelNoticeKind);
+noticeKindNameKz 'Наименование (KZ)' = DATA STRING[200] (PersonnelNoticeKind);
+noticeKindLeadDays 'Минимальный срок, дней' = DATA INTEGER (PersonnelNoticeKind);
+noticeKindWorkingDays 'Срок в рабочих днях' = DATA BOOLEAN (PersonnelNoticeKind);
+noticeKindLegalBasis 'Правовое основание' = DATA STRING[250] (PersonnelNoticeKind);
+noticeKindActive 'Используется' = DATA BOOLEAN (PersonnelNoticeKind);
+
+loadPersonnelNoticeKinds() {
+    IF NOT noticeKindCode(PersonnelNoticeKind.workConditions) THEN {
+        noticeKindCode(PersonnelNoticeKind.workConditions) <- 'WORK_CONDITIONS';
+        noticeKindNameKz(PersonnelNoticeKind.workConditions) <- 'Еңбек жағдайларының өзгеруі';
+        noticeKindLeadDays(PersonnelNoticeKind.workConditions) <- 15;
+        noticeKindLegalBasis(PersonnelNoticeKind.workConditions) <- 'ТК РК, статья 46, пункт 2';
+        noticeKindActive(PersonnelNoticeKind.workConditions) <- TRUE;
+    }
+    IF NOT noticeKindCode(PersonnelNoticeKind.staffReduction) THEN {
+        noticeKindCode(PersonnelNoticeKind.staffReduction) <- 'STAFF_REDUCTION';
+        noticeKindNameKz(PersonnelNoticeKind.staffReduction) <- 'Тарату немесе штаттың қысқаруы';
+        noticeKindLeadDays(PersonnelNoticeKind.staffReduction) <- 30;
+        noticeKindLegalBasis(PersonnelNoticeKind.staffReduction) <- 'ТК РК, статья 53, пункт 1';
+        noticeKindActive(PersonnelNoticeKind.staffReduction) <- TRUE;
+    }
+    IF NOT noticeKindCode(PersonnelNoticeKind.economicDeterioration) THEN {
+        noticeKindCode(PersonnelNoticeKind.economicDeterioration) <- 'ECONOMIC_DETERIORATION';
+        noticeKindNameKz(PersonnelNoticeKind.economicDeterioration) <- 'Өндіріс көлемінің төмендеуі';
+        noticeKindLeadDays(PersonnelNoticeKind.economicDeterioration) <- 15;
+        noticeKindWorkingDays(PersonnelNoticeKind.economicDeterioration) <- TRUE;
+        noticeKindLegalBasis(PersonnelNoticeKind.economicDeterioration) <- 'ТК РК, статья 53, пункт 2';
+        noticeKindActive(PersonnelNoticeKind.economicDeterioration) <- TRUE;
+    }
+    IF NOT noticeKindCode(PersonnelNoticeKind.vacationScheduleChange) THEN {
+        noticeKindCode(PersonnelNoticeKind.vacationScheduleChange) <- 'VACATION_SCHEDULE_CHANGE';
+        noticeKindNameKz(PersonnelNoticeKind.vacationScheduleChange) <- 'Демалыс кестесінің өзгеруі';
+        noticeKindLeadDays(PersonnelNoticeKind.vacationScheduleChange) <- 14;
+        noticeKindLegalBasis(PersonnelNoticeKind.vacationScheduleChange) <- 'ТК РК, статья 93, пункт 2';
+        noticeKindActive(PersonnelNoticeKind.vacationScheduleChange) <- TRUE;
+    }
+    IF NOT noticeKindCode(PersonnelNoticeKind.other) THEN {
+        noticeKindCode(PersonnelNoticeKind.other) <- 'OTHER';
+        noticeKindNameKz(PersonnelNoticeKind.other) <- 'Басқа хабарлама';
+        noticeKindLeadDays(PersonnelNoticeKind.other) <- 0;
+        noticeKindActive(PersonnelNoticeKind.other) <- TRUE;
+    }
+}
+
+onStarted() + { loadPersonnelNoticeKinds(); }
+
+CLASS PersonnelNoticeStatus 'Статус уведомления' {
+    draft 'Черновик',
+    issued 'Оформлено',
+    delivered 'Вручено',
+    cancelled 'Отменено'
+}
+
+CLASS PersonnelNoticeDelivery 'Способ вручения' {
+    paper 'На бумаге',
+    electronicSignature 'Электронный документ с ЭЦП'
+}
+
+CLASS PersonnelNoticeResponse 'Ответ работника' {
+    agreed 'Согласен',
+    refused 'Отказался',
+    noResponse 'Ответ не получен'
+}
+
+CLASS PersonnelNotice 'Уведомление работника';
+
+personnelNoticeOrganization 'Организация' = DATA Organization (PersonnelNotice);
+personnelNoticeEmployee 'Работник' = DATA Employee (PersonnelNotice);
+personnelNoticeKind 'Вид уведомления' = DATA PersonnelNoticeKind (PersonnelNotice);
+personnelNoticeNumber 'Номер' = DATA STRING[50] (PersonnelNotice);
+personnelNoticeDate 'Дата документа' = DATA DATE (PersonnelNotice);
+personnelNoticeEffectiveDate 'Дата события' = DATA DATE (PersonnelNotice);
+personnelNoticeCalendar 'Производственный календарь' = DATA ProductionCalendar (PersonnelNotice);
+personnelNoticeWorkWeek 'Рабочая неделя' = DATA LeaveWorkWeek (PersonnelNotice);
+personnelNoticeDelivery 'Способ вручения' = DATA PersonnelNoticeDelivery (PersonnelNotice);
+personnelNoticeDeliveredDate 'Дата вручения' = DATA DATE (PersonnelNotice);
+personnelNoticeResponse 'Ответ работника' = DATA PersonnelNoticeResponse (PersonnelNotice);
+personnelNoticeResponseDate 'Дата ответа' = DATA DATE (PersonnelNotice);
+personnelNoticeText 'Текст уведомления' = DATA STRING[1000] (PersonnelNotice);
+personnelNoticeStatus 'Статус' = DATA PersonnelNoticeStatus (PersonnelNotice);
+personnelNoticeIssuedAt 'Оформлено' = DATA DATETIME (PersonnelNotice);
+personnelNoticeCancelledAt 'Отменено' = DATA DATETIME (PersonnelNotice);
+personnelNoticeEvent 'Кадровое событие' = DATA PersonnelEvent (PersonnelNotice);
+personnelNoticeVacationLine 'Строка графика отпусков' = DATA VacationScheduleLine (PersonnelNotice);
+
+CONSTRAINT personnelNoticeEffectiveDate(PersonnelNotice n) < personnelNoticeDate(n)
+    MESSAGE 'Дата события не может быть раньше даты уведомления';
+CONSTRAINT personnelNoticeDeliveredDate(PersonnelNotice n) > personnelNoticeEffectiveDate(n)
+    MESSAGE 'Дата вручения не может быть позже даты события';
+CONSTRAINT personnelNoticeResponseDate(PersonnelNotice n) < personnelNoticeDeliveredDate(n)
+    MESSAGE 'Дата ответа не может быть раньше даты вручения';
+CONSTRAINT personnelNoticeEvent(PersonnelNotice n) AND
+           organization(eventEmployment(personnelNoticeEvent(n))) != personnelNoticeOrganization(n)
+    MESSAGE 'Кадровое событие должно принадлежать организации уведомления';
+CONSTRAINT personnelNoticeVacationLine(PersonnelNotice n) AND
+           vacationScheduleOrganization(vacationLineSchedule(personnelNoticeVacationLine(n))) !=
+               personnelNoticeOrganization(n)
+    MESSAGE 'График отпусков должен принадлежать организации уведомления';
+CONSTRAINT (CHANGED(personnelNoticeOrganization(PersonnelNotice n)) OR
+            CHANGED(personnelNoticeEmployee(n)) OR CHANGED(personnelNoticeKind(n)) OR
+            CHANGED(personnelNoticeNumber(n)) OR CHANGED(personnelNoticeDate(n)) OR
+            CHANGED(personnelNoticeEffectiveDate(n)) OR CHANGED(personnelNoticeCalendar(n)) OR
+            CHANGED(personnelNoticeWorkWeek(n)) OR CHANGED(personnelNoticeText(n)) OR
+            CHANGED(personnelNoticeEvent(n)) OR CHANGED(personnelNoticeVacationLine(n))) AND
+           PREV(personnelNoticeStatus(n)) != PersonnelNoticeStatus.draft
+    MESSAGE 'Нельзя изменить оформленное или отменённое уведомление';
+
+personnelNoticeCalendarDaysProvided 'Предоставлено календарных дней' (PersonnelNotice n) =
+    daysBetweenDates(personnelNoticeEffectiveDate(n), personnelNoticeDeliveredDate(n));
+personnelNoticeWorkingDaysProvided 'Предоставлено рабочих дней' (PersonnelNotice n) = GROUP SUM 1 IF
+    productionCalendar(CalendarDay d) == personnelNoticeCalendar(n) AND
+    calendarDate(d) > personnelNoticeDeliveredDate(n) AND
+    calendarDate(d) <= personnelNoticeEffectiveDate(n) AND
+    calendarWorkDay(d, personnelNoticeWorkWeek(n));
+personnelNoticeDaysProvided 'Предоставлено дней' (PersonnelNotice n) =
+    IF noticeKindWorkingDays(personnelNoticeKind(n)) THEN personnelNoticeWorkingDaysProvided(n)
+    ELSE personnelNoticeCalendarDaysProvided(n);
+personnelNoticeCompliant 'Срок соблюдён' (PersonnelNotice n) =
+    personnelNoticeDeliveredDate(n) AND
+    personnelNoticeDaysProvided(n) >= noticeKindLeadDays(personnelNoticeKind(n));
+
+issuePersonnelNotice 'Оформить' (PersonnelNotice n) {
+    IF personnelNoticeStatus(n) AND personnelNoticeStatus(n) != PersonnelNoticeStatus.draft THEN
+        MESSAGE 'Оформить можно только черновик уведомления';
+    ELSE IF NOT personnelNoticeOrganization(n) OR NOT personnelNoticeEmployee(n) OR
+            NOT personnelNoticeKind(n) OR NOT personnelNoticeNumber(n) OR
+            NOT personnelNoticeDate(n) OR NOT personnelNoticeEffectiveDate(n) OR
+            NOT personnelNoticeText(n) THEN
+        MESSAGE 'Заполните организацию, работника, вид, номер, даты и текст уведомления';
+    ELSE IF noticeKindWorkingDays(personnelNoticeKind(n)) AND
+            (NOT personnelNoticeCalendar(n) OR NOT personnelNoticeWorkWeek(n)) THEN
+        MESSAGE 'Для срока в рабочих днях выберите календарь и рабочую неделю';
+    ELSE {
+        personnelNoticeStatus(n) <- PersonnelNoticeStatus.issued;
+        personnelNoticeIssuedAt(n) <- currentDateTime();
+        APPLY;
+    }
+}
+
+deliverPersonnelNotice 'Зарегистрировать вручение' (PersonnelNotice n) {
+    IF personnelNoticeStatus(n) != PersonnelNoticeStatus.issued THEN
+        MESSAGE 'Сначала оформите уведомление';
+    ELSE IF NOT personnelNoticeDelivery(n) THEN
+        MESSAGE 'Укажите способ вручения';
+    ELSE {
+        IF NOT personnelNoticeDeliveredDate(n) THEN
+            personnelNoticeDeliveredDate(n) <- currentDate();
+        personnelNoticeStatus(n) <- PersonnelNoticeStatus.delivered;
+        APPLY;
+    }
+}
+
+cancelPersonnelNotice 'Отменить' (PersonnelNotice n) {
+    IF personnelNoticeStatus(n) == PersonnelNoticeStatus.cancelled THEN
+        MESSAGE 'Уведомление уже отменено';
+    ELSE {
+        personnelNoticeStatus(n) <- PersonnelNoticeStatus.cancelled;
+        personnelNoticeCancelledAt(n) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM personnelNoticeKinds 'Виды уведомлений работников'
+    OBJECTS k = PersonnelNoticeKind
+    PROPERTIES(k) noticeKindCode, noticeKindNameKz, noticeKindLeadDays,
+                  noticeKindWorkingDays, noticeKindLegalBasis, noticeKindActive
+;
+
+FORM personnelNotices 'Уведомления работников'
+    OBJECTS n = PersonnelNotice
+    PROPERTIES(n) personnelNoticeOrganization, personnelNoticeEmployee,
+                  personnelNoticeKind, personnelNoticeNumber, personnelNoticeDate,
+                  personnelNoticeEffectiveDate, personnelNoticeCalendar,
+                  personnelNoticeWorkWeek, personnelNoticeText, personnelNoticeEvent,
+                  personnelNoticeVacationLine, personnelNoticeDelivery,
+                  personnelNoticeDeliveredDate, personnelNoticeResponse,
+                  personnelNoticeResponseDate, personnelNoticeDaysProvided,
+                  personnelNoticeCompliant, personnelNoticeStatus,
+                  personnelNoticeIssuedAt, personnelNoticeCancelledAt
+    PROPERTIES(n) issuePersonnelNotice, deliverPersonnelNotice, cancelPersonnelNotice
+;
+
+CLASS ApprovalRequestStatus 'Статус согласования' {
+    draft 'Черновик',
+    pending 'На согласовании',
+    approved 'Согласовано',
+    rejected 'Отклонено',
+    cancelled 'Отменено'
+}
+
+CLASS ApprovalStepStatus 'Статус этапа согласования' {
+    waiting 'Ожидает очереди',
+    pending 'Ожидает решения',
+    approved 'Согласовано',
+    rejected 'Отклонено',
+    cancelled 'Отменено'
+}
+
+CLASS ApprovalRequest 'Согласование кадрового документа';
+
+approvalOrganization 'Организация' = DATA Organization (ApprovalRequest);
+approvalTitle 'Наименование' = DATA STRING[250] (ApprovalRequest);
+approvalPersonnelEvent 'Кадровое событие' = DATA PersonnelEvent (ApprovalRequest);
+approvalLeave 'Отпуск' = DATA LeaveDocument (ApprovalRequest);
+approvalVacationSchedule 'График отпусков' = DATA VacationSchedule (ApprovalRequest);
+approvalBusinessTrip 'Командировка' = DATA BusinessTripDocument (ApprovalRequest);
+approvalStatus 'Статус' = DATA ApprovalRequestStatus (ApprovalRequest);
+approvalSubmittedBy 'Автор' = DATA CustomUser (ApprovalRequest);
+approvalSubmittedAt 'Отправлено' = DATA DATETIME (ApprovalRequest);
+approvalCompletedAt 'Завершено' = DATA DATETIME (ApprovalRequest);
+approvalComment 'Комментарий' = DATA STRING[500] (ApprovalRequest);
+
+approvalTargetCount(ApprovalRequest r) =
+    (IF approvalPersonnelEvent(r) THEN 1 ELSE 0) +
+    (IF approvalLeave(r) THEN 1 ELSE 0) +
+    (IF approvalVacationSchedule(r) THEN 1 ELSE 0) +
+    (IF approvalBusinessTrip(r) THEN 1 ELSE 0);
+approvalTargetOrganization(ApprovalRequest r) =
+    IF approvalPersonnelEvent(r) THEN organization(eventEmployment(approvalPersonnelEvent(r)))
+    ELSE IF approvalLeave(r) THEN organization(employment(leaveAssignment(approvalLeave(r))))
+    ELSE IF approvalVacationSchedule(r) THEN vacationScheduleOrganization(approvalVacationSchedule(r))
+    ELSE IF approvalBusinessTrip(r) THEN tripOrganization(approvalBusinessTrip(r));
+approvalTargetDraft(ApprovalRequest r) =
+    (approvalPersonnelEvent(r) AND (NOT eventStatus(approvalPersonnelEvent(r)) OR
+        eventStatus(approvalPersonnelEvent(r)) == PersonnelEventStatus.draft)) OR
+    (approvalLeave(r) AND (NOT leaveStatus(approvalLeave(r)) OR
+        leaveStatus(approvalLeave(r)) == LeaveStatus.draft)) OR
+    (approvalVacationSchedule(r) AND (NOT vacationScheduleStatus(approvalVacationSchedule(r)) OR
+        vacationScheduleStatus(approvalVacationSchedule(r)) == VacationScheduleStatus.draft)) OR
+    (approvalBusinessTrip(r) AND (NOT tripStatus(approvalBusinessTrip(r)) OR
+        tripStatus(approvalBusinessTrip(r)) == BusinessTripStatus.draft));
+approvalTargetExecuted(ApprovalRequest r) =
+    (approvalPersonnelEvent(r) AND eventStatus(approvalPersonnelEvent(r)) == PersonnelEventStatus.posted) OR
+    (approvalLeave(r) AND leaveStatus(approvalLeave(r)) == LeaveStatus.approved) OR
+    (approvalVacationSchedule(r) AND vacationScheduleStatus(approvalVacationSchedule(r)) ==
+        VacationScheduleStatus.approved) OR
+    (approvalBusinessTrip(r) AND tripStatus(approvalBusinessTrip(r)) == BusinessTripStatus.approved);
+
+CONSTRAINT approvalTargetCount(ApprovalRequest r) > 1
+    MESSAGE 'В согласовании можно выбрать только один кадровый документ';
+CONSTRAINT approvalTargetOrganization(ApprovalRequest r) AND approvalOrganization(r) AND
+           approvalTargetOrganization(r) != approvalOrganization(r)
+    MESSAGE 'Документ должен принадлежать организации согласования';
+CONSTRAINT (CHANGED(approvalOrganization(ApprovalRequest r)) OR CHANGED(approvalTitle(r)) OR
+            CHANGED(approvalPersonnelEvent(r)) OR CHANGED(approvalLeave(r)) OR
+            CHANGED(approvalVacationSchedule(r)) OR CHANGED(approvalBusinessTrip(r))) AND
+           PREV(approvalStatus(r)) != ApprovalRequestStatus.draft
+    MESSAGE 'Нельзя изменить отправленное согласование';
+
+CLASS ApprovalStep 'Этап согласования';
+
+approvalStepRequest 'Согласование' = DATA ApprovalRequest (ApprovalStep);
+approvalStepSequence 'Порядок' = DATA INTEGER (ApprovalStep);
+approvalStepApprover 'Согласующий' = DATA CustomUser (ApprovalStep);
+approvalStepDueDate 'Срок решения' = DATA DATE (ApprovalStep);
+approvalStepStatus 'Статус' = DATA ApprovalStepStatus (ApprovalStep);
+approvalStepDecidedBy 'Решение принял' = DATA CustomUser (ApprovalStep);
+approvalStepDecidedAt 'Дата решения' = DATA DATETIME (ApprovalStep);
+approvalStepComment 'Комментарий' = DATA STRING[500] (ApprovalStep);
+
+CONSTRAINT approvalStepSequence(ApprovalStep s) <= 0
+    MESSAGE 'Порядок этапа должен быть положительным';
+duplicateApprovalStepSequence(ApprovalStep s) = GROUP SUM 1 IF
+    approvalStepRequest(ApprovalStep other) == approvalStepRequest(s) AND
+    approvalStepSequence(other) == approvalStepSequence(s);
+CONSTRAINT approvalStepRequest(ApprovalStep s) AND approvalStepSequence(s) AND
+           duplicateApprovalStepSequence(s) > 1
+    MESSAGE 'Порядок этапов одного согласования не должен повторяться';
+CONSTRAINT (CHANGED(approvalStepRequest(ApprovalStep s)) OR
+            CHANGED(approvalStepSequence(s)) OR CHANGED(approvalStepApprover(s)) OR
+            CHANGED(approvalStepDueDate(s))) AND
+           PREV(approvalStatus(approvalStepRequest(s))) != ApprovalRequestStatus.draft
+    MESSAGE 'Нельзя изменить этап отправленного согласования';
+
+approvalStepCount(ApprovalRequest r) = GROUP SUM 1 IF
+    approvalStepRequest(ApprovalStep s) == r;
+invalidApprovalStepCount(ApprovalRequest r) = GROUP SUM 1 IF
+    approvalStepRequest(ApprovalStep s) == r AND
+    (NOT approvalStepSequence(s) OR NOT approvalStepApprover(s));
+nextWaitingApprovalStep(ApprovalRequest r) = GROUP LAST ApprovalStep s IF
+    approvalStepRequest(s) == r AND approvalStepStatus(s) == ApprovalStepStatus.waiting
+    ORDER DESC approvalStepSequence(s), s;
+approvalRequestOverdue 'Просрочено' (ApprovalRequest r) = GROUP MAX 1 IF
+    approvalStepRequest(ApprovalStep s) == r AND
+    approvalStepStatus(s) == ApprovalStepStatus.pending AND
+    approvalStepDueDate(s) < currentDate();
+
+CLASS PersonnelNotification 'Кадровое уведомление пользователя';
+
+notificationUser 'Получатель' = DATA CustomUser (PersonnelNotification);
+notificationOrganization 'Организация' = DATA Organization (PersonnelNotification);
+notificationApproval 'Согласование' = DATA ApprovalRequest (PersonnelNotification);
+notificationStep 'Этап' = DATA ApprovalStep (PersonnelNotification);
+notificationSubject 'Тема' = DATA STRING[250] (PersonnelNotification);
+notificationText 'Сообщение' = DATA STRING[500] (PersonnelNotification);
+notificationCreatedAt 'Создано' = DATA DATETIME (PersonnelNotification);
+notificationReadAt 'Прочитано' = DATA DATETIME (PersonnelNotification);
+notificationUnread 'Не прочитано' (PersonnelNotification n) = NOT notificationReadAt(n);
+
+approvalNotificationCount(ApprovalRequest r) = GROUP SUM 1 IF
+    notificationApproval(PersonnelNotification n) == r;
+approvalStepNotification(ApprovalStep s) = GROUP LAST PersonnelNotification n IF
+    notificationStep(n) == s ORDER notificationCreatedAt(n), n;
+
+submitApprovalRequest 'Отправить на согласование' (ApprovalRequest r) {
+    LOCAL firstStep = ApprovalStep();
+    IF approvalStatus(r) AND approvalStatus(r) != ApprovalRequestStatus.draft THEN
+        MESSAGE 'Отправить можно только черновик согласования';
+    ELSE IF NOT approvalOrganization(r) OR NOT approvalTitle(r) OR approvalTargetCount(r) != 1 THEN
+        MESSAGE 'Заполните организацию, наименование и выберите один документ';
+    ELSE IF NOT approvalTargetDraft(r) THEN
+        MESSAGE 'На согласование можно отправить только черновик документа';
+    ELSE IF NOT approvalStepCount(r) OR invalidApprovalStepCount(r) THEN
+        MESSAGE 'Добавьте этапы и заполните порядок и согласующих';
+    ELSE {
+        FOR approvalStepRequest(ApprovalStep s) == r DO
+            approvalStepStatus(s) <- ApprovalStepStatus.waiting;
+        firstStep() <- nextWaitingApprovalStep(r);
+        approvalStepStatus(firstStep()) <- ApprovalStepStatus.pending;
+        approvalStatus(r) <- ApprovalRequestStatus.pending;
+        approvalSubmittedBy(r) <- currentUser() AS CustomUser;
+        approvalSubmittedAt(r) <- currentDateTime();
+        NEW n = PersonnelNotification {
+            notificationUser(n) <- approvalStepApprover(firstStep());
+            notificationOrganization(n) <- approvalOrganization(r);
+            notificationApproval(n) <- r;
+            notificationStep(n) <- firstStep();
+            notificationSubject(n) <- 'Документ ожидает согласования';
+            notificationText(n) <- approvalTitle(r);
+            notificationCreatedAt(n) <- currentDateTime();
+        }
+        APPLY;
+    }
+}
+
+approveApprovalStep 'Согласовать' (ApprovalStep s) {
+    LOCAL nextStep = ApprovalStep();
+    IF approvalStatus(approvalStepRequest(s)) != ApprovalRequestStatus.pending OR
+       approvalStepStatus(s) != ApprovalStepStatus.pending THEN
+        MESSAGE 'Этап не ожидает решения';
+    ELSE IF approvalStepApprover(s) != currentUser() AS CustomUser AND
+            NOT has(currentUser() AS CustomUser, userRoleSID('admin')) THEN
+        MESSAGE 'Решение может принять только назначенный согласующий';
+    ELSE {
+        approvalStepStatus(s) <- ApprovalStepStatus.approved;
+        approvalStepDecidedBy(s) <- currentUser() AS CustomUser;
+        approvalStepDecidedAt(s) <- currentDateTime();
+        nextStep() <- nextWaitingApprovalStep(approvalStepRequest(s));
+        IF nextStep() THEN {
+            approvalStepStatus(nextStep()) <- ApprovalStepStatus.pending;
+            NEW n = PersonnelNotification {
+                notificationUser(n) <- approvalStepApprover(nextStep());
+                notificationOrganization(n) <- approvalOrganization(approvalStepRequest(s));
+                notificationApproval(n) <- approvalStepRequest(s);
+                notificationStep(n) <- nextStep();
+                notificationSubject(n) <- 'Документ ожидает согласования';
+                notificationText(n) <- approvalTitle(approvalStepRequest(s));
+                notificationCreatedAt(n) <- currentDateTime();
+            }
+        } ELSE {
+            approvalStatus(approvalStepRequest(s)) <- ApprovalRequestStatus.approved;
+            approvalCompletedAt(approvalStepRequest(s)) <- currentDateTime();
+            NEW n = PersonnelNotification {
+                notificationUser(n) <- approvalSubmittedBy(approvalStepRequest(s));
+                notificationOrganization(n) <- approvalOrganization(approvalStepRequest(s));
+                notificationApproval(n) <- approvalStepRequest(s);
+                notificationSubject(n) <- 'Документ согласован';
+                notificationText(n) <- approvalTitle(approvalStepRequest(s));
+                notificationCreatedAt(n) <- currentDateTime();
+            }
+        }
+        APPLY;
+    }
+}
+
+rejectApprovalStep 'Отклонить' (ApprovalStep s) {
+    IF approvalStatus(approvalStepRequest(s)) != ApprovalRequestStatus.pending OR
+       approvalStepStatus(s) != ApprovalStepStatus.pending THEN
+        MESSAGE 'Этап не ожидает решения';
+    ELSE IF approvalStepApprover(s) != currentUser() AS CustomUser AND
+            NOT has(currentUser() AS CustomUser, userRoleSID('admin')) THEN
+        MESSAGE 'Решение может принять только назначенный согласующий';
+    ELSE {
+        approvalStepStatus(s) <- ApprovalStepStatus.rejected;
+        approvalStepDecidedBy(s) <- currentUser() AS CustomUser;
+        approvalStepDecidedAt(s) <- currentDateTime();
+        FOR approvalStepRequest(ApprovalStep other) == approvalStepRequest(s) AND
+            approvalStepStatus(other) == ApprovalStepStatus.waiting DO
+            approvalStepStatus(other) <- ApprovalStepStatus.cancelled;
+        approvalStatus(approvalStepRequest(s)) <- ApprovalRequestStatus.rejected;
+        approvalCompletedAt(approvalStepRequest(s)) <- currentDateTime();
+        NEW n = PersonnelNotification {
+            notificationUser(n) <- approvalSubmittedBy(approvalStepRequest(s));
+            notificationOrganization(n) <- approvalOrganization(approvalStepRequest(s));
+            notificationApproval(n) <- approvalStepRequest(s);
+            notificationSubject(n) <- 'Документ отклонён';
+            notificationText(n) <- approvalTitle(approvalStepRequest(s));
+            notificationCreatedAt(n) <- currentDateTime();
+        }
+        APPLY;
+    }
+}
+
+cancelApprovalRequest 'Отменить согласование' (ApprovalRequest r) {
+    IF approvalStatus(r) == ApprovalRequestStatus.approved OR approvalTargetExecuted(r) THEN
+        MESSAGE 'Нельзя отменить завершённое или использованное согласование';
+    ELSE IF approvalStatus(r) == ApprovalRequestStatus.cancelled THEN
+        MESSAGE 'Согласование уже отменено';
+    ELSE IF approvalSubmittedBy(r) AND approvalSubmittedBy(r) != currentUser() AS CustomUser AND
+            NOT has(currentUser() AS CustomUser, userRoleSID('admin')) THEN
+        MESSAGE 'Отменить согласование может только автор или администратор';
+    ELSE {
+        FOR approvalStepRequest(ApprovalStep s) == r AND
+            (approvalStepStatus(s) == ApprovalStepStatus.waiting OR
+             approvalStepStatus(s) == ApprovalStepStatus.pending) DO
+            approvalStepStatus(s) <- ApprovalStepStatus.cancelled;
+        approvalStatus(r) <- ApprovalRequestStatus.cancelled;
+        approvalCompletedAt(r) <- currentDateTime();
+        APPLY;
+    }
+}
+
+readPersonnelNotification 'Прочитать' (PersonnelNotification n) {
+    IF notificationUser(n) == currentUser() AS CustomUser AND NOT notificationReadAt(n) THEN {
+        notificationReadAt(n) <- currentDateTime();
+        APPLY;
+    }
+}
+
+activeEventApprovalCount(PersonnelEvent e) = GROUP SUM 1 IF
+    approvalPersonnelEvent(ApprovalRequest r) == e AND
+    (NOT approvalStatus(r) OR approvalStatus(r) != ApprovalRequestStatus.cancelled);
+unapprovedEventApprovalCount(PersonnelEvent e) = GROUP SUM 1 IF
+    approvalPersonnelEvent(ApprovalRequest r) == e AND
+    (NOT approvalStatus(r) OR (approvalStatus(r) != ApprovalRequestStatus.cancelled AND
+     approvalStatus(r) != ApprovalRequestStatus.approved));
+activeLeaveApprovalCount(LeaveDocument l) = GROUP SUM 1 IF
+    approvalLeave(ApprovalRequest r) == l AND
+    (NOT approvalStatus(r) OR approvalStatus(r) != ApprovalRequestStatus.cancelled);
+unapprovedLeaveApprovalCount(LeaveDocument l) = GROUP SUM 1 IF
+    approvalLeave(ApprovalRequest r) == l AND
+    (NOT approvalStatus(r) OR (approvalStatus(r) != ApprovalRequestStatus.cancelled AND
+     approvalStatus(r) != ApprovalRequestStatus.approved));
+activeVacationScheduleApprovalCount(VacationSchedule s) = GROUP SUM 1 IF
+    approvalVacationSchedule(ApprovalRequest r) == s AND
+    (NOT approvalStatus(r) OR approvalStatus(r) != ApprovalRequestStatus.cancelled);
+unapprovedVacationScheduleApprovalCount(VacationSchedule s) = GROUP SUM 1 IF
+    approvalVacationSchedule(ApprovalRequest r) == s AND
+    (NOT approvalStatus(r) OR (approvalStatus(r) != ApprovalRequestStatus.cancelled AND
+     approvalStatus(r) != ApprovalRequestStatus.approved));
+activeTripApprovalCount(BusinessTripDocument d) = GROUP SUM 1 IF
+    approvalBusinessTrip(ApprovalRequest r) == d AND
+    (NOT approvalStatus(r) OR approvalStatus(r) != ApprovalRequestStatus.cancelled);
+unapprovedTripApprovalCount(BusinessTripDocument d) = GROUP SUM 1 IF
+    approvalBusinessTrip(ApprovalRequest r) == d AND
+    (NOT approvalStatus(r) OR (approvalStatus(r) != ApprovalRequestStatus.cancelled AND
+     approvalStatus(r) != ApprovalRequestStatus.approved));
+
+CONSTRAINT activeEventApprovalCount(PersonnelEvent e) > 1
+    MESSAGE 'Для кадрового события допускается только одно активное согласование';
+CONSTRAINT activeLeaveApprovalCount(LeaveDocument l) > 1
+    MESSAGE 'Для отпуска допускается только одно активное согласование';
+CONSTRAINT activeVacationScheduleApprovalCount(VacationSchedule s) > 1
+    MESSAGE 'Для графика отпусков допускается только одно активное согласование';
+CONSTRAINT activeTripApprovalCount(BusinessTripDocument d) > 1
+    MESSAGE 'Для документа допускается только одно активное согласование';
+CONSTRAINT eventStatus(PersonnelEvent e) == PersonnelEventStatus.posted AND
+           unapprovedEventApprovalCount(e)
+    MESSAGE 'Кадровое событие ещё не согласовано';
+CONSTRAINT leaveStatus(LeaveDocument l) == LeaveStatus.approved AND
+           unapprovedLeaveApprovalCount(l)
+    MESSAGE 'Отпуск ещё не согласован';
+CONSTRAINT vacationScheduleStatus(VacationSchedule s) == VacationScheduleStatus.approved AND
+           unapprovedVacationScheduleApprovalCount(s)
+    MESSAGE 'График отпусков ещё не согласован';
+CONSTRAINT tripStatus(BusinessTripDocument d) == BusinessTripStatus.approved AND
+           unapprovedTripApprovalCount(d)
+    MESSAGE 'Командировка ещё не согласована';
+
+FORM approvalRequests 'Согласования кадровых документов'
+    OBJECTS r = ApprovalRequest
+    PROPERTIES(r) approvalOrganization, approvalTitle, approvalPersonnelEvent,
+                  approvalLeave, approvalVacationSchedule, approvalBusinessTrip,
+                  approvalStatus, approvalRequestOverdue, approvalSubmittedBy,
+                  approvalSubmittedAt, approvalCompletedAt, approvalComment
+    PROPERTIES(r) submitApprovalRequest, cancelApprovalRequest
+    OBJECTS s = ApprovalStep
+    PROPERTIES(s) approvalStepSequence, approvalStepApprover, approvalStepDueDate,
+                  approvalStepStatus, approvalStepDecidedBy, approvalStepDecidedAt,
+                  approvalStepComment
+    PROPERTIES(s) approveApprovalStep, rejectApprovalStep
+    FILTERS approvalStepRequest(s) == r
+;
+
+FORM myPersonnelNotifications 'Мои кадровые уведомления'
+    OBJECTS n = PersonnelNotification
+    PROPERTIES(n) notificationOrganization, notificationSubject, notificationText,
+                  notificationApproval, notificationStep, notificationCreatedAt,
+                  notificationReadAt, notificationUnread
+    PROPERTIES(n) readPersonnelNotification
+    FILTERS notificationUser(n) == currentUser() AS CustomUser
+;

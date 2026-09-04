@@ -127,6 +127,17 @@ jobs:
 
               python3 tests/assert_planning_workflow.py planning-workflow-result.json
 
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.approvalWorkflowTest' \
+                --output approval-workflow-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.approvalBlockVerificationTest' \
+                --output approval-block-result.json
+
+              python3 tests/assert_approval_workflow.py \
+                approval-workflow-result.json approval-block-result.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT

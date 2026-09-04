@@ -3,7 +3,7 @@ MODULE ZUPKZ;
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, HREmployeeCard, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
-        PayrollRecalculation, HRLeave, HRVacationSchedule, HRBusinessTrip, HRPrintForms,
+        PayrollRecalculation, HRLeave, HRVacationSchedule, HRBusinessTrip, HRApproval, HRPrintForms,
         PayrollSickLeave, PayrollInterimPayment,
         PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax,
         PayrollCivilContract,
@@ -26,6 +26,7 @@ NAVIGATOR {
         NEW legalSources;
         NEW statutoryParameters;
         NEW statutoryParameterValues;
+        NEW personnelNoticeKinds;
     }
 
     NEW FOLDER personnel 'Кадровый учёт' WINDOW toolbar {
@@ -38,6 +39,9 @@ NAVIGATOR {
         NEW vacationSchedules;
         NEW vacationScheduleLines;
         NEW businessTrips;
+        NEW personnelNotices;
+        NEW approvalRequests;
+        NEW myPersonnelNotifications;
         NEW sickLeaveDocuments;
     }
 

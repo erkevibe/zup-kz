@@ -1,0 +1,149 @@
+MODULE ApprovalWorkflowTest;
+
+REQUIRE PlanningWorkflowTest, HRApproval;
+NAMESPACE ZUPKZ;
+
+approvalWorkflowTest() {
+    NEW org = Organization {
+        name(org) <- 'Согласование Тест';
+        bin(org) <- '121212121212';
+        NEW staff = StaffPosition {
+            organization(staff) <- org;
+            staffCode(staff) <- 'APPROVAL-STAFF';
+            validFrom(staff) <- 2026_01_01;
+            plannedFTE(staff) <- 2.0000;
+            salaryMin(staff) <- 100000.00;
+            salaryMax(staff) <- 500000.00;
+            NEW worker = Employee {
+                iin(worker) <- '910101300011';
+                lastName(worker) <- 'Согласуемый';
+                firstName(worker) <- 'Тест';
+                NEW contract = Employment {
+                    employee(contract) <- worker;
+                    organization(contract) <- org;
+                    NEW hire = PersonnelEvent {
+                        eventKind(hire) <- PersonnelEventKind.hire;
+                        eventEmployment(hire) <- contract;
+                        eventStaffPosition(hire) <- staff;
+                        eventFte(hire) <- 1.0000;
+                        eventSalary(hire) <- 250000.00;
+                        effectiveDate(hire) <- 2026_02_01;
+                        orderNumber(hire) <- 'APP-HIRE-1';
+                        orderDate(hire) <- 2026_01_30;
+                        basis(hire) <- 'Трудовой договор';
+                        eventStatus(hire) <- PersonnelEventStatus.draft;
+                        NEW request = ApprovalRequest {
+                            approvalOrganization(request) <- org;
+                            approvalTitle(request) <- 'Приём сотрудника';
+                            approvalPersonnelEvent(request) <- hire;
+                            approvalStatus(request) <- ApprovalRequestStatus.draft;
+                            NEW firstStep = ApprovalStep {
+                                approvalStepRequest(firstStep) <- request;
+                                approvalStepSequence(firstStep) <- 1;
+                                approvalStepApprover(firstStep) <- currentUser() AS CustomUser;
+                                approvalStepDueDate(firstStep) <- 2026_01_25;
+                                NEW secondStep = ApprovalStep {
+                                    approvalStepRequest(secondStep) <- request;
+                                    approvalStepSequence(secondStep) <- 2;
+                                    approvalStepApprover(secondStep) <- currentUser() AS CustomUser;
+                                    approvalStepDueDate(secondStep) <- 2026_01_27;
+                                    submitApprovalRequest(request);
+                                    approveApprovalStep(firstStep);
+                                    approveApprovalStep(secondStep);
+                                    postPersonnelEvent(hire);
+                                    readPersonnelNotification(approvalStepNotification(firstStep));
+
+                                    NEW notice = PersonnelNotice {
+                                        personnelNoticeOrganization(notice) <- org;
+                                        personnelNoticeEmployee(notice) <- worker;
+                                        personnelNoticeKind(notice) <- PersonnelNoticeKind.workConditions;
+                                        personnelNoticeNumber(notice) <- 'NOTICE-1';
+                                        personnelNoticeDate(notice) <- 2026_01_01;
+                                        personnelNoticeEffectiveDate(notice) <- 2026_01_16;
+                                        personnelNoticeText(notice) <- 'Изменение условий труда';
+                                        personnelNoticeDelivery(notice) <- PersonnelNoticeDelivery.paper;
+                                        personnelNoticeDeliveredDate(notice) <- 2026_01_01;
+                                        personnelNoticeStatus(notice) <- PersonnelNoticeStatus.draft;
+                                        issuePersonnelNotice(notice);
+                                        deliverPersonnelNotice(notice);
+
+                                        NEW rejectedWorker = Employee {
+                                            iin(rejectedWorker) <- '920202300012';
+                                            lastName(rejectedWorker) <- 'Отклонённый';
+                                            firstName(rejectedWorker) <- 'Тест';
+                                            NEW rejectedContract = Employment {
+                                                employee(rejectedContract) <- rejectedWorker;
+                                                organization(rejectedContract) <- org;
+                                                NEW rejectedHire = PersonnelEvent {
+                                                    eventKind(rejectedHire) <- PersonnelEventKind.hire;
+                                                    eventEmployment(rejectedHire) <- rejectedContract;
+                                                    eventStaffPosition(rejectedHire) <- staff;
+                                                    eventFte(rejectedHire) <- 1.0000;
+                                                    eventSalary(rejectedHire) <- 200000.00;
+                                                    effectiveDate(rejectedHire) <- 2026_03_01;
+                                                    orderNumber(rejectedHire) <- 'APP-HIRE-2';
+                                                    orderDate(rejectedHire) <- 2026_02_27;
+                                                    basis(rejectedHire) <- 'Трудовой договор';
+                                                    eventStatus(rejectedHire) <- PersonnelEventStatus.draft;
+                                                    NEW rejectedRequest = ApprovalRequest {
+                                                        approvalOrganization(rejectedRequest) <- org;
+                                                        approvalTitle(rejectedRequest) <- 'Отклоняемый приём';
+                                                        approvalPersonnelEvent(rejectedRequest) <- rejectedHire;
+                                                        approvalStatus(rejectedRequest) <-
+                                                            ApprovalRequestStatus.draft;
+                                                        NEW rejectedStep = ApprovalStep {
+                                                            approvalStepRequest(rejectedStep) <- rejectedRequest;
+                                                            approvalStepSequence(rejectedStep) <- 1;
+                                                            approvalStepApprover(rejectedStep) <-
+                                                                currentUser() AS CustomUser;
+                                                            submitApprovalRequest(rejectedRequest);
+                                                            rejectApprovalStep(rejectedStep);
+                                                            postPersonnelEvent(rejectedHire);
+
+                                                            EXPORT JSON FROM
+                                                                requestApproved = approvalStatus(request) ==
+                                                                    ApprovalRequestStatus.approved,
+                                                                firstStepApproved = approvalStepStatus(firstStep) ==
+                                                                    ApprovalStepStatus.approved,
+                                                                secondStepApproved = approvalStepStatus(secondStep) ==
+                                                                    ApprovalStepStatus.approved,
+                                                                hirePosted = eventStatus(hire) ==
+                                                                    PersonnelEventStatus.posted,
+                                                                approvalNotifications =
+                                                                    approvalNotificationCount(request),
+                                                                firstNotificationRead = NOT notificationUnread(
+                                                                    approvalStepNotification(firstStep)),
+                                                                noticeDelivered = personnelNoticeStatus(notice) ==
+                                                                    PersonnelNoticeStatus.delivered,
+                                                                noticeDaysProvided = personnelNoticeDaysProvided(notice),
+                                                                noticeDeadlineMet = personnelNoticeCompliant(notice),
+                                                                workConditionsLeadDays = noticeKindLeadDays(
+                                                                    PersonnelNoticeKind.workConditions),
+                                                                rejectedRequestRejected = approvalStatus(rejectedRequest) ==
+                                                                    ApprovalRequestStatus.rejected,
+                                                                rejectedNotifications =
+                                                                    approvalNotificationCount(rejectedRequest);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+approvalBlockedTestEvent() = GROUP LAST PersonnelEvent e IF
+    orderNumber(e) == 'APP-HIRE-2' ORDER e;
+
+approvalBlockVerificationTest() {
+    EXPORT JSON FROM
+        postingBlockedBeforeApproval = eventStatus(approvalBlockedTestEvent()) ==
+            PersonnelEventStatus.draft;
+}
