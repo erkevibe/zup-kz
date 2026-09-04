@@ -37,7 +37,7 @@ jobs:
         with:
           repository: erkevibe/platform
           # Last upstream-compatible revision verified by this application.
-          ref: 68d154cb90
+          ref: 68d154cb9082b1df5554ba31070870eb45c3b528
           path: platform
 
       - name: Set up Java 21
