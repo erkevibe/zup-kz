@@ -1,0 +1,201 @@
+MODULE KZAccessControl;
+
+REQUIRE Security, KZOrganization, HRDepartment, HRPosition, HRStaffSchedule,
+        HREmployment, TimeWorkSchedule, TimeTimesheet, HRLeave,
+        PayrollSickLeave, PayrollInterimPayment, PayrollRecalculation,
+        TaxesKZSocialPayments, TaxesKZIncomeTax, PayrollSettlement,
+        PayrollPayments, PayrollEnforcement, PayrollCivilContract,
+        PayrollCivilContractPayments, TaxesKZSocialTransferRegisters,
+        ReportsKZForm20005;
+NAMESPACE ZUPKZ;
+
+CLASS UserOrganizationAccess 'Доступ пользователя к организации';
+
+accessUser 'Пользователь' = DATA CustomUser (UserOrganizationAccess);
+accessOrganization 'Организация' = DATA Organization (UserOrganizationAccess);
+accessActive 'Активен' = DATA BOOLEAN (UserOrganizationAccess);
+
+accessPairCount(CustomUser user, Organization org) = GROUP SUM 1 IF
+    accessUser(UserOrganizationAccess a) == user AND accessOrganization(a) == org;
+CONSTRAINT accessPairCount(CustomUser user, Organization org) > 1
+    MESSAGE 'Организация может быть назначена пользователю только один раз';
+
+userOrganizationAllowed(CustomUser user, Organization org) =
+    has(user, userRoleSID('admin')) OR GROUP MAX accessActive(UserOrganizationAccess a)
+        IF accessUser(a) == user AND accessOrganization(a) == org;
+organizationAllowed(Organization org) =
+    userOrganizationAllowed(currentUser() AS CustomUser, org);
+employeeAllowed(Employee worker) = GROUP MAX organizationAllowed(organization(Employment contract))
+    IF employee(contract) == worker;
+
+FORM userOrganizationAccesses 'Доступ к организациям'
+    OBJECTS a = UserOrganizationAccess
+    PROPERTIES(a) accessUser, accessOrganization, accessActive
+;
+
+denyBusinessFolders(UserRole role) {
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.masterData')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.legislation')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.personnel')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.workingTime')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.payroll')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.taxesKz')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.reportsKz')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.accessAdministration')) <- Permission.forbid;
+}
+
+permitBusinessFolders(UserRole role) {
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.masterData')) <- Permission.permit;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.legislation')) <- Permission.permit;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.personnel')) <- Permission.permit;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.workingTime')) <- Permission.permit;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.payroll')) <- Permission.permit;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.taxesKz')) <- Permission.permit;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.reportsKz')) <- Permission.permit;
+}
+
+loadZupRoles() {
+    IF NOT userRoleSID('zup_hr') THEN NEW role = UserRole {
+        sid(role) <- 'zup_hr';
+        name(role) <- 'ZUP KZ — HR';
+    }
+    IF NOT userRoleSID('zup_timekeeper') THEN NEW role = UserRole {
+        sid(role) <- 'zup_timekeeper';
+        name(role) <- 'ZUP KZ — Timekeeper';
+    }
+    IF NOT userRoleSID('zup_payroll') THEN NEW role = UserRole {
+        sid(role) <- 'zup_payroll';
+        name(role) <- 'ZUP KZ — Payroll';
+    }
+    IF NOT userRoleSID('zup_chief_accountant') THEN NEW role = UserRole {
+        sid(role) <- 'zup_chief_accountant';
+        name(role) <- 'ZUP KZ — Chief accountant';
+    }
+    IF NOT userRoleSID('zup_auditor') THEN NEW role = UserRole {
+        sid(role) <- 'zup_auditor';
+        name(role) <- 'ZUP KZ — Auditor';
+    }
+
+    denyBusinessFolders(userRoleSID('zup_hr'));
+    denyBusinessFolders(userRoleSID('zup_timekeeper'));
+    denyBusinessFolders(userRoleSID('zup_payroll'));
+    denyBusinessFolders(userRoleSID('zup_chief_accountant'));
+    denyBusinessFolders(userRoleSID('zup_auditor'));
+
+    dataPermission(userRoleSID('zup_hr'),
+        navigatorElementCanonicalName('ZUPKZ.masterData')) <- Permission.permit;
+    dataPermission(userRoleSID('zup_hr'),
+        navigatorElementCanonicalName('ZUPKZ.personnel')) <- Permission.permit;
+
+    dataPermission(userRoleSID('zup_timekeeper'),
+        navigatorElementCanonicalName('ZUPKZ.masterData')) <- Permission.permit;
+    dataPermission(userRoleSID('zup_timekeeper'),
+        navigatorElementCanonicalName('ZUPKZ.workingTime')) <- Permission.permit;
+
+    dataPermission(userRoleSID('zup_payroll'),
+        navigatorElementCanonicalName('ZUPKZ.masterData')) <- Permission.permit;
+    dataPermission(userRoleSID('zup_payroll'),
+        navigatorElementCanonicalName('ZUPKZ.legislation')) <- Permission.permit;
+    dataPermission(userRoleSID('zup_payroll'),
+        navigatorElementCanonicalName('ZUPKZ.payroll')) <- Permission.permit;
+
+    permitBusinessFolders(userRoleSID('zup_chief_accountant'));
+    permitBusinessFolders(userRoleSID('zup_auditor'));
+    dataPermissionChange(userRoleSID('zup_auditor'), propertyGroup('System_root')) <- Permission.forbid;
+    dataPermissionEditObjects(userRoleSID('zup_auditor'), propertyGroup('System_root')) <- Permission.forbid;
+}
+
+onStarted() + { loadZupRoles(); }
+
+EXTEND FORM organizations FILTERS organizationAllowed(o);
+EXTEND FORM departments FILTERS organizationAllowed(organization(d));
+EXTEND FORM positions FILTERS organizationAllowed(organization(p));
+EXTEND FORM staffPositions FILTERS organizationAllowed(organization(s));
+EXTEND FORM employees FILTERS employeeAllowed(e);
+EXTEND FORM employments FILTERS organizationAllowed(organization(e));
+EXTEND FORM employmentAssignments
+    FILTERS organizationAllowed(organization(employment(a)));
+EXTEND FORM personnelEvents
+    FILTERS organizationAllowed(organization(eventEmployment(e)));
+EXTEND FORM leaveEntitlements
+    FILTERS organizationAllowed(organization(employment(entitlementAssignment(e))));
+EXTEND FORM leaveDocuments
+    FILTERS organizationAllowed(organization(employment(leaveAssignment(l))));
+
+EXTEND FORM workSchedules FILTERS organizationAllowed(scheduleOrganization(s));
+EXTEND FORM shiftTemplates FILTERS organizationAllowed(scheduleOrganization(shiftSchedule(s)));
+EXTEND FORM scheduleCycleDays FILTERS organizationAllowed(scheduleOrganization(cycleSchedule(d)));
+EXTEND FORM employeeScheduleAssignments FILTERS
+    organizationAllowed(organization(employment(scheduleEmploymentAssignment(a))));
+EXTEND FORM timesheets FILTERS organizationAllowed(timesheetOrganization(t));
+EXTEND FORM timesheetLines FILTERS
+    organizationAllowed(timesheetOrganization(lineTimesheet(l)));
+
+EXTEND FORM payrollRuns FILTERS organizationAllowed(payrollOrganization(r));
+EXTEND FORM payrollTimeSummaries FILTERS
+    organizationAllowed(payrollOrganization(summaryPayrollRun(s)));
+EXTEND FORM payrollInputs FILTERS organizationAllowed(payrollOrganization(inputPayrollRun(i)));
+EXTEND FORM payrollLines FILTERS organizationAllowed(payrollOrganization(linePayrollRun(l)));
+EXTEND FORM averageEarningsDocuments FILTERS
+    organizationAllowed(organization(employment(averageAssignment(d))));
+EXTEND FORM averageEarningsBaseLines FILTERS
+    organizationAllowed(organization(employment(averageAssignment(baseAverageDocument(l)))));
+EXTEND FORM payrollRecalculations FILTERS
+    organizationAllowed(payrollOrganization(recalculationTargetRun(d)));
+EXTEND FORM payrollRecalculationLines FILTERS organizationAllowed(payrollOrganization(
+    recalculationTargetRun(lineRecalculation(l))));
+EXTEND FORM interimPayments FILTERS
+    organizationAllowed(organization(employment(interimPaymentAssignment(p))));
+EXTEND FORM sickLeaveDocuments FILTERS
+    organizationAllowed(organization(employment(sickLeaveAssignment(d))));
+EXTEND FORM sickLeaveBenefitLines FILTERS
+    organizationAllowed(organization(employment(sickLeaveAssignment(sickBenefitDocument(l)))));
+
+EXTEND FORM socialPaymentProfiles FILTERS organizationAllowed(socialProfileOrganization(p));
+EXTEND FORM socialPaymentDocuments FILTERS
+    organizationAllowed(payrollOrganization(socialPaymentPayrollRun(d)));
+EXTEND FORM socialPaymentLines FILTERS
+    organizationAllowed(payrollOrganization(socialPaymentPayrollRun(socialPaymentDocument(l))));
+EXTEND FORM employeeTaxProfiles FILTERS organizationAllowed(taxProfileOrganization(p));
+EXTEND FORM organizationTaxProfiles FILTERS
+    organizationAllowed(organizationTaxProfileOrganization(p));
+EXTEND FORM taxCalculationDocuments FILTERS
+    organizationAllowed(payrollOrganization(taxCalculationPayrollRun(d)));
+EXTEND FORM taxCalculationLines FILTERS organizationAllowed(payrollOrganization(
+    taxCalculationPayrollRun(taxCalculationDocument(l))));
+EXTEND FORM enforcementOrders FILTERS organizationAllowed(enforcementOrganization(o));
+EXTEND FORM enforcementCalculationDocuments FILTERS organizationAllowed(payrollOrganization(
+    taxCalculationPayrollRun(enforcementTaxCalculation(d))));
+EXTEND FORM enforcementCalculationLines FILTERS organizationAllowed(payrollOrganization(
+    taxCalculationPayrollRun(enforcementTaxCalculation(enforcementCalculationDocument(l)))));
+
+EXTEND FORM civilContracts FILTERS organizationAllowed(civilContractOrganization(c));
+EXTEND FORM civilContractActs FILTERS
+    organizationAllowed(civilContractOrganization(civilActContract(a)));
+EXTEND FORM civilLiabilityDocuments FILTERS organizationAllowed(civilContractOrganization(
+    civilActContract(civilLiabilityAct(d))));
+EXTEND FORM civilLiabilityLines FILTERS organizationAllowed(civilContractOrganization(
+    civilActContract(civilLiabilityAct(civilLiabilityLineDocument(l)))));
+
+EXTEND FORM payrollSettlements FILTERS
+    organizationAllowed(payrollOrganization(settlementPayrollRun(l)));
+EXTEND FORM paymentStatements FILTERS
+    organizationAllowed(payrollOrganization(paymentStatementPayrollRun(d)));
+EXTEND FORM paymentStatementLines FILTERS organizationAllowed(payrollOrganization(
+    paymentStatementPayrollRun(paymentLineStatement(l))));
+EXTEND FORM salaryBankRegisters FILTERS organizationAllowed(bankRegisterOrganization(r));
+EXTEND FORM salaryBankRegisterLines FILTERS
+    organizationAllowed(bankRegisterOrganization(bankRegisterLineRegister(l)));
+EXTEND FORM payrollLiabilityDocuments FILTERS
+    organizationAllowed(payrollOrganization(liabilityPayrollRun(d)));
+EXTEND FORM payrollLiabilityLines FILTERS organizationAllowed(payrollOrganization(
+    liabilityPayrollRun(liabilityLineDocument(l))));
+EXTEND FORM socialTransferRegisters FILTERS organizationAllowed(socialTransferOrganization(r));
+EXTEND FORM socialTransferRegisterLines FILTERS
+    organizationAllowed(socialTransferOrganization(socialTransferLineRegister(line)));
+
+EXTEND FORM form200Declarations FILTERS organizationAllowed(form200Organization(d));
+EXTEND FORM form200MonthLines FILTERS
+    organizationAllowed(form200Organization(form200LineDeclaration(line)));
+EXTEND FORM form20005Lines FILTERS
+    organizationAllowed(form200Organization(form20005LineDeclaration(line)));

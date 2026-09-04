@@ -1,0 +1,37 @@
+MODULE AccessWorkflowTest;
+
+REQUIRE SickLeaveWorkflowTest;
+NAMESPACE ZUPKZ;
+
+accessWorkflowTest() {
+    loadZupRoles();
+    NEW assignedOrg = Organization {
+        bin(assignedOrg) <- '333333333333';
+        NEW hiddenOrg = Organization {
+            bin(hiddenOrg) <- '222222222222';
+            NEW user = CustomUser {
+                login(user) <- 'zup-access-test';
+                in(user, userRoleSID('zup_hr')) <- TRUE;
+                NEW access = UserOrganizationAccess {
+                    accessUser(access) <- user;
+                    accessOrganization(access) <- assignedOrg;
+                    accessActive(access) <- TRUE;
+
+                    EXPORT JSON FROM
+                        allRolesCreated = userRoleSID('zup_hr') AND
+                            userRoleSID('zup_timekeeper') AND userRoleSID('zup_payroll') AND
+                            userRoleSID('zup_chief_accountant') AND userRoleSID('zup_auditor'),
+                        userHasHrRole = has(user, userRoleSID('zup_hr')),
+                        assignedOrganizationAllowed = userOrganizationAllowed(user, assignedOrg),
+                        hiddenOrganizationRejected = NOT userOrganizationAllowed(user, hiddenOrg),
+                        hrPersonnelPermitted = dataPermission(userRoleSID('zup_hr'),
+                            navigatorElementCanonicalName('ZUPKZ.personnel')) == Permission.permit,
+                        hrPayrollForbidden = dataPermission(userRoleSID('zup_hr'),
+                            navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.forbid,
+                        auditorReadOnly = dataPermissionChange(userRoleSID('zup_auditor'),
+                            propertyGroup('System_root')) == Permission.forbid;
+                }
+            }
+        }
+    }
+}

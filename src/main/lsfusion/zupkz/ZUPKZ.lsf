@@ -8,7 +8,8 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         PayrollCivilContract,
         PayrollEnforcement, PayrollSettlement, PayrollPayments,
         PayrollCivilContractPayments,
-        TaxesKZSocialTransferRegisters, ReportsKZForm200, ReportsKZForm20005;
+        TaxesKZSocialTransferRegisters, ReportsKZForm200, ReportsKZForm20005,
+        KZAccessControl;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -93,5 +94,9 @@ NAVIGATOR {
         NEW form200Declarations;
         NEW form200MonthLines;
         NEW form20005Lines;
+    }
+
+    NEW FOLDER accessAdministration 'Доступ' WINDOW toolbar {
+        NEW userOrganizationAccesses;
     }
 }

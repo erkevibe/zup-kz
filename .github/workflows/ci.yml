@@ -103,6 +103,12 @@ jobs:
 
               python3 tests/assert_sick_leave_workflow.py sick-leave-workflow-result.json
 
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.accessWorkflowTest' \
+                --output access-workflow-result.json
+
+              python3 tests/assert_access_workflow.py access-workflow-result.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT
