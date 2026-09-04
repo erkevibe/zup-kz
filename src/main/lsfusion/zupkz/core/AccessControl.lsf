@@ -1,7 +1,7 @@
 MODULE KZAccessControl;
 
 REQUIRE Security, KZOrganization, HRDepartment, HRPosition, HRStaffSchedule,
-        HREmployment, TimeWorkSchedule, TimeTimesheet, HRLeave,
+        HREmployment, TimeWorkSchedule, TimeTimesheet, HRLeave, HRPrintForms,
         PayrollSickLeave, PayrollInterimPayment, PayrollRecalculation,
         TaxesKZSocialPayments, TaxesKZIncomeTax, PayrollSettlement,
         PayrollPayments, PayrollEnforcement, PayrollCivilContract,
@@ -117,10 +117,13 @@ EXTEND FORM employmentAssignments
     FILTERS organizationAllowed(organization(employment(a)));
 EXTEND FORM personnelEvents
     FILTERS organizationAllowed(organization(eventEmployment(e)));
+EXTEND FORM personnelEventOrder
+    FILTERS organizationAllowed(personnelEventOrganization(e));
 EXTEND FORM leaveEntitlements
     FILTERS organizationAllowed(organization(employment(entitlementAssignment(e))));
 EXTEND FORM leaveDocuments
     FILTERS organizationAllowed(organization(employment(leaveAssignment(l))));
+EXTEND FORM leaveOrder FILTERS organizationAllowed(leaveOrderOrganization(l));
 
 EXTEND FORM workSchedules FILTERS organizationAllowed(scheduleOrganization(s));
 EXTEND FORM shiftTemplates FILTERS organizationAllowed(scheduleOrganization(shiftSchedule(s)));

@@ -109,6 +109,12 @@ jobs:
 
               python3 tests/assert_access_workflow.py access-workflow-result.json
 
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.printWorkflowTest' \
+                --output print-workflow-result.json
+
+              python3 tests/assert_print_workflow.py print-workflow-result.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT

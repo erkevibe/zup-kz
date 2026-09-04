@@ -3,7 +3,7 @@ MODULE ZUPKZ;
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
-        PayrollRecalculation, HRLeave, PayrollSickLeave, PayrollInterimPayment,
+        PayrollRecalculation, HRLeave, HRPrintForms, PayrollSickLeave, PayrollInterimPayment,
         PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax,
         PayrollCivilContract,
         PayrollEnforcement, PayrollSettlement, PayrollPayments,

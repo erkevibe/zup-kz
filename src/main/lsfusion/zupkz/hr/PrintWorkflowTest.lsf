@@ -1,0 +1,83 @@
+MODULE PrintWorkflowTest;
+
+REQUIRE AccessWorkflowTest, HRPrintForms;
+NAMESPACE ZUPKZ;
+
+printWorkflowTest() {
+    LOCAL eventPdf = FILE();
+    LOCAL leaveDocx = FILE();
+    NEW org = Organization {
+        name(org) <- 'Тестовая организация';
+        bin(org) <- '222222222222';
+        NEW department = Department {
+            name(department) <- 'Отдел кадров';
+            organization(department) <- org;
+            NEW position = Position {
+                name(position) <- 'Специалист';
+                organization(position) <- org;
+                NEW staff = StaffPosition {
+                    organization(staff) <- org;
+                    department(staff) <- department;
+                    position(staff) <- position;
+                    NEW worker = Employee {
+                        iin(worker) <- '920202300002';
+                        lastName(worker) <- 'Печатный';
+                        firstName(worker) <- 'Тест';
+                        middleName(worker) <- 'Тестович';
+                        NEW contract = Employment {
+                            employee(contract) <- worker;
+                            organization(contract) <- org;
+                            NEW assignment = EmploymentAssignment {
+                                employment(assignment) <- contract;
+                                staffPosition(assignment) <- staff;
+                                assignmentFrom(assignment) <- 2026_01_01;
+                                NEW hire = PersonnelEvent {
+                                    eventKind(hire) <- PersonnelEventKind.hire;
+                                    eventEmployment(hire) <- contract;
+                                    eventStaffPosition(hire) <- staff;
+                                    eventStatus(hire) <- PersonnelEventStatus.posted;
+                                    NEW transfer = PersonnelEvent {
+                                        eventKind(transfer) <- PersonnelEventKind.transfer;
+                                        eventEmployment(transfer) <- contract;
+                                        eventStaffPosition(transfer) <- staff;
+                                        eventStatus(transfer) <- PersonnelEventStatus.posted;
+                                        NEW termination = PersonnelEvent {
+                                            eventKind(termination) <- PersonnelEventKind.termination;
+                                            eventEmployment(termination) <- contract;
+                                            eventStatus(termination) <- PersonnelEventStatus.posted;
+                                            NEW leave = LeaveDocument {
+                                                leaveAssignment(leave) <- assignment;
+                                                leaveStatus(leave) <- LeaveStatus.approved;
+
+                                                PRINT personnelEventOrder OBJECTS e = hire PDF TO eventPdf;
+                                                PRINT leaveOrder OBJECTS l = leave DOCX TO leaveDocx;
+
+                                                EXPORT JSON FROM
+                                                    hireTitleRu = personnelEventTitleRu(hire),
+                                                    hireTitleKz = personnelEventTitleKz(hire),
+                                                    transferTitleKz = personnelEventTitleKz(transfer),
+                                                    terminationTitleKz = personnelEventTitleKz(termination),
+                                                    eventEmployeeName = personnelEventEmployeeName(hire),
+                                                    eventOrganizationMatches =
+                                                        personnelEventOrganization(hire) == org,
+                                                    eventPrintable = personnelEventPrintable(hire),
+                                                    leaveTitleRu = leaveOrderTitleRu(leave),
+                                                    leaveTitleKz = leaveOrderTitleKz(leave),
+                                                    leaveEmployeeName = leaveOrderEmployeeName(leave),
+                                                    leaveDepartmentName = leaveOrderDepartment(leave),
+                                                    leavePositionName = leaveOrderPosition(leave),
+                                                    leavePrintable = leaveOrderPrintable(leave),
+                                                    eventPdfGenerated = TRUE IF eventPdf(),
+                                                    leaveDocxGenerated = TRUE IF leaveDocx();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,134 @@
+MODULE HRPrintForms;
+
+REQUIRE HRLeave;
+NAMESPACE ZUPKZ;
+
+personnelEventPrintable(PersonnelEvent e) =
+    eventStatus(e) == PersonnelEventStatus.posted;
+personnelEventTitleRu 'Документ / Құжат (RU)' (PersonnelEvent e) = CASE
+    WHEN eventKind(e) == PersonnelEventKind.hire THEN 'ПРИКАЗ О ПРИЁМЕ НА РАБОТУ'
+    WHEN eventKind(e) == PersonnelEventKind.transfer THEN 'ПРИКАЗ О ПЕРЕВОДЕ НА ДРУГУЮ РАБОТУ'
+    WHEN eventKind(e) == PersonnelEventKind.termination THEN 'ПРИКАЗ О РАСТОРЖЕНИИ ТРУДОВОГО ДОГОВОРА';
+personnelEventTitleKz 'Құжат / Документ (KZ)' (PersonnelEvent e) = CASE
+    WHEN eventKind(e) == PersonnelEventKind.hire THEN 'ЖҰМЫСҚА ҚАБЫЛДАУ ТУРАЛЫ БҰЙРЫҚ'
+    WHEN eventKind(e) == PersonnelEventKind.transfer THEN 'БАСҚА ЖҰМЫСҚА АУЫСТЫРУ ТУРАЛЫ БҰЙРЫҚ'
+    WHEN eventKind(e) == PersonnelEventKind.termination THEN 'ЕҢБЕК ШАРТЫН БҰЗУ ТУРАЛЫ БҰЙРЫҚ';
+personnelEventOrganization 'Организация / Ұйым' (PersonnelEvent e) =
+    organization(eventEmployment(e));
+personnelEventBin 'БИН / БСН' (PersonnelEvent e) =
+    bin(personnelEventOrganization(e));
+personnelEventEmployee 'Работник / Қызметкер' (PersonnelEvent e) =
+    employee(eventEmployment(e));
+personnelEventEmployeeName 'Ф.И.О. / Т.А.Ә.' (PersonnelEvent e) =
+    lastName(personnelEventEmployee(e)) + ' ' + firstName(personnelEventEmployee(e)) +
+    (IF middleName(personnelEventEmployee(e)) THEN
+        ' ' + middleName(personnelEventEmployee(e)) ELSE '');
+personnelEventIin 'ИИН / ЖСН' (PersonnelEvent e) =
+    iin(personnelEventEmployee(e));
+personnelEventDepartment 'Подразделение / Бөлімше' (PersonnelEvent e) =
+    name(department(eventStaffPosition(e)));
+personnelEventPosition 'Должность / Лауазым' (PersonnelEvent e) =
+    name(position(eventStaffPosition(e)));
+personnelEventPreviousDepartment 'Прежнее подразделение / Бұрынғы бөлімше' (PersonnelEvent e) =
+    name(department(staffPosition(eventPreviousAssignment(e))));
+personnelEventPreviousPosition 'Прежняя должность / Бұрынғы лауазым' (PersonnelEvent e) =
+    name(position(staffPosition(eventPreviousAssignment(e))));
+personnelEventContractNumber 'Трудовой договор № / Еңбек шарты №' (PersonnelEvent e) =
+    contractNumber(eventEmployment(e));
+personnelEventContractDate 'Дата договора / Шарт күні' (PersonnelEvent e) =
+    contractDate(eventEmployment(e));
+personnelEventWorkConditions 'Условия труда / Еңбек жағдайлары' (PersonnelEvent e) =
+    workConditions(eventEmployment(e));
+
+FORM personnelEventOrder 'Кадровый приказ / Кадрлық бұйрық'
+    OBJECTS e = PersonnelEvent PANEL
+    PROPERTIES(e) personnelEventTitleRu, personnelEventTitleKz,
+                  personnelEventOrganization, personnelEventBin,
+                  orderNumber, orderDate, personnelEventEmployeeName,
+                  personnelEventIin, personnelEventPreviousDepartment,
+                  personnelEventPreviousPosition, personnelEventDepartment,
+                  personnelEventPosition, effectiveDate, eventFte, eventSalary,
+                  basis, personnelEventContractNumber, personnelEventContractDate,
+                  personnelEventWorkConditions
+;
+
+printPersonnelEventOrder 'Печать / Басып шығару' (PersonnelEvent e) {
+    IF NOT personnelEventPrintable(e) THEN
+        MESSAGE 'Печать доступна только для проведённого кадрового события';
+    ELSE
+        PRINT personnelEventOrder OBJECTS e = e;
+}
+
+printPersonnelEventOrderPdf 'PDF' (PersonnelEvent e) {
+    IF NOT personnelEventPrintable(e) THEN
+        MESSAGE 'PDF доступен только для проведённого кадрового события';
+    ELSE
+        PRINT personnelEventOrder OBJECTS e = e PDF;
+}
+
+printPersonnelEventOrderDocx 'DOCX' (PersonnelEvent e) {
+    IF NOT personnelEventPrintable(e) THEN
+        MESSAGE 'DOCX доступен только для проведённого кадрового события';
+    ELSE
+        PRINT personnelEventOrder OBJECTS e = e DOCX;
+}
+
+leaveOrderPrintable(LeaveDocument l) = leaveStatus(l) == LeaveStatus.approved;
+leaveOrderTitleRu 'Документ / Құжат (RU)' (LeaveDocument l) =
+    'ПРИКАЗ О ПРЕДОСТАВЛЕНИИ ОТПУСКА';
+leaveOrderTitleKz 'Құжат / Документ (KZ)' (LeaveDocument l) =
+    'ДЕМАЛЫС БЕРУ ТУРАЛЫ БҰЙРЫҚ';
+leaveOrderOrganization 'Организация / Ұйым' (LeaveDocument l) =
+    organization(employment(leaveAssignment(l)));
+leaveOrderBin 'БИН / БСН' (LeaveDocument l) = bin(leaveOrderOrganization(l));
+leaveOrderEmployee 'Работник / Қызметкер' (LeaveDocument l) =
+    employee(employment(leaveAssignment(l)));
+leaveOrderEmployeeName 'Ф.И.О. / Т.А.Ә.' (LeaveDocument l) =
+    lastName(leaveOrderEmployee(l)) + ' ' + firstName(leaveOrderEmployee(l)) +
+    (IF middleName(leaveOrderEmployee(l)) THEN ' ' + middleName(leaveOrderEmployee(l)) ELSE '');
+leaveOrderIin 'ИИН / ЖСН' (LeaveDocument l) = iin(leaveOrderEmployee(l));
+leaveOrderDepartment 'Подразделение / Бөлімше' (LeaveDocument l) =
+    name(department(staffPosition(leaveAssignment(l))));
+leaveOrderPosition 'Должность / Лауазым' (LeaveDocument l) =
+    name(position(staffPosition(leaveAssignment(l))));
+
+FORM leaveOrder 'Приказ об отпуске / Демалыс туралы бұйрық'
+    OBJECTS l = LeaveDocument PANEL
+    PROPERTIES(l) leaveOrderTitleRu, leaveOrderTitleKz,
+                  leaveOrderOrganization, leaveOrderBin, leaveNumber, leaveOrderDate,
+                  leaveOrderEmployeeName, leaveOrderIin, leaveOrderDepartment,
+                  leaveOrderPosition, leaveKind, leaveDateFrom, leaveDateTo,
+                  leaveCalendarDays, leaveChargedDays, leaveBasis
+;
+
+printLeaveOrder 'Печать / Басып шығару' (LeaveDocument l) {
+    IF NOT leaveOrderPrintable(l) THEN
+        MESSAGE 'Печать доступна только для утверждённого отпуска';
+    ELSE
+        PRINT leaveOrder OBJECTS l = l;
+}
+
+printLeaveOrderPdf 'PDF' (LeaveDocument l) {
+    IF NOT leaveOrderPrintable(l) THEN
+        MESSAGE 'PDF доступен только для утверждённого отпуска';
+    ELSE
+        PRINT leaveOrder OBJECTS l = l PDF;
+}
+
+printLeaveOrderDocx 'DOCX' (LeaveDocument l) {
+    IF NOT leaveOrderPrintable(l) THEN
+        MESSAGE 'DOCX доступен только для утверждённого отпуска';
+    ELSE
+        PRINT leaveOrder OBJECTS l = l DOCX;
+}
+
+EXTEND FORM personnelEvents
+    PROPERTIES(e) printPersonnelEventOrder TOOLBAR,
+                  printPersonnelEventOrderPdf TOOLBAR,
+                  printPersonnelEventOrderDocx TOOLBAR
+;
+
+EXTEND FORM leaveDocuments
+    PROPERTIES(l) printLeaveOrder TOOLBAR, printLeaveOrderPdf TOOLBAR,
+                  printLeaveOrderDocx TOOLBAR
+;
