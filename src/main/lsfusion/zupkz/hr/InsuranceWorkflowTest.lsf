@@ -1,0 +1,161 @@
+MODULE InsuranceWorkflowTest;
+
+REQUIRE ArchiveWorkflowTest, HRAccidentInsurance;
+NAMESPACE ZUPKZ;
+
+insuranceWorkflowTest() {
+    LOCAL accidentPdf = FILE();
+    NEW risk = OccupationalRiskClass {
+        riskClassCode(risk) <- 'TEST-RISK-1';
+        riskClassName(risk) <- 'Тестовый класс риска';
+        riskClassActive(risk) <- TRUE;
+        NEW rate = AccidentInsuranceRate {
+            insuranceRateRiskClass(rate) <- risk;
+            insuranceRateValidFrom(rate) <- 2026_01_01;
+            insuranceRateValidTo(rate) <- 2026_12_31;
+            insuranceRatePercent(rate) <- 1.500000;
+            insuranceRateLegalBasis(rate) <- 'Тестовое датированное правило';
+            NEW org = Organization {
+                name(org) <- 'Страхование Тест';
+                bin(org) <- '141414141414';
+                NEW policy = AccidentInsurancePolicy {
+                    insurancePolicyOrganization(policy) <- org;
+                    insurancePolicyInsurer(policy) <- 'Тестовая страховая компания';
+                    insurancePolicyInsurerBin(policy) <- '151515151515';
+                    insurancePolicyNumber(policy) <- 'POLICY-2026-1';
+                    insurancePolicyDate(policy) <- 2025_12_20;
+                    insurancePolicyValidFrom(policy) <- 2026_01_01;
+                    insurancePolicyValidTo(policy) <- 2026_12_31;
+                    insurancePolicyRiskClass(policy) <- risk;
+                    insurancePolicyPayrollBase(policy) <- 10000000.00;
+                    insurancePolicyStatus(policy) <- AccidentInsurancePolicyStatus.draft;
+                    activateInsurancePolicy(policy);
+                    NEW worker = Employee {
+                        iin(worker) <- '940404300014';
+                        lastName(worker) <- 'Страховой';
+                        firstName(worker) <- 'Тест';
+                        NEW contract = Employment {
+                            employee(contract) <- worker;
+                            organization(contract) <- org;
+                            hireDate(contract) <- 2026_01_01;
+                            contractNumber(contract) <- 'INS-CONTRACT-1';
+                            contractDate(contract) <- 2025_12_20;
+                            NEW assignment = EmploymentAssignment {
+                                employment(assignment) <- contract;
+                                assignmentFrom(assignment) <- 2026_01_01;
+                                assignmentSalary(assignment) <- 300000.00;
+                                NEW accident = WorkAccident {
+                                    workAccidentOrganization(accident) <- org;
+                                    workAccidentEmployee(accident) <- worker;
+                                    workAccidentAssignment(accident) <- assignment;
+                                    workAccidentNumber(accident) <- 'ACCIDENT-1';
+                                    workAccidentDate(accident) <- 2026_04_10;
+                                    workAccidentTime(accident) <- '10:30';
+                                    workAccidentPlace(accident) <- 'Производственный участок';
+                                    workAccidentDescription(accident) <-
+                                        'Тестовое повреждение здоровья при выполнении работы';
+                                    workAccidentSeverity(accident) <- WorkAccidentSeverity.minor;
+                                    workAccidentStatus(accident) <- WorkAccidentStatus.draft;
+                                    registerWorkAccident(accident);
+                                    workAccidentInsurerNotifiedDate(accident) <- 2026_04_10;
+                                    workAccidentInvestigationDueDate(accident) <- 2026_04_20;
+                                    workAccidentCommissionOrder(accident) <- 'COMMISSION-1';
+                                    workAccidentCommissionChair(accident) <- 'Председатель Тест';
+                                    workAccidentOutcome(accident) <- WorkAccidentOutcome.workRelated;
+                                    workAccidentConclusion(accident) <-
+                                        'Случай связан с трудовой деятельностью';
+                                    workAccidentActNumber(accident) <- 'ACT-1';
+                                    workAccidentActDate(accident) <- 2026_04_18;
+                                    workAccidentLostWorkDays(accident) <- 5;
+                                    completeWorkAccidentInvestigation(accident);
+                                    NEW claim = AccidentInsuranceClaim {
+                                        insuranceClaimAccident(claim) <- accident;
+                                        insuranceClaimNumber(claim) <- 'CLAIM-1';
+                                        insuranceClaimDate(claim) <- 2026_04_20;
+                                        insuranceClaimAmount(claim) <- 500000.00;
+                                        insuranceClaimStatus(claim) <-
+                                            AccidentInsuranceClaimStatus.draft;
+                                        submitInsuranceClaim(claim);
+                                        insuranceClaimAcceptedAmount(claim) <- 450000.00;
+                                        insuranceClaimInsurerReference(claim) <- 'INSURER-DECISION-1';
+                                        acceptInsuranceClaim(claim);
+                                        insuranceClaimPaidAmount(claim) <- 450000.00;
+                                        insuranceClaimPaidDate(claim) <- 2026_04_25;
+                                        payInsuranceClaim(claim);
+                                        closeWorkAccident(accident);
+
+                                        NEW uninsuredOrg = Organization {
+                                            name(uninsuredOrg) <- 'Без Полиса Тест';
+                                            bin(uninsuredOrg) <- '161616161616';
+                                            NEW uninsuredWorker = Employee {
+                                                iin(uninsuredWorker) <- '950505300015';
+                                                lastName(uninsuredWorker) <- 'Незастрахованный';
+                                                firstName(uninsuredWorker) <- 'Тест';
+                                                NEW uninsuredContract = Employment {
+                                                    employee(uninsuredContract) <- uninsuredWorker;
+                                                    organization(uninsuredContract) <- uninsuredOrg;
+                                                    hireDate(uninsuredContract) <- 2026_01_01;
+                                                    NEW uninsuredAssignment = EmploymentAssignment {
+                                                        employment(uninsuredAssignment) <- uninsuredContract;
+                                                        assignmentFrom(uninsuredAssignment) <- 2026_01_01;
+                                                        NEW uninsuredAccident = WorkAccident {
+                                                            workAccidentOrganization(uninsuredAccident) <-
+                                                                uninsuredOrg;
+                                                            workAccidentEmployee(uninsuredAccident) <-
+                                                                uninsuredWorker;
+                                                            workAccidentAssignment(uninsuredAccident) <-
+                                                                uninsuredAssignment;
+                                                            workAccidentNumber(uninsuredAccident) <-
+                                                                'ACCIDENT-NO-POLICY';
+                                                            workAccidentDate(uninsuredAccident) <- 2026_05_05;
+                                                            workAccidentPlace(uninsuredAccident) <- 'Склад';
+                                                            workAccidentDescription(uninsuredAccident) <-
+                                                                'Происшествие при отсутствии покрытия';
+                                                            workAccidentSeverity(uninsuredAccident) <-
+                                                                WorkAccidentSeverity.minor;
+                                                            workAccidentStatus(uninsuredAccident) <-
+                                                                WorkAccidentStatus.draft;
+                                                            registerWorkAccident(uninsuredAccident);
+
+                                                            PRINT workAccidentAct OBJECTS a = accident
+                                                                PDF TO accidentPdf;
+
+                                                            EXPORT JSON FROM
+                                                                rateSnapshot =
+                                                                    insurancePolicyRatePercent(policy),
+                                                                premium = insurancePolicyPremium(policy),
+                                                                policyActive = insurancePolicyStatus(policy) ==
+                                                                    AccidentInsurancePolicyStatus.active,
+                                                                accidentCovered = workAccidentPolicy(accident) ==
+                                                                    policy,
+                                                                accidentClosed = workAccidentStatus(accident) ==
+                                                                    WorkAccidentStatus.closed,
+                                                                accidentWorkRelated =
+                                                                    workAccidentOutcome(accident) ==
+                                                                        WorkAccidentOutcome.workRelated,
+                                                                claimPaid = insuranceClaimStatus(claim) ==
+                                                                    AccidentInsuranceClaimStatus.paid,
+                                                                acceptedAmount =
+                                                                    insuranceClaimAcceptedAmount(claim),
+                                                                paidAmount = insuranceClaimPaidAmount(claim),
+                                                                uninsuredRegistered =
+                                                                    workAccidentStatus(uninsuredAccident) ==
+                                                                        WorkAccidentStatus.investigating,
+                                                                uninsuredFlag =
+                                                                    workAccidentUninsured(uninsuredAccident),
+                                                                accidentPdfGenerated = TRUE IF accidentPdf();
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

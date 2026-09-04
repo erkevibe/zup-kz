@@ -4,7 +4,7 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, HREmployeeCard, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
         PayrollRecalculation, HRLeave, HRVacationSchedule, HRBusinessTrip, HRApproval,
-        HRArchive, HRPrintForms,
+        HRArchive, HRAccidentInsurance, HRPrintForms,
         PayrollSickLeave, PayrollInterimPayment,
         PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax,
         PayrollCivilContract,
@@ -30,6 +30,8 @@ NAVIGATOR {
         NEW personnelNoticeKinds;
         NEW archiveDocumentKinds;
         NEW archiveRetentionRules;
+        NEW occupationalRiskClasses;
+        NEW accidentInsuranceRates;
     }
 
     NEW FOLDER personnel 'Кадровый учёт' WINDOW toolbar {
@@ -47,6 +49,9 @@ NAVIGATOR {
         NEW myPersonnelNotifications;
         NEW archiveCases;
         NEW archiveDocuments;
+        NEW accidentInsurancePolicies;
+        NEW workAccidents;
+        NEW accidentInsuranceClaims;
         NEW sickLeaveDocuments;
     }
 

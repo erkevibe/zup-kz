@@ -2,7 +2,8 @@ MODULE KZAccessControl;
 
 REQUIRE Security, KZOrganization, HRDepartment, HRPosition, HRStaffSchedule,
         HREmployment, HREmployeeCard, TimeWorkSchedule, TimeTimesheet, HRLeave,
-        HRVacationSchedule, HRBusinessTrip, HRApproval, HRArchive, HRPrintForms,
+        HRVacationSchedule, HRBusinessTrip, HRApproval, HRArchive,
+        HRAccidentInsurance, HRPrintForms,
         PayrollSickLeave, PayrollInterimPayment, PayrollRecalculation,
         TaxesKZSocialPayments, TaxesKZIncomeTax, PayrollSettlement,
         PayrollPayments, PayrollEnforcement, PayrollCivilContract,
@@ -140,6 +141,12 @@ EXTEND FORM archiveCases FILTERS organizationAllowed(archiveCaseOrganization(c))
 EXTEND FORM archiveDocuments FILTERS
     organizationAllowed(archiveCaseOrganization(archiveDocumentCase(d)));
 EXTEND FORM archiveCaseInventory FILTERS organizationAllowed(archiveCaseOrganization(c));
+EXTEND FORM accidentInsurancePolicies
+    FILTERS organizationAllowed(insurancePolicyOrganization(p));
+EXTEND FORM workAccidents FILTERS organizationAllowed(workAccidentOrganization(a));
+EXTEND FORM accidentInsuranceClaims FILTERS
+    organizationAllowed(workAccidentOrganization(insuranceClaimAccident(c)));
+EXTEND FORM workAccidentAct FILTERS organizationAllowed(workAccidentOrganization(a));
 
 EXTEND FORM workSchedules FILTERS organizationAllowed(scheduleOrganization(s));
 EXTEND FORM shiftTemplates FILTERS organizationAllowed(scheduleOrganization(shiftSchedule(s)));

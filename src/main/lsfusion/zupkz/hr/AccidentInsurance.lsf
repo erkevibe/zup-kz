@@ -1,0 +1,467 @@
+MODULE HRAccidentInsurance;
+
+REQUIRE HREmployment;
+NAMESPACE ZUPKZ;
+
+// Тариф не зашивается в код: правило выбирается на дату начала полиса,
+// а значение фиксируется в договоре для воспроизводимости расчёта.
+CLASS OccupationalRiskClass 'Класс профессионального риска';
+
+riskClassCode 'Код' = DATA STRING[20] (OccupationalRiskClass);
+riskClassName 'Наименование' = DATA STRING[200] (OccupationalRiskClass);
+riskClassActive 'Используется' = DATA BOOLEAN (OccupationalRiskClass);
+
+riskClassCodeCount(STRING[20] code) = GROUP SUM 1 IF
+    riskClassCode(OccupationalRiskClass r) == code;
+CONSTRAINT riskClassCodeCount(riskClassCode(OccupationalRiskClass r)) > 1
+    MESSAGE 'Код класса профессионального риска должен быть уникальным';
+
+CLASS AccidentInsuranceRate 'Тариф страхования от несчастных случаев';
+
+insuranceRateRiskClass 'Класс риска' = DATA OccupationalRiskClass (AccidentInsuranceRate);
+insuranceRateValidFrom 'Действует с' = DATA DATE (AccidentInsuranceRate);
+insuranceRateValidTo 'Действует по' = DATA DATE (AccidentInsuranceRate);
+insuranceRatePercent 'Тариф, %' = DATA NUMERIC[8,6] (AccidentInsuranceRate);
+insuranceRateLegalBasis 'Правовое основание' = DATA STRING[300] (AccidentInsuranceRate);
+
+CONSTRAINT insuranceRateValidTo(AccidentInsuranceRate r) < insuranceRateValidFrom(r)
+    MESSAGE 'Окончание действия тарифа не может быть раньше начала';
+CONSTRAINT insuranceRatePercent(AccidentInsuranceRate r) <= 0.000000
+    MESSAGE 'Тариф страхования должен быть положительным';
+overlappingInsuranceRateCount(AccidentInsuranceRate r) = GROUP SUM 1 IF
+    insuranceRateRiskClass(AccidentInsuranceRate other) == insuranceRateRiskClass(r) AND
+    insuranceRateValidFrom(other) <=
+        (IF insuranceRateValidTo(r) THEN insuranceRateValidTo(r) ELSE 9999_12_31) AND
+    (IF insuranceRateValidTo(other) THEN insuranceRateValidTo(other) ELSE 9999_12_31) >=
+        insuranceRateValidFrom(r);
+CONSTRAINT insuranceRateRiskClass(AccidentInsuranceRate r) AND insuranceRateValidFrom(r) AND
+           overlappingInsuranceRateCount(r) > 1
+    MESSAGE 'Периоды тарифов одного класса риска не должны пересекаться';
+
+accidentInsuranceRateOn(OccupationalRiskClass risk, DATE date) =
+    GROUP LAST AccidentInsuranceRate r IF insuranceRateRiskClass(r) == risk AND
+        insuranceRateValidFrom(r) <= date AND
+        (NOT insuranceRateValidTo(r) OR insuranceRateValidTo(r) >= date)
+    ORDER insuranceRateValidFrom(r), r;
+
+CLASS AccidentInsurancePolicyStatus 'Статус договора страхования' {
+    draft 'Черновик',
+    active 'Действует',
+    cancelled 'Прекращён'
+}
+
+CLASS AccidentInsurancePolicy 'Договор страхования работников';
+
+insurancePolicyOrganization 'Организация' = DATA Organization (AccidentInsurancePolicy);
+insurancePolicyInsurer 'Страховая организация' = DATA STRING[200] (AccidentInsurancePolicy);
+insurancePolicyInsurerBin 'БИН страховщика' = DATA STRING[12] (AccidentInsurancePolicy);
+insurancePolicyNumber 'Номер договора' = DATA STRING[80] (AccidentInsurancePolicy);
+insurancePolicyDate 'Дата договора' = DATA DATE (AccidentInsurancePolicy);
+insurancePolicyValidFrom 'Действует с' = DATA DATE (AccidentInsurancePolicy);
+insurancePolicyValidTo 'Действует по' = DATA DATE (AccidentInsurancePolicy);
+insurancePolicyRiskClass 'Класс риска' = DATA OccupationalRiskClass (AccidentInsurancePolicy);
+insurancePolicyPayrollBase 'Страховая база' = DATA NUMERIC[16,2] (AccidentInsurancePolicy);
+insurancePolicyRateRule 'Применённый тариф' = DATA AccidentInsuranceRate (AccidentInsurancePolicy);
+insurancePolicyRatePercent 'Снимок тарифа, %' = DATA NUMERIC[8,6] (AccidentInsurancePolicy);
+insurancePolicyPremium 'Страховая премия' = DATA NUMERIC[16,2] (AccidentInsurancePolicy);
+insurancePolicyStatus 'Статус' = DATA AccidentInsurancePolicyStatus (AccidentInsurancePolicy);
+insurancePolicyActivatedAt 'Введён в действие' = DATA DATETIME (AccidentInsurancePolicy);
+insurancePolicyCancelledAt 'Прекращён' = DATA DATETIME (AccidentInsurancePolicy);
+
+CONSTRAINT insurancePolicyValidTo(AccidentInsurancePolicy p) < insurancePolicyValidFrom(p)
+    MESSAGE 'Окончание договора не может быть раньше начала';
+CONSTRAINT insurancePolicyPayrollBase(AccidentInsurancePolicy p) <= 0.00
+    MESSAGE 'Страховая база должна быть положительной';
+insurancePolicyKeyCount(Organization org, STRING[80] number) = GROUP SUM 1 IF
+    insurancePolicyOrganization(AccidentInsurancePolicy p) == org AND
+    insurancePolicyNumber(p) == number;
+CONSTRAINT insurancePolicyKeyCount(insurancePolicyOrganization(AccidentInsurancePolicy p),
+                                   insurancePolicyNumber(p)) > 1
+    MESSAGE 'Номер договора страхования должен быть уникальным в организации';
+overlappingActiveInsurancePolicyCount(AccidentInsurancePolicy p) = GROUP SUM 1 IF
+    insurancePolicyOrganization(AccidentInsurancePolicy other) == insurancePolicyOrganization(p) AND
+    insurancePolicyStatus(other) == AccidentInsurancePolicyStatus.active AND
+    insurancePolicyValidFrom(other) <= insurancePolicyValidTo(p) AND
+    insurancePolicyValidTo(other) >= insurancePolicyValidFrom(p);
+CONSTRAINT insurancePolicyStatus(AccidentInsurancePolicy p) == AccidentInsurancePolicyStatus.active AND
+           overlappingActiveInsurancePolicyCount(p) > 1
+    MESSAGE 'Периоды действующих договоров страхования одной организации не должны пересекаться';
+CONSTRAINT (CHANGED(insurancePolicyOrganization(AccidentInsurancePolicy p)) OR
+            CHANGED(insurancePolicyInsurer(p)) OR CHANGED(insurancePolicyInsurerBin(p)) OR
+            CHANGED(insurancePolicyNumber(p)) OR CHANGED(insurancePolicyDate(p)) OR
+            CHANGED(insurancePolicyValidFrom(p)) OR CHANGED(insurancePolicyValidTo(p)) OR
+            CHANGED(insurancePolicyRiskClass(p)) OR CHANGED(insurancePolicyPayrollBase(p))) AND
+           PREV(insurancePolicyStatus(p)) != AccidentInsurancePolicyStatus.draft
+    MESSAGE 'Нельзя изменить введённый в действие договор страхования';
+
+insurancePolicyOn(Organization org, DATE date) = GROUP LAST AccidentInsurancePolicy p IF
+    insurancePolicyOrganization(p) == org AND
+    insurancePolicyStatus(p) == AccidentInsurancePolicyStatus.active AND
+    insurancePolicyValidFrom(p) <= date AND insurancePolicyValidTo(p) >= date
+    ORDER insurancePolicyValidFrom(p), p;
+
+activateInsurancePolicy 'Ввести в действие' (AccidentInsurancePolicy p) {
+    IF insurancePolicyStatus(p) AND
+       insurancePolicyStatus(p) != AccidentInsurancePolicyStatus.draft THEN
+        MESSAGE 'Ввести в действие можно только черновик договора';
+    ELSE IF NOT insurancePolicyOrganization(p) OR NOT insurancePolicyInsurer(p) OR
+            NOT insurancePolicyNumber(p) OR NOT insurancePolicyDate(p) OR
+            NOT insurancePolicyValidFrom(p) OR NOT insurancePolicyValidTo(p) OR
+            NOT insurancePolicyRiskClass(p) OR NOT insurancePolicyPayrollBase(p) THEN
+        MESSAGE 'Заполните организацию, страховщика, реквизиты, период, класс риска и базу';
+    ELSE IF NOT accidentInsuranceRateOn(insurancePolicyRiskClass(p),
+                                        insurancePolicyValidFrom(p)) THEN
+        MESSAGE 'На дату начала договора не найден тариф для класса риска';
+    ELSE {
+        insurancePolicyRateRule(p) <- accidentInsuranceRateOn(
+            insurancePolicyRiskClass(p), insurancePolicyValidFrom(p));
+        insurancePolicyRatePercent(p) <- insuranceRatePercent(insurancePolicyRateRule(p));
+        insurancePolicyPremium(p) <- ROUND(insurancePolicyPayrollBase(p) *
+            insurancePolicyRatePercent(p) / 100.000000, 2);
+        insurancePolicyStatus(p) <- AccidentInsurancePolicyStatus.active;
+        insurancePolicyActivatedAt(p) <- currentDateTime();
+        APPLY;
+    }
+}
+
+cancelInsurancePolicy 'Прекратить' (AccidentInsurancePolicy p) {
+    IF insurancePolicyStatus(p) != AccidentInsurancePolicyStatus.active THEN
+        MESSAGE 'Прекратить можно только действующий договор';
+    ELSE {
+        insurancePolicyStatus(p) <- AccidentInsurancePolicyStatus.cancelled;
+        insurancePolicyCancelledAt(p) <- currentDateTime();
+        APPLY;
+    }
+}
+
+CLASS WorkAccidentSeverity 'Тяжесть происшествия' {
+    minor 'Лёгкий',
+    severe 'Тяжёлый',
+    group 'Групповой',
+    fatal 'Со смертельным исходом'
+}
+
+CLASS WorkAccidentOutcome 'Результат расследования' {
+    workRelated 'Связан с трудовой деятельностью',
+    notWorkRelated 'Не связан с трудовой деятельностью'
+}
+
+CLASS WorkAccidentStatus 'Статус происшествия' {
+    draft 'Черновик',
+    investigating 'Расследуется',
+    confirmed 'Страховой случай подтверждён',
+    notWorkRelated 'Не связан с трудовой деятельностью',
+    closed 'Закрыт'
+}
+
+CLASS WorkAccident 'Несчастный случай';
+
+workAccidentOrganization 'Организация' = DATA Organization (WorkAccident);
+workAccidentEmployee 'Пострадавший' = DATA Employee (WorkAccident);
+workAccidentAssignment 'Назначение' = DATA EmploymentAssignment (WorkAccident);
+workAccidentNumber 'Регистрационный номер' = DATA STRING[80] (WorkAccident);
+workAccidentDate 'Дата происшествия' = DATA DATE (WorkAccident);
+workAccidentTime 'Время' = DATA STRING[5] (WorkAccident);
+workAccidentPlace 'Место' = DATA STRING[250] (WorkAccident);
+workAccidentDescription 'Обстоятельства' = DATA STRING[1000] (WorkAccident);
+workAccidentSeverity 'Тяжесть' = DATA WorkAccidentSeverity (WorkAccident);
+workAccidentPolicy 'Договор страхования на дату события' = DATA AccidentInsurancePolicy (WorkAccident);
+workAccidentRegisteredAt 'Зарегистрирован' = DATA DATETIME (WorkAccident);
+workAccidentInsurerNotifiedDate 'Страховщик уведомлён' = DATA DATE (WorkAccident);
+workAccidentInvestigationDueDate 'Срок расследования' = DATA DATE (WorkAccident);
+workAccidentCommissionOrder 'Акт о создании комиссии' = DATA STRING[100] (WorkAccident);
+workAccidentCommissionChair 'Председатель комиссии' = DATA STRING[150] (WorkAccident);
+workAccidentOutcome 'Результат расследования' = DATA WorkAccidentOutcome (WorkAccident);
+workAccidentConclusion 'Заключение комиссии' = DATA STRING[1000] (WorkAccident);
+workAccidentActNumber 'Номер акта' = DATA STRING[80] (WorkAccident);
+workAccidentActDate 'Дата акта' = DATA DATE (WorkAccident);
+workAccidentLostWorkDays 'Дней нетрудоспособности' = DATA INTEGER (WorkAccident);
+workAccidentStatus 'Статус' = DATA WorkAccidentStatus (WorkAccident);
+workAccidentClosedAt 'Закрыт' = DATA DATETIME (WorkAccident);
+
+workAccidentUninsured 'Нет покрытия на дату события' (WorkAccident a) =
+    workAccidentStatus(a) != WorkAccidentStatus.draft AND NOT workAccidentPolicy(a);
+workAccidentInvestigationOverdue 'Расследование просрочено' (WorkAccident a) =
+    workAccidentStatus(a) == WorkAccidentStatus.investigating AND
+    workAccidentInvestigationDueDate(a) < currentDate();
+workAccidentKeyCount(Organization org, STRING[80] number) = GROUP SUM 1 IF
+    workAccidentOrganization(WorkAccident a) == org AND workAccidentNumber(a) == number;
+CONSTRAINT workAccidentKeyCount(workAccidentOrganization(WorkAccident a),
+                               workAccidentNumber(a)) > 1
+    MESSAGE 'Регистрационный номер происшествия должен быть уникальным в организации';
+CONSTRAINT workAccidentAssignment(WorkAccident a) AND
+           (organization(employment(workAccidentAssignment(a))) != workAccidentOrganization(a) OR
+            employee(employment(workAccidentAssignment(a))) != workAccidentEmployee(a))
+    MESSAGE 'Назначение должно принадлежать выбранным организации и работнику';
+CONSTRAINT workAccidentDate(WorkAccident a) AND workAccidentAssignment(a) AND
+           (workAccidentDate(a) < assignmentFrom(workAccidentAssignment(a)) OR
+            (assignmentTo(workAccidentAssignment(a)) AND
+             workAccidentDate(a) > assignmentTo(workAccidentAssignment(a))))
+    MESSAGE 'На дату происшествия назначение работника должно действовать';
+CONSTRAINT workAccidentLostWorkDays(WorkAccident a) < 0
+    MESSAGE 'Количество дней нетрудоспособности не может быть отрицательным';
+CONSTRAINT (CHANGED(workAccidentOrganization(WorkAccident a)) OR
+            CHANGED(workAccidentEmployee(a)) OR CHANGED(workAccidentAssignment(a)) OR
+            CHANGED(workAccidentNumber(a)) OR CHANGED(workAccidentDate(a)) OR
+            CHANGED(workAccidentTime(a)) OR CHANGED(workAccidentPlace(a)) OR
+            CHANGED(workAccidentDescription(a)) OR CHANGED(workAccidentSeverity(a))) AND
+           PREV(workAccidentStatus(a)) != WorkAccidentStatus.draft
+    MESSAGE 'Нельзя изменить зарегистрированное происшествие';
+CONSTRAINT (CHANGED(workAccidentInsurerNotifiedDate(WorkAccident a)) OR
+            CHANGED(workAccidentInvestigationDueDate(a)) OR
+            CHANGED(workAccidentCommissionOrder(a)) OR
+            CHANGED(workAccidentCommissionChair(a)) OR
+            CHANGED(workAccidentOutcome(a)) OR CHANGED(workAccidentConclusion(a)) OR
+            CHANGED(workAccidentActNumber(a)) OR CHANGED(workAccidentActDate(a)) OR
+            CHANGED(workAccidentLostWorkDays(a))) AND
+           PREV(workAccidentStatus(a)) != WorkAccidentStatus.investigating
+    MESSAGE 'Нельзя изменить завершённое расследование';
+
+registerWorkAccident 'Зарегистрировать происшествие' (WorkAccident a) {
+    IF workAccidentStatus(a) AND workAccidentStatus(a) != WorkAccidentStatus.draft THEN
+        MESSAGE 'Зарегистрировать можно только черновик';
+    ELSE IF NOT workAccidentOrganization(a) OR NOT workAccidentEmployee(a) OR
+            NOT workAccidentAssignment(a) OR NOT workAccidentNumber(a) OR
+            NOT workAccidentDate(a) OR NOT workAccidentPlace(a) OR
+            NOT workAccidentDescription(a) OR NOT workAccidentSeverity(a) THEN
+        MESSAGE 'Заполните организацию, работника, назначение и сведения о происшествии';
+    ELSE {
+        workAccidentPolicy(a) <- insurancePolicyOn(workAccidentOrganization(a),
+                                                   workAccidentDate(a));
+        workAccidentStatus(a) <- WorkAccidentStatus.investigating;
+        workAccidentRegisteredAt(a) <- currentDateTime();
+        APPLY;
+    }
+}
+
+completeWorkAccidentInvestigation 'Завершить расследование' (WorkAccident a) {
+    IF workAccidentStatus(a) != WorkAccidentStatus.investigating THEN
+        MESSAGE 'Завершить можно только начатое расследование';
+    ELSE IF NOT workAccidentOutcome(a) OR NOT workAccidentConclusion(a) OR
+            NOT workAccidentActNumber(a) OR NOT workAccidentActDate(a) OR
+            NOT workAccidentCommissionOrder(a) OR NOT workAccidentCommissionChair(a) THEN
+        MESSAGE 'Заполните комиссию, результат, заключение и акт расследования';
+    ELSE {
+        workAccidentStatus(a) <- IF workAccidentOutcome(a) == WorkAccidentOutcome.workRelated
+            THEN WorkAccidentStatus.confirmed ELSE WorkAccidentStatus.notWorkRelated;
+        APPLY;
+    }
+}
+
+CLASS AccidentInsuranceClaimStatus 'Статус страхового требования' {
+    draft 'Черновик',
+    submitted 'Передано страховщику',
+    accepted 'Признано',
+    rejected 'Отказано',
+    paid 'Выплачено'
+}
+
+CLASS AccidentInsuranceClaim 'Страховое требование';
+
+insuranceClaimAccident 'Несчастный случай' = DATA WorkAccident (AccidentInsuranceClaim);
+insuranceClaimPolicy 'Договор страхования' = DATA AccidentInsurancePolicy (AccidentInsuranceClaim);
+insuranceClaimNumber 'Номер требования' = DATA STRING[80] (AccidentInsuranceClaim);
+insuranceClaimDate 'Дата требования' = DATA DATE (AccidentInsuranceClaim);
+insuranceClaimAmount 'Заявленная сумма' = DATA NUMERIC[16,2] (AccidentInsuranceClaim);
+insuranceClaimAcceptedAmount 'Признанная сумма' = DATA NUMERIC[16,2] (AccidentInsuranceClaim);
+insuranceClaimPaidAmount 'Выплачено' = DATA NUMERIC[16,2] (AccidentInsuranceClaim);
+insuranceClaimInsurerReference 'Ссылка страховщика' = DATA STRING[100] (AccidentInsuranceClaim);
+insuranceClaimRejectionReason 'Причина отказа' = DATA STRING[500] (AccidentInsuranceClaim);
+insuranceClaimStatus 'Статус' = DATA AccidentInsuranceClaimStatus (AccidentInsuranceClaim);
+insuranceClaimSubmittedAt 'Передано' = DATA DATETIME (AccidentInsuranceClaim);
+insuranceClaimDecidedAt 'Решение' = DATA DATETIME (AccidentInsuranceClaim);
+insuranceClaimPaidDate 'Дата выплаты' = DATA DATE (AccidentInsuranceClaim);
+
+CONSTRAINT insuranceClaimAmount(AccidentInsuranceClaim c) <= 0.00
+    MESSAGE 'Заявленная сумма должна быть положительной';
+CONSTRAINT insuranceClaimAcceptedAmount(AccidentInsuranceClaim c) < 0.00 OR
+           insuranceClaimAcceptedAmount(c) > insuranceClaimAmount(c)
+    MESSAGE 'Признанная сумма должна быть от нуля до заявленной суммы';
+CONSTRAINT insuranceClaimPaidAmount(AccidentInsuranceClaim c) < 0.00 OR
+           insuranceClaimPaidAmount(c) > insuranceClaimAcceptedAmount(c)
+    MESSAGE 'Выплата не может превышать признанную сумму';
+CONSTRAINT insuranceClaimPolicy(AccidentInsuranceClaim c) AND insuranceClaimAccident(c) AND
+           insuranceClaimPolicy(c) != workAccidentPolicy(insuranceClaimAccident(c))
+    MESSAGE 'Требование должно относиться к договору, покрывавшему происшествие';
+CONSTRAINT (CHANGED(insuranceClaimAccident(AccidentInsuranceClaim c)) OR
+            CHANGED(insuranceClaimNumber(c)) OR CHANGED(insuranceClaimDate(c)) OR
+            CHANGED(insuranceClaimAmount(c))) AND
+           PREV(insuranceClaimStatus(c)) != AccidentInsuranceClaimStatus.draft
+    MESSAGE 'Нельзя изменить переданное страховщику требование';
+CONSTRAINT (CHANGED(insuranceClaimAcceptedAmount(AccidentInsuranceClaim c)) OR
+            CHANGED(insuranceClaimInsurerReference(c)) OR
+            CHANGED(insuranceClaimRejectionReason(c))) AND
+           PREV(insuranceClaimStatus(c)) != AccidentInsuranceClaimStatus.submitted
+    MESSAGE 'Нельзя изменить зарегистрированное решение страховщика';
+CONSTRAINT (CHANGED(insuranceClaimPaidAmount(AccidentInsuranceClaim c)) OR
+            CHANGED(insuranceClaimPaidDate(c))) AND
+           PREV(insuranceClaimStatus(c)) != AccidentInsuranceClaimStatus.accepted
+    MESSAGE 'Нельзя изменить зарегистрированную страховую выплату';
+
+submitInsuranceClaim 'Передать страховщику' (AccidentInsuranceClaim c) {
+    IF insuranceClaimStatus(c) AND insuranceClaimStatus(c) != AccidentInsuranceClaimStatus.draft THEN
+        MESSAGE 'Передать можно только черновик требования';
+    ELSE IF NOT insuranceClaimAccident(c) OR NOT insuranceClaimNumber(c) OR
+            NOT insuranceClaimDate(c) OR NOT insuranceClaimAmount(c) THEN
+        MESSAGE 'Заполните происшествие, номер, дату и сумму требования';
+    ELSE IF workAccidentStatus(insuranceClaimAccident(c)) != WorkAccidentStatus.confirmed THEN
+        MESSAGE 'Требование возможно только по подтверждённому страховому случаю';
+    ELSE IF NOT workAccidentPolicy(insuranceClaimAccident(c)) THEN
+        MESSAGE 'На дату происшествия отсутствует договор страхования';
+    ELSE {
+        insuranceClaimPolicy(c) <- workAccidentPolicy(insuranceClaimAccident(c));
+        insuranceClaimStatus(c) <- AccidentInsuranceClaimStatus.submitted;
+        insuranceClaimSubmittedAt(c) <- currentDateTime();
+        APPLY;
+    }
+}
+
+acceptInsuranceClaim 'Зарегистрировать признание' (AccidentInsuranceClaim c) {
+    IF insuranceClaimStatus(c) != AccidentInsuranceClaimStatus.submitted THEN
+        MESSAGE 'Решение регистрируется после передачи требования';
+    ELSE IF NOT insuranceClaimAcceptedAmount(c) THEN
+        MESSAGE 'Укажите признанную сумму';
+    ELSE {
+        insuranceClaimStatus(c) <- AccidentInsuranceClaimStatus.accepted;
+        insuranceClaimDecidedAt(c) <- currentDateTime();
+        APPLY;
+    }
+}
+
+rejectInsuranceClaim 'Зарегистрировать отказ' (AccidentInsuranceClaim c) {
+    IF insuranceClaimStatus(c) != AccidentInsuranceClaimStatus.submitted THEN
+        MESSAGE 'Отказ регистрируется после передачи требования';
+    ELSE IF NOT insuranceClaimRejectionReason(c) THEN
+        MESSAGE 'Укажите причину отказа';
+    ELSE {
+        insuranceClaimStatus(c) <- AccidentInsuranceClaimStatus.rejected;
+        insuranceClaimDecidedAt(c) <- currentDateTime();
+        APPLY;
+    }
+}
+
+payInsuranceClaim 'Зарегистрировать выплату' (AccidentInsuranceClaim c) {
+    IF insuranceClaimStatus(c) != AccidentInsuranceClaimStatus.accepted THEN
+        MESSAGE 'Выплата регистрируется по признанному требованию';
+    ELSE IF NOT insuranceClaimPaidAmount(c) OR NOT insuranceClaimPaidDate(c) THEN
+        MESSAGE 'Укажите сумму и дату выплаты';
+    ELSE {
+        insuranceClaimStatus(c) <- AccidentInsuranceClaimStatus.paid;
+        APPLY;
+    }
+}
+
+insuranceClaimCount(WorkAccident a) = GROUP SUM 1 IF
+    insuranceClaimAccident(AccidentInsuranceClaim c) == a;
+unresolvedInsuranceClaimCount(WorkAccident a) = GROUP SUM 1 IF
+    insuranceClaimAccident(AccidentInsuranceClaim c) == a AND
+    insuranceClaimStatus(c) != AccidentInsuranceClaimStatus.paid AND
+    insuranceClaimStatus(c) != AccidentInsuranceClaimStatus.rejected;
+
+closeWorkAccident 'Закрыть происшествие' (WorkAccident a) {
+    IF workAccidentStatus(a) != WorkAccidentStatus.confirmed AND
+       workAccidentStatus(a) != WorkAccidentStatus.notWorkRelated THEN
+        MESSAGE 'Закрыть можно только завершённое расследование';
+    ELSE IF workAccidentStatus(a) == WorkAccidentStatus.confirmed AND
+            workAccidentPolicy(a) AND
+            (NOT insuranceClaimCount(a) OR unresolvedInsuranceClaimCount(a)) THEN
+        MESSAGE 'Сначала завершите страховое требование';
+    ELSE {
+        workAccidentStatus(a) <- WorkAccidentStatus.closed;
+        workAccidentClosedAt(a) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM occupationalRiskClasses 'Классы профессионального риска'
+    OBJECTS r = OccupationalRiskClass
+    PROPERTIES(r) riskClassCode, riskClassName, riskClassActive
+;
+
+FORM accidentInsuranceRates 'Тарифы страхования от несчастных случаев'
+    OBJECTS r = AccidentInsuranceRate
+    PROPERTIES(r) insuranceRateRiskClass, insuranceRateValidFrom,
+                  insuranceRateValidTo, insuranceRatePercent, insuranceRateLegalBasis
+;
+
+FORM accidentInsurancePolicies 'Договоры страхования работников'
+    OBJECTS p = AccidentInsurancePolicy
+    PROPERTIES(p) insurancePolicyOrganization, insurancePolicyInsurer,
+                  insurancePolicyInsurerBin, insurancePolicyNumber, insurancePolicyDate,
+                  insurancePolicyValidFrom, insurancePolicyValidTo,
+                  insurancePolicyRiskClass, insurancePolicyPayrollBase,
+                  insurancePolicyRateRule, insurancePolicyRatePercent,
+                  insurancePolicyPremium, insurancePolicyStatus,
+                  insurancePolicyActivatedAt, insurancePolicyCancelledAt
+    PROPERTIES(p) activateInsurancePolicy, cancelInsurancePolicy
+;
+
+FORM workAccidents 'Несчастные случаи'
+    OBJECTS a = WorkAccident
+    PROPERTIES(a) workAccidentOrganization, workAccidentEmployee,
+                  workAccidentAssignment, workAccidentNumber, workAccidentDate,
+                  workAccidentTime, workAccidentPlace, workAccidentDescription,
+                  workAccidentSeverity, workAccidentPolicy, workAccidentUninsured,
+                  workAccidentRegisteredAt, workAccidentInsurerNotifiedDate,
+                  workAccidentInvestigationDueDate, workAccidentInvestigationOverdue,
+                  workAccidentCommissionOrder, workAccidentCommissionChair,
+                  workAccidentOutcome, workAccidentConclusion, workAccidentActNumber,
+                  workAccidentActDate, workAccidentLostWorkDays, workAccidentStatus
+    PROPERTIES(a) registerWorkAccident, completeWorkAccidentInvestigation,
+                  closeWorkAccident
+;
+
+FORM accidentInsuranceClaims 'Страховые требования'
+    OBJECTS c = AccidentInsuranceClaim
+    PROPERTIES(c) insuranceClaimAccident, insuranceClaimPolicy, insuranceClaimNumber,
+                  insuranceClaimDate, insuranceClaimAmount, insuranceClaimAcceptedAmount,
+                  insuranceClaimPaidAmount, insuranceClaimInsurerReference,
+                  insuranceClaimRejectionReason, insuranceClaimStatus,
+                  insuranceClaimSubmittedAt, insuranceClaimDecidedAt,
+                  insuranceClaimPaidDate
+    PROPERTIES(c) submitInsuranceClaim, acceptInsuranceClaim,
+                  rejectInsuranceClaim, payInsuranceClaim
+;
+
+workAccidentActTitleRu 'Документ / Құжат (RU)' (WorkAccident a) =
+    'АКТ О НЕСЧАСТНОМ СЛУЧАЕ, СВЯЗАННОМ С ТРУДОВОЙ ДЕЯТЕЛЬНОСТЬЮ';
+workAccidentActTitleKz 'Құжат / Документ (KZ)' (WorkAccident a) =
+    'ЕҢБЕК ҚЫЗМЕТІНЕ БАЙЛАНЫСТЫ ЖАЗАТАЙЫМ ОҚИҒА ТУРАЛЫ АКТ';
+workAccidentOrganizationName 'Организация / Ұйым' (WorkAccident a) =
+    name(workAccidentOrganization(a));
+workAccidentEmployeeName 'Ф.И.О. / Т.А.Ә.' (WorkAccident a) =
+    lastName(workAccidentEmployee(a)) + ' ' + firstName(workAccidentEmployee(a)) +
+    (IF middleName(workAccidentEmployee(a)) THEN
+        ' ' + middleName(workAccidentEmployee(a)) ELSE '');
+
+FORM workAccidentAct 'Акт о несчастном случае / Жазатайым оқиға туралы акт'
+    OBJECTS a = WorkAccident PANEL
+    PROPERTIES(a) workAccidentActTitleRu, workAccidentActTitleKz,
+                  workAccidentOrganizationName, workAccidentEmployeeName,
+                  workAccidentNumber, workAccidentDate, workAccidentTime,
+                  workAccidentPlace, workAccidentDescription, workAccidentSeverity,
+                  workAccidentCommissionOrder, workAccidentCommissionChair,
+                  workAccidentOutcome, workAccidentConclusion,
+                  workAccidentActNumber, workAccidentActDate,
+                  workAccidentLostWorkDays, workAccidentPolicy
+;
+
+printWorkAccidentActPdf 'Акт PDF' (WorkAccident a) {
+    IF workAccidentStatus(a) != WorkAccidentStatus.confirmed AND
+       workAccidentStatus(a) != WorkAccidentStatus.notWorkRelated AND
+       workAccidentStatus(a) != WorkAccidentStatus.closed THEN
+        MESSAGE 'Акт печатается после завершения расследования';
+    ELSE PRINT workAccidentAct OBJECTS a = a PDF;
+}
+
+printWorkAccidentActDocx 'Акт DOCX' (WorkAccident a) {
+    IF workAccidentStatus(a) != WorkAccidentStatus.confirmed AND
+       workAccidentStatus(a) != WorkAccidentStatus.notWorkRelated AND
+       workAccidentStatus(a) != WorkAccidentStatus.closed THEN
+        MESSAGE 'Акт печатается после завершения расследования';
+    ELSE PRINT workAccidentAct OBJECTS a = a DOCX;
+}
+
+EXTEND FORM workAccidents
+    PROPERTIES(a) printWorkAccidentActPdf TOOLBAR, printWorkAccidentActDocx TOOLBAR
+;

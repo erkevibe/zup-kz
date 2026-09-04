@@ -1,6 +1,6 @@
 MODULE PayrollStage0Test;
 
-REQUIRE ArchiveWorkflowTest;
+REQUIRE InsuranceWorkflowTest;
 NAMESPACE ZUPKZ;
 
 stage0TaxLedgerIpn(Organization org, Employee worker) = GROUP SUM
