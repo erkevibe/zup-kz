@@ -1,0 +1,145 @@
+MODULE ArchiveWorkflowTest;
+
+REQUIRE ApprovalWorkflowTest, HRArchive;
+NAMESPACE ZUPKZ;
+
+archiveWorkflowTest() {
+    LOCAL sourcePdf = FILE();
+    LOCAL inventoryPdf = FILE();
+    NEW org = Organization {
+        name(org) <- 'Архив Тест';
+        bin(org) <- '131313131313';
+        NEW worker = Employee {
+            iin(worker) <- '930303300013';
+            lastName(worker) <- 'Архивный';
+            firstName(worker) <- 'Тест';
+            birthDate(worker) <- 1993_03_03;
+            NEW card = EmployeeCard {
+                cardEmployee(card) <- worker;
+                cardOrganization(card) <- org;
+                cardNumber(card) <- 'ARCHIVE-CARD-1';
+                cardDate(card) <- 2020_12_31;
+                personnelNumber(card) <- 'ARCHIVE-1';
+                PRINT employeePersonalCard OBJECTS c = card PDF TO sourcePdf;
+                NEW temporaryKind = ArchiveDocumentKind {
+                    archiveKindCode(temporaryKind) <- 'TEST-TEMPORARY';
+                    archiveKindName(temporaryKind) <- 'Тестовый временный документ';
+                    archiveKindActive(temporaryKind) <- TRUE;
+                    NEW temporaryRule = ArchiveRetentionRule {
+                        retentionRuleKind(temporaryRule) <- temporaryKind;
+                        retentionRuleValidFrom(temporaryRule) <- 2020_01_01;
+                        retentionRuleYears(temporaryRule) <- 5;
+                        retentionRuleLegalBasis(temporaryRule) <- 'Тестовое правило';
+                        NEW archiveCase = ArchiveCase {
+                            archiveCaseOrganization(archiveCase) <- org;
+                            archiveCaseIndex(archiveCase) <- 'TEST-2020-01';
+                            archiveCaseYear(archiveCase) <- 2020;
+                            archiveCaseTitle(archiveCase) <- 'Личные карточки работников';
+                            archiveCaseResponsible(archiveCase) <- 'Архивариус';
+                            archiveCaseOpenedDate(archiveCase) <- 2020_01_01;
+                            archiveCaseClosedDate(archiveCase) <- 2021_01_31;
+                            archiveCaseTransferDate(archiveCase) <- 2021_02_01;
+                            archiveCaseTransferAct(archiveCase) <- 'TRANSFER-1';
+                            archiveCaseStatus(archiveCase) <- ArchiveCaseStatus.open;
+                            NEW document = ArchiveDocument {
+                                archiveDocumentCase(document) <- archiveCase;
+                                archiveDocumentKind(document) <- temporaryKind;
+                                archiveDocumentEmployee(document) <- worker;
+                                archiveDocumentNumber(document) <- 'ARCHIVE-DOC-1';
+                                archiveDocumentDate(document) <- 2020_12_31;
+                                archiveDocumentTitle(document) <- 'Личная карточка работника';
+                                archiveDocumentPages(document) <- 4;
+                                archiveDocumentCarrier(document) <- ArchiveCarrier.electronic;
+                                archiveDocumentFile(document) <- sourcePdf();
+                                archiveDocumentSignatureInfo(document) <- 'Тестовая ЭЦП';
+                                archiveDocumentChecksum(document) <- 'TEST-CHECKSUM';
+                                archiveDocumentRetentionStart(document) <- 2021_01_01;
+                                archiveDocumentStatus(document) <- ArchiveDocumentStatus.draft;
+                                archiveSourceEmployeeCard(document) <- card;
+                                registerArchiveDocument(document);
+                                closeArchiveCase(archiveCase);
+                                transferArchiveCase(archiveCase);
+                                prepareArchiveDestruction(document);
+                                archiveDocumentDestructionAct(document) <- 'DESTROY-1';
+                                archiveDocumentDestructionDate(document) <- 2026_09_04;
+                                archiveDocumentDestructionReason(document) <-
+                                    'Истечение тестового срока хранения';
+                                destroyArchiveDocument(document);
+
+                                NEW permanentKind = ArchiveDocumentKind {
+                                    archiveKindCode(permanentKind) <- 'TEST-PERMANENT';
+                                    archiveKindName(permanentKind) <- 'Тестовый постоянный документ';
+                                    archiveKindActive(permanentKind) <- TRUE;
+                                    NEW permanentRule = ArchiveRetentionRule {
+                                        retentionRuleKind(permanentRule) <- permanentKind;
+                                        retentionRuleValidFrom(permanentRule) <- 2020_01_01;
+                                        retentionRulePermanent(permanentRule) <- TRUE;
+                                        retentionRuleLegalBasis(permanentRule) <- 'Тестовое правило';
+                                        NEW permanentCase = ArchiveCase {
+                                            archiveCaseOrganization(permanentCase) <- org;
+                                            archiveCaseIndex(permanentCase) <- 'TEST-2020-02';
+                                            archiveCaseYear(permanentCase) <- 2020;
+                                            archiveCaseTitle(permanentCase) <-
+                                                'Документы постоянного хранения';
+                                            archiveCaseOpenedDate(permanentCase) <- 2020_01_01;
+                                            archiveCaseClosedDate(permanentCase) <- 2021_01_31;
+                                            archiveCaseTransferDate(permanentCase) <- 2021_02_01;
+                                            archiveCaseTransferAct(permanentCase) <- 'TRANSFER-2';
+                                            archiveCaseStatus(permanentCase) <- ArchiveCaseStatus.open;
+                                            NEW permanentDocument = ArchiveDocument {
+                                                archiveDocumentCase(permanentDocument) <- permanentCase;
+                                                archiveDocumentKind(permanentDocument) <- permanentKind;
+                                                archiveDocumentNumber(permanentDocument) <- 'ARCHIVE-DOC-2';
+                                                archiveDocumentDate(permanentDocument) <- 2020_12_31;
+                                                archiveDocumentTitle(permanentDocument) <-
+                                                    'Постоянный документ';
+                                                archiveDocumentPages(permanentDocument) <- 1;
+                                                archiveDocumentCarrier(permanentDocument) <-
+                                                    ArchiveCarrier.paper;
+                                                archiveDocumentPhysicalLocation(permanentDocument) <-
+                                                    'Архив, шкаф 1';
+                                                archiveDocumentRetentionStart(permanentDocument) <-
+                                                    2021_01_01;
+                                                archiveDocumentStatus(permanentDocument) <-
+                                                    ArchiveDocumentStatus.draft;
+                                                registerArchiveDocument(permanentDocument);
+                                                closeArchiveCase(permanentCase);
+                                                transferArchiveCase(permanentCase);
+                                                prepareArchiveDestruction(permanentDocument);
+
+                                                PRINT archiveCaseInventory OBJECTS c = archiveCase
+                                                    PDF TO inventoryPdf;
+
+                                                EXPORT JSON FROM
+                                                    caseStored = archiveCaseStatus(archiveCase) ==
+                                                        ArchiveCaseStatus.stored,
+                                                    ruleSnapshotYears =
+                                                        archiveDocumentRetentionYears(document),
+                                                    retentionUntilResult =
+                                                        archiveDocumentRetentionUntil(document),
+                                                    documentDestroyed = archiveDocumentStatus(document) ==
+                                                        ArchiveDocumentStatus.destroyed,
+                                                    electronicFileRemoved =
+                                                        IF archiveDocumentFile(document)
+                                                        THEN NULL ELSE TRUE,
+                                                    destructionMetadataKept =
+                                                        archiveDocumentDestructionAct(document) ==
+                                                            'DESTROY-1',
+                                                    permanentDocumentStored =
+                                                        archiveDocumentStatus(permanentDocument) ==
+                                                            ArchiveDocumentStatus.stored,
+                                                    permanentRuleSnapshot =
+                                                        archiveDocumentPermanent(permanentDocument),
+                                                    inventoryPdfGenerated = TRUE IF inventoryPdf();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

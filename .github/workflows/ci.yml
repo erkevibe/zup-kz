@@ -138,6 +138,12 @@ jobs:
               python3 tests/assert_approval_workflow.py \
                 approval-workflow-result.json approval-block-result.json
 
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.archiveWorkflowTest' \
+                --output archive-workflow-result.json
+
+              python3 tests/assert_archive_workflow.py archive-workflow-result.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT

@@ -1,0 +1,423 @@
+MODULE HRArchive;
+
+REQUIRE HRApproval, HREmployeeCard;
+NAMESPACE ZUPKZ;
+
+CLASS ArchiveDocumentKind 'Вид архивного документа';
+
+archiveKindCode 'Код' = DATA STRING[50] (ArchiveDocumentKind);
+archiveKindName 'Наименование' = DATA STRING[200] (ArchiveDocumentKind);
+archiveKindNameKz 'Наименование (KZ)' = DATA STRING[200] (ArchiveDocumentKind);
+archiveKindActive 'Используется' = DATA BOOLEAN (ArchiveDocumentKind);
+
+archiveKindCodeCount(STRING[50] code) = GROUP SUM 1 IF
+    archiveKindCode(ArchiveDocumentKind k) == code;
+CONSTRAINT archiveKindCodeCount(archiveKindCode(ArchiveDocumentKind k)) > 1
+    MESSAGE 'Код вида архивного документа должен быть уникальным';
+
+CLASS ArchiveRetentionRule 'Правило хранения';
+
+retentionRuleKind 'Вид документа' = DATA ArchiveDocumentKind (ArchiveRetentionRule);
+retentionRuleValidFrom 'Действует с' = DATA DATE (ArchiveRetentionRule);
+retentionRuleValidTo 'Действует по' = DATA DATE (ArchiveRetentionRule);
+retentionRuleYears 'Срок хранения, лет' = DATA INTEGER (ArchiveRetentionRule);
+retentionRulePermanent 'Постоянное хранение' = DATA BOOLEAN (ArchiveRetentionRule);
+retentionRuleLegalBasis 'Правовое основание' = DATA STRING[300] (ArchiveRetentionRule);
+retentionRuleNote 'Примечание' = DATA STRING[500] (ArchiveRetentionRule);
+
+CONSTRAINT retentionRuleValidTo(ArchiveRetentionRule r) < retentionRuleValidFrom(r)
+    MESSAGE 'Окончание действия правила не может быть раньше начала';
+CONSTRAINT retentionRuleYears(ArchiveRetentionRule r) <= 0
+    MESSAGE 'Срок временного хранения должен быть положительным';
+CONSTRAINT retentionRulePermanent(ArchiveRetentionRule r) AND retentionRuleYears(r)
+    MESSAGE 'Для постоянного хранения количество лет не указывается';
+CONSTRAINT NOT retentionRulePermanent(ArchiveRetentionRule r) AND
+           NOT retentionRuleYears(r)
+    MESSAGE 'Укажите срок в годах или постоянное хранение';
+
+overlappingRetentionRuleCount(ArchiveRetentionRule r) = GROUP SUM 1 IF
+    retentionRuleKind(ArchiveRetentionRule other) == retentionRuleKind(r) AND
+    retentionRuleValidFrom(other) <=
+        (IF retentionRuleValidTo(r) THEN retentionRuleValidTo(r) ELSE 9999_12_31) AND
+    (IF retentionRuleValidTo(other) THEN retentionRuleValidTo(other) ELSE 9999_12_31) >=
+        retentionRuleValidFrom(r);
+CONSTRAINT retentionRuleKind(ArchiveRetentionRule r) AND retentionRuleValidFrom(r) AND
+           overlappingRetentionRuleCount(r) > 1
+    MESSAGE 'Периоды правил хранения одного вида документа не должны пересекаться';
+
+retentionRuleOn(ArchiveDocumentKind kind, DATE date) = GROUP LAST ArchiveRetentionRule r IF
+    retentionRuleKind(r) == kind AND retentionRuleValidFrom(r) <= date AND
+    (NOT retentionRuleValidTo(r) OR retentionRuleValidTo(r) >= date)
+    ORDER retentionRuleValidFrom(r), r;
+
+CLASS ArchiveCaseStatus 'Статус архивного дела' {
+    open 'Формируется',
+    closed 'Закрыто',
+    stored 'Передано в архив'
+}
+
+CLASS ArchiveCase 'Архивное дело';
+
+archiveCaseOrganization 'Организация' = DATA Organization (ArchiveCase);
+archiveCaseIndex 'Индекс дела' = DATA STRING[50] (ArchiveCase);
+archiveCaseYear 'Год' = DATA INTEGER (ArchiveCase);
+archiveCaseTitle 'Заголовок дела' = DATA STRING[300] (ArchiveCase);
+archiveCaseResponsible 'Ответственный' = DATA STRING[150] (ArchiveCase);
+archiveCaseOpenedDate 'Открыто' = DATA DATE (ArchiveCase);
+archiveCaseClosedDate 'Закрыто' = DATA DATE (ArchiveCase);
+archiveCaseTransferDate 'Передано в архив' = DATA DATE (ArchiveCase);
+archiveCaseTransferAct 'Акт передачи' = DATA STRING[100] (ArchiveCase);
+archiveCaseStatus 'Статус' = DATA ArchiveCaseStatus (ArchiveCase);
+
+archiveCaseKeyCount(Organization org, INTEGER year, STRING[50] index) = GROUP SUM 1 IF
+    archiveCaseOrganization(ArchiveCase c) == org AND archiveCaseYear(c) == year AND
+    archiveCaseIndex(c) == index;
+CONSTRAINT archiveCaseKeyCount(archiveCaseOrganization(ArchiveCase c), archiveCaseYear(c),
+                               archiveCaseIndex(c)) > 1
+    MESSAGE 'Индекс архивного дела должен быть уникален в организации и году';
+CONSTRAINT archiveCaseClosedDate(ArchiveCase c) < archiveCaseOpenedDate(c)
+    MESSAGE 'Дата закрытия дела не может быть раньше даты открытия';
+CONSTRAINT archiveCaseTransferDate(ArchiveCase c) < archiveCaseClosedDate(c)
+    MESSAGE 'Дата передачи не может быть раньше даты закрытия дела';
+CONSTRAINT (CHANGED(archiveCaseOrganization(ArchiveCase c)) OR
+            CHANGED(archiveCaseIndex(c)) OR CHANGED(archiveCaseYear(c)) OR
+            CHANGED(archiveCaseTitle(c)) OR CHANGED(archiveCaseResponsible(c)) OR
+            CHANGED(archiveCaseOpenedDate(c)) OR CHANGED(archiveCaseClosedDate(c))) AND
+           PREV(archiveCaseStatus(c)) != ArchiveCaseStatus.open
+    MESSAGE 'Нельзя изменить закрытое архивное дело';
+CONSTRAINT (CHANGED(archiveCaseTransferDate(ArchiveCase c)) OR
+            CHANGED(archiveCaseTransferAct(c))) AND
+           PREV(archiveCaseStatus(c)) == ArchiveCaseStatus.stored
+    MESSAGE 'Нельзя изменить реквизиты переданного архивного дела';
+
+CLASS ArchiveCarrier 'Носитель документа' {
+    paper 'Бумажный',
+    electronic 'Электронный',
+    hybrid 'Бумажный и электронный'
+}
+
+CLASS ArchiveDocumentStatus 'Статус архивного документа' {
+    draft 'Черновик',
+    registered 'Зарегистрирован',
+    stored 'Передан в архив',
+    destructionReady 'Подготовлен к уничтожению',
+    destroyed 'Уничтожен'
+}
+
+CLASS ArchiveDocument 'Архивный документ';
+
+archiveDocumentCase 'Дело' = DATA ArchiveCase (ArchiveDocument);
+archiveDocumentKind 'Вид документа' = DATA ArchiveDocumentKind (ArchiveDocument);
+archiveDocumentEmployee 'Работник' = DATA Employee (ArchiveDocument);
+archiveDocumentNumber 'Регистрационный номер' = DATA STRING[80] (ArchiveDocument);
+archiveDocumentDate 'Дата документа' = DATA DATE (ArchiveDocument);
+archiveDocumentTitle 'Заголовок' = DATA STRING[300] (ArchiveDocument);
+archiveDocumentPages 'Количество листов' = DATA INTEGER (ArchiveDocument);
+archiveDocumentCarrier 'Носитель' = DATA ArchiveCarrier (ArchiveDocument);
+archiveDocumentFile 'Электронный документ' = DATA FILE (ArchiveDocument);
+archiveDocumentPhysicalLocation 'Место хранения оригинала' = DATA STRING[300] (ArchiveDocument);
+archiveDocumentSignatureInfo 'Сведения об ЭЦП' = DATA STRING[500] (ArchiveDocument);
+archiveDocumentChecksum 'Контрольная сумма' = DATA STRING[128] (ArchiveDocument);
+archiveDocumentRetentionStart 'Начало срока хранения' = DATA DATE (ArchiveDocument);
+archiveDocumentRetentionRule 'Применённое правило' = DATA ArchiveRetentionRule (ArchiveDocument);
+archiveDocumentRetentionYears 'Срок хранения, лет' = DATA INTEGER (ArchiveDocument);
+archiveDocumentPermanent 'Постоянное хранение' = DATA BOOLEAN (ArchiveDocument);
+archiveDocumentRetentionUntil 'Хранить по' = DATA DATE (ArchiveDocument);
+archiveDocumentRegisteredAt 'Зарегистрирован' = DATA DATETIME (ArchiveDocument);
+archiveDocumentStoredAt 'Передан в архив' = DATA DATETIME (ArchiveDocument);
+archiveDocumentStatus 'Статус' = DATA ArchiveDocumentStatus (ArchiveDocument);
+archiveDocumentDestructionAct 'Акт уничтожения' = DATA STRING[100] (ArchiveDocument);
+archiveDocumentDestructionDate 'Дата акта уничтожения' = DATA DATE (ArchiveDocument);
+archiveDocumentDestructionReason 'Основание уничтожения' = DATA STRING[500] (ArchiveDocument);
+archiveDocumentDestroyedAt 'Уничтожен' = DATA DATETIME (ArchiveDocument);
+
+archiveSourceEmployment 'Трудовой договор' = DATA Employment (ArchiveDocument);
+archiveSourcePersonnelEvent 'Кадровое событие' = DATA PersonnelEvent (ArchiveDocument);
+archiveSourceEmployeeCard 'Личная карточка' = DATA EmployeeCard (ArchiveDocument);
+archiveSourceLeave 'Отпуск' = DATA LeaveDocument (ArchiveDocument);
+archiveSourceVacationSchedule 'График отпусков' = DATA VacationSchedule (ArchiveDocument);
+archiveSourceBusinessTrip 'Командировка' = DATA BusinessTripDocument (ArchiveDocument);
+archiveSourcePersonnelNotice 'Уведомление работника' = DATA PersonnelNotice (ArchiveDocument);
+
+archiveSourceCount(ArchiveDocument d) =
+    (IF archiveSourceEmployment(d) THEN 1 ELSE 0) +
+    (IF archiveSourcePersonnelEvent(d) THEN 1 ELSE 0) +
+    (IF archiveSourceEmployeeCard(d) THEN 1 ELSE 0) +
+    (IF archiveSourceLeave(d) THEN 1 ELSE 0) +
+    (IF archiveSourceVacationSchedule(d) THEN 1 ELSE 0) +
+    (IF archiveSourceBusinessTrip(d) THEN 1 ELSE 0) +
+    (IF archiveSourcePersonnelNotice(d) THEN 1 ELSE 0);
+archiveSourceOrganization(ArchiveDocument d) =
+    IF archiveSourceEmployment(d) THEN organization(archiveSourceEmployment(d))
+    ELSE IF archiveSourcePersonnelEvent(d) THEN
+        organization(eventEmployment(archiveSourcePersonnelEvent(d)))
+    ELSE IF archiveSourceEmployeeCard(d) THEN cardOrganization(archiveSourceEmployeeCard(d))
+    ELSE IF archiveSourceLeave(d) THEN
+        organization(employment(leaveAssignment(archiveSourceLeave(d))))
+    ELSE IF archiveSourceVacationSchedule(d) THEN
+        vacationScheduleOrganization(archiveSourceVacationSchedule(d))
+    ELSE IF archiveSourceBusinessTrip(d) THEN tripOrganization(archiveSourceBusinessTrip(d))
+    ELSE IF archiveSourcePersonnelNotice(d) THEN
+        personnelNoticeOrganization(archiveSourcePersonnelNotice(d));
+archiveSourceReady(ArchiveDocument d) =
+    archiveSourceCount(d) == 0 OR archiveSourceEmployment(d) OR archiveSourceEmployeeCard(d) OR
+    (archiveSourcePersonnelEvent(d) AND
+        (eventStatus(archiveSourcePersonnelEvent(d)) == PersonnelEventStatus.posted OR
+         eventStatus(archiveSourcePersonnelEvent(d)) == PersonnelEventStatus.cancelled)) OR
+    (archiveSourceLeave(d) AND
+        (leaveStatus(archiveSourceLeave(d)) == LeaveStatus.approved OR
+         leaveStatus(archiveSourceLeave(d)) == LeaveStatus.cancelled)) OR
+    (archiveSourceVacationSchedule(d) AND
+        (vacationScheduleStatus(archiveSourceVacationSchedule(d)) == VacationScheduleStatus.approved OR
+         vacationScheduleStatus(archiveSourceVacationSchedule(d)) == VacationScheduleStatus.cancelled)) OR
+    (archiveSourceBusinessTrip(d) AND
+        (tripStatus(archiveSourceBusinessTrip(d)) == BusinessTripStatus.approved OR
+         tripStatus(archiveSourceBusinessTrip(d)) == BusinessTripStatus.cancelled)) OR
+    (archiveSourcePersonnelNotice(d) AND
+        (personnelNoticeStatus(archiveSourcePersonnelNotice(d)) == PersonnelNoticeStatus.delivered OR
+         personnelNoticeStatus(archiveSourcePersonnelNotice(d)) == PersonnelNoticeStatus.cancelled));
+
+archiveDocumentSuggestedRetentionUntil(ArchiveDocument d) =
+    sumYear(archiveDocumentRetentionStart(d), archiveDocumentRetentionYears(d)) - 1;
+archiveDocumentRetentionDue 'Срок хранения истёк' (ArchiveDocument d) =
+    archiveDocumentStatus(d) == ArchiveDocumentStatus.stored AND
+    NOT archiveDocumentPermanent(d) AND archiveDocumentRetentionUntil(d) < currentDate();
+
+archiveDocumentNumberCount(ArchiveCase c, STRING[80] number) = GROUP SUM 1 IF
+    archiveDocumentCase(ArchiveDocument d) == c AND archiveDocumentNumber(d) == number;
+CONSTRAINT archiveDocumentNumberCount(archiveDocumentCase(ArchiveDocument d),
+                                      archiveDocumentNumber(d)) > 1
+    MESSAGE 'Регистрационный номер документа должен быть уникален внутри дела';
+
+CONSTRAINT archiveDocumentPages(ArchiveDocument d) <= 0
+    MESSAGE 'Количество листов должно быть положительным';
+CONSTRAINT archiveDocumentRetentionUntil(ArchiveDocument d) < archiveDocumentRetentionStart(d)
+    MESSAGE 'Окончание хранения не может быть раньше начала срока';
+CONSTRAINT archiveDocumentDestructionDate(ArchiveDocument d) < archiveDocumentRetentionUntil(d)
+    MESSAGE 'Дата уничтожения не может быть раньше окончания срока хранения';
+CONSTRAINT archiveDocumentDestructionDate(ArchiveDocument d) > currentDate()
+    MESSAGE 'Дата уничтожения не может быть будущей';
+CONSTRAINT archiveDocumentCase(ArchiveDocument d) AND archiveSourceOrganization(d) AND
+           archiveSourceOrganization(d) != archiveCaseOrganization(archiveDocumentCase(d))
+    MESSAGE 'Исходный документ должен принадлежать организации архивного дела';
+CONSTRAINT archiveSourceCount(ArchiveDocument d) > 1
+    MESSAGE 'Можно выбрать только один исходный документ';
+CONSTRAINT archiveDocumentStatus(ArchiveDocument d) AND
+           archiveDocumentStatus(d) != ArchiveDocumentStatus.draft AND
+           archiveDocumentStatus(d) != ArchiveDocumentStatus.destroyed AND
+           archiveDocumentCarrier(d) == ArchiveCarrier.electronic AND
+           NOT archiveDocumentFile(d)
+    MESSAGE 'Для электронного документа приложите файл';
+CONSTRAINT archiveDocumentStatus(ArchiveDocument d) AND
+           archiveDocumentStatus(d) != ArchiveDocumentStatus.draft AND
+           archiveDocumentStatus(d) != ArchiveDocumentStatus.destroyed AND
+           archiveDocumentCarrier(d) == ArchiveCarrier.paper AND
+           NOT archiveDocumentPhysicalLocation(d)
+    MESSAGE 'Для бумажного документа укажите место хранения оригинала';
+CONSTRAINT archiveDocumentStatus(ArchiveDocument d) AND
+           archiveDocumentStatus(d) != ArchiveDocumentStatus.draft AND
+           archiveDocumentStatus(d) != ArchiveDocumentStatus.destroyed AND
+           archiveDocumentCarrier(d) == ArchiveCarrier.hybrid AND
+           (NOT archiveDocumentFile(d) OR NOT archiveDocumentPhysicalLocation(d))
+    MESSAGE 'Для смешанного документа заполните файл и место хранения оригинала';
+CONSTRAINT (CHANGED(archiveDocumentCase(ArchiveDocument d)) OR
+            CHANGED(archiveDocumentKind(d)) OR CHANGED(archiveDocumentEmployee(d)) OR
+            CHANGED(archiveDocumentNumber(d)) OR CHANGED(archiveDocumentDate(d)) OR
+            CHANGED(archiveDocumentTitle(d)) OR CHANGED(archiveDocumentCarrier(d)) OR
+            CHANGED(archiveDocumentRetentionStart(d)) OR
+            CHANGED(archiveDocumentRetentionRule(d)) OR
+            CHANGED(archiveDocumentRetentionYears(d)) OR
+            CHANGED(archiveDocumentPermanent(d)) OR
+            CHANGED(archiveDocumentRetentionUntil(d)) OR
+            CHANGED(archiveSourceEmployment(d)) OR CHANGED(archiveSourcePersonnelEvent(d)) OR
+            CHANGED(archiveSourceEmployeeCard(d)) OR CHANGED(archiveSourceLeave(d)) OR
+            CHANGED(archiveSourceVacationSchedule(d)) OR
+            CHANGED(archiveSourceBusinessTrip(d)) OR
+            CHANGED(archiveSourcePersonnelNotice(d))) AND
+           PREV(archiveDocumentStatus(d)) != ArchiveDocumentStatus.draft
+    MESSAGE 'Нельзя изменить зарегистрированный архивный документ';
+CONSTRAINT (CHANGED(archiveDocumentFile(ArchiveDocument d)) OR
+            CHANGED(archiveDocumentPhysicalLocation(d)) OR
+            CHANGED(archiveDocumentSignatureInfo(d)) OR
+            CHANGED(archiveDocumentChecksum(d))) AND
+           PREV(archiveDocumentStatus(d)) != ArchiveDocumentStatus.draft AND
+           archiveDocumentStatus(d) != ArchiveDocumentStatus.destroyed
+    MESSAGE 'Нельзя заменить содержимое зарегистрированного архивного документа';
+CONSTRAINT (CHANGED(archiveDocumentDestructionAct(ArchiveDocument d)) OR
+            CHANGED(archiveDocumentDestructionDate(d)) OR
+            CHANGED(archiveDocumentDestructionReason(d))) AND
+           PREV(archiveDocumentStatus(d)) == ArchiveDocumentStatus.destroyed
+    MESSAGE 'Нельзя изменить реквизиты зарегистрированного уничтожения';
+
+archiveDocumentCount(ArchiveCase c) = GROUP SUM 1 IF
+    archiveDocumentCase(ArchiveDocument d) == c;
+archiveDraftDocumentCount(ArchiveCase c) = GROUP SUM 1 IF
+    archiveDocumentCase(ArchiveDocument d) == c AND
+    archiveDocumentStatus(d) == ArchiveDocumentStatus.draft;
+archiveDestroyedDocumentCount(ArchiveCase c) = GROUP SUM 1 IF
+    archiveDocumentCase(ArchiveDocument d) == c AND
+    archiveDocumentStatus(d) == ArchiveDocumentStatus.destroyed;
+
+registerArchiveDocument 'Зарегистрировать' (ArchiveDocument d) {
+    IF archiveDocumentStatus(d) AND archiveDocumentStatus(d) != ArchiveDocumentStatus.draft THEN
+        MESSAGE 'Зарегистрировать можно только черновик';
+    ELSE IF NOT archiveDocumentCase(d) OR NOT archiveDocumentKind(d) OR
+            NOT archiveDocumentNumber(d) OR NOT archiveDocumentDate(d) OR
+            NOT archiveDocumentTitle(d) OR NOT archiveDocumentCarrier(d) OR
+            NOT archiveDocumentRetentionStart(d) THEN
+        MESSAGE 'Заполните дело, вид, номер, даты, заголовок и носитель';
+    ELSE IF archiveCaseStatus(archiveDocumentCase(d)) != ArchiveCaseStatus.open THEN
+        MESSAGE 'Документы добавляются только в формируемое дело';
+    ELSE IF NOT archiveSourceReady(d) THEN
+        MESSAGE 'Исходный документ ещё не завершён';
+    ELSE IF NOT retentionRuleOn(archiveDocumentKind(d), archiveDocumentDate(d)) THEN
+        MESSAGE 'Для вида и даты документа не найдено правило хранения';
+    ELSE {
+        archiveDocumentRetentionRule(d) <-
+            retentionRuleOn(archiveDocumentKind(d), archiveDocumentDate(d));
+        archiveDocumentRetentionYears(d) <-
+            retentionRuleYears(archiveDocumentRetentionRule(d));
+        archiveDocumentPermanent(d) <-
+            retentionRulePermanent(archiveDocumentRetentionRule(d));
+        IF archiveDocumentPermanent(d) THEN
+            archiveDocumentRetentionUntil(d) <- NULL;
+        ELSE
+            archiveDocumentRetentionUntil(d) <- archiveDocumentSuggestedRetentionUntil(d);
+        archiveDocumentStatus(d) <- ArchiveDocumentStatus.registered;
+        archiveDocumentRegisteredAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+closeArchiveCase 'Закрыть дело' (ArchiveCase c) {
+    IF archiveCaseStatus(c) AND archiveCaseStatus(c) != ArchiveCaseStatus.open THEN
+        MESSAGE 'Закрыть можно только формируемое дело';
+    ELSE IF NOT archiveCaseOrganization(c) OR NOT archiveCaseIndex(c) OR
+            NOT archiveCaseYear(c) OR NOT archiveCaseTitle(c) OR
+            NOT archiveCaseOpenedDate(c) OR NOT archiveDocumentCount(c) THEN
+        MESSAGE 'Заполните реквизиты дела и добавьте документы';
+    ELSE IF archiveDraftDocumentCount(c) THEN
+        MESSAGE 'Зарегистрируйте все документы дела';
+    ELSE {
+        IF NOT archiveCaseClosedDate(c) THEN archiveCaseClosedDate(c) <- currentDate();
+        archiveCaseStatus(c) <- ArchiveCaseStatus.closed;
+        APPLY;
+    }
+}
+
+transferArchiveCase 'Передать в архив' (ArchiveCase c) {
+    IF archiveCaseStatus(c) != ArchiveCaseStatus.closed THEN
+        MESSAGE 'Передать можно только закрытое дело';
+    ELSE IF NOT archiveCaseTransferDate(c) OR NOT archiveCaseTransferAct(c) THEN
+        MESSAGE 'Укажите дату и акт передачи';
+    ELSE {
+        FOR archiveDocumentCase(ArchiveDocument d) == c AND
+            archiveDocumentStatus(d) == ArchiveDocumentStatus.registered DO {
+            archiveDocumentStatus(d) <- ArchiveDocumentStatus.stored;
+            archiveDocumentStoredAt(d) <- currentDateTime();
+        }
+        archiveCaseStatus(c) <- ArchiveCaseStatus.stored;
+        APPLY;
+    }
+}
+
+prepareArchiveDestruction 'Подготовить к уничтожению' (ArchiveDocument d) {
+    IF archiveDocumentStatus(d) != ArchiveDocumentStatus.stored THEN
+        MESSAGE 'Документ должен находиться в архиве';
+    ELSE IF archiveDocumentPermanent(d) THEN
+        MESSAGE 'Документ постоянного хранения нельзя уничтожить';
+    ELSE IF NOT archiveDocumentRetentionDue(d) THEN
+        MESSAGE 'Срок хранения документа ещё не истёк';
+    ELSE {
+        archiveDocumentStatus(d) <- ArchiveDocumentStatus.destructionReady;
+        APPLY;
+    }
+}
+
+destroyArchiveDocument 'Зарегистрировать уничтожение' (ArchiveDocument d) {
+    IF archiveDocumentStatus(d) != ArchiveDocumentStatus.destructionReady THEN
+        MESSAGE 'Сначала подготовьте документ к уничтожению';
+    ELSE IF NOT archiveDocumentDestructionAct(d) OR NOT archiveDocumentDestructionDate(d) OR
+            NOT archiveDocumentDestructionReason(d) THEN
+        MESSAGE 'Заполните акт, дату и основание уничтожения';
+    ELSE {
+        archiveDocumentFile(d) <- NULL;
+        archiveDocumentStatus(d) <- ArchiveDocumentStatus.destroyed;
+        archiveDocumentDestroyedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM archiveDocumentKinds 'Виды архивных документов'
+    OBJECTS k = ArchiveDocumentKind
+    PROPERTIES(k) archiveKindCode, archiveKindName, archiveKindNameKz, archiveKindActive
+;
+
+FORM archiveRetentionRules 'Правила хранения архивных документов'
+    OBJECTS r = ArchiveRetentionRule
+    PROPERTIES(r) retentionRuleKind, retentionRuleValidFrom, retentionRuleValidTo,
+                  retentionRuleYears, retentionRulePermanent,
+                  retentionRuleLegalBasis, retentionRuleNote
+;
+
+FORM archiveCases 'Архивные дела'
+    OBJECTS c = ArchiveCase
+    PROPERTIES(c) archiveCaseOrganization, archiveCaseIndex, archiveCaseYear,
+                  archiveCaseTitle, archiveCaseResponsible, archiveCaseOpenedDate,
+                  archiveCaseClosedDate, archiveCaseTransferDate, archiveCaseTransferAct,
+                  archiveCaseStatus, archiveDocumentCount, archiveDestroyedDocumentCount
+    PROPERTIES(c) closeArchiveCase, transferArchiveCase
+;
+
+FORM archiveDocuments 'Архивные документы'
+    OBJECTS d = ArchiveDocument
+    PROPERTIES(d) archiveDocumentCase, archiveDocumentKind, archiveDocumentEmployee,
+                  archiveDocumentNumber, archiveDocumentDate, archiveDocumentTitle,
+                  archiveDocumentPages, archiveDocumentCarrier, archiveDocumentFile,
+                  archiveDocumentPhysicalLocation, archiveDocumentSignatureInfo,
+                  archiveDocumentChecksum, archiveDocumentRetentionStart,
+                  archiveDocumentRetentionRule, archiveDocumentRetentionYears,
+                  archiveDocumentPermanent, archiveDocumentRetentionUntil,
+                  archiveDocumentRetentionDue, archiveDocumentStatus,
+                  archiveDocumentRegisteredAt, archiveDocumentStoredAt,
+                  archiveDocumentDestructionAct, archiveDocumentDestructionDate,
+                  archiveDocumentDestructionReason, archiveDocumentDestroyedAt,
+                  archiveSourceEmployment, archiveSourcePersonnelEvent,
+                  archiveSourceEmployeeCard, archiveSourceLeave,
+                  archiveSourceVacationSchedule, archiveSourceBusinessTrip,
+                  archiveSourcePersonnelNotice
+    PROPERTIES(d) registerArchiveDocument, prepareArchiveDestruction, destroyArchiveDocument
+;
+
+archiveCaseOrganizationName 'Организация / Ұйым' (ArchiveCase c) =
+    name(archiveCaseOrganization(c));
+
+FORM archiveCaseInventory 'Опись архивного дела / Архивтік істің тізімдемесі'
+    OBJECTS c = ArchiveCase PANEL
+    PROPERTIES(c) archiveCaseOrganizationName, archiveCaseIndex, archiveCaseYear,
+                  archiveCaseTitle, archiveCaseResponsible, archiveCaseClosedDate,
+                  archiveCaseTransferDate, archiveCaseTransferAct
+    OBJECTS d = ArchiveDocument
+    PROPERTIES(d) archiveDocumentNumber, archiveDocumentDate, archiveDocumentTitle,
+                  archiveDocumentPages, archiveDocumentCarrier,
+                  archiveDocumentRetentionYears, archiveDocumentPermanent,
+                  archiveDocumentRetentionUntil, archiveDocumentStatus
+    FILTERS archiveDocumentCase(d) == c
+;
+
+printArchiveCaseInventoryPdf 'Опись PDF' (ArchiveCase c) {
+    IF archiveCaseStatus(c) != ArchiveCaseStatus.stored THEN
+        MESSAGE 'Опись печатается после передачи дела в архив';
+    ELSE PRINT archiveCaseInventory OBJECTS c = c PDF;
+}
+
+printArchiveCaseInventoryDocx 'Опись DOCX' (ArchiveCase c) {
+    IF archiveCaseStatus(c) != ArchiveCaseStatus.stored THEN
+        MESSAGE 'Опись печатается после передачи дела в архив';
+    ELSE PRINT archiveCaseInventory OBJECTS c = c DOCX;
+}
+
+EXTEND FORM archiveCases
+    PROPERTIES(c) printArchiveCaseInventoryPdf TOOLBAR,
+                  printArchiveCaseInventoryDocx TOOLBAR
+;
