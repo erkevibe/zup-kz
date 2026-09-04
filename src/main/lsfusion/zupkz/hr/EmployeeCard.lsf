@@ -1,0 +1,284 @@
+MODULE HREmployeeCard;
+
+REQUIRE HREmployment;
+NAMESPACE ZUPKZ;
+
+CLASS MaritalStatus 'Семейное положение' {
+    single 'Не состоит в браке',
+    married 'Состоит в браке',
+    divorced 'Разведён(а)',
+    widowed 'Вдовец / вдова'
+}
+
+CLASS ConsentPermission 'Условие согласия' {
+    allowed 'Разрешено',
+    prohibited 'Запрещено'
+}
+
+CLASS EmployeeCard 'Личная карточка работника';
+
+cardEmployee 'Работник' = DATA Employee (EmployeeCard);
+cardOrganization 'Организация' = DATA Organization (EmployeeCard);
+cardNumber 'Номер карточки' = DATA STRING[50] (EmployeeCard);
+cardDate 'Дата составления' = DATA DATE (EmployeeCard);
+personnelNumber 'Табельный номер' = DATA STRING[50] (EmployeeCard);
+birthPlace 'Место рождения' = DATA STRING[250] (EmployeeCard);
+nationality 'Национальность (по желанию)' = DATA STRING[100] (EmployeeCard);
+maritalStatus 'Семейное положение' = DATA MaritalStatus (EmployeeCard);
+phone 'Телефон' = DATA STRING[50] (EmployeeCard);
+email 'Электронная почта' = DATA STRING[150] (EmployeeCard);
+registeredAddress 'Адрес регистрации' = DATA STRING[500] (EmployeeCard);
+residentialAddress 'Адрес проживания' = DATA STRING[500] (EmployeeCard);
+consentDate 'Дата согласия на обработку ПД' = DATA DATE (EmployeeCard);
+consentValidUntil 'Согласие действует по' = DATA DATE (EmployeeCard);
+consentPurpose 'Цель обработки ПД' = DATA STRING[500] (EmployeeCard);
+consentDataScope 'Перечень обрабатываемых данных' = DATA STRING[1000] (EmployeeCard);
+consentThirdPartyTransfer 'Передача третьим лицам' = DATA ConsentPermission (EmployeeCard);
+consentCrossBorderTransfer 'Трансграничная передача' = DATA ConsentPermission (EmployeeCard);
+consentPublicDistribution 'Размещение в открытых источниках' =
+    DATA ConsentPermission (EmployeeCard);
+consentWithdrawnAt 'Согласие отозвано' = DATA DATETIME (EmployeeCard);
+
+employeeCardPairCount(Employee worker, Organization org) = GROUP SUM 1 IF
+    cardEmployee(EmployeeCard c) == worker AND cardOrganization(c) == org;
+CONSTRAINT employeeCardPairCount(Employee worker, Organization org) > 1
+    MESSAGE 'Для работника может быть только одна личная карточка в организации';
+employeeCardNumberCount(Organization org, STRING[50] number) = GROUP SUM 1 IF
+    cardOrganization(EmployeeCard c) == org AND cardNumber(c) == number;
+CONSTRAINT employeeCardNumberCount(Organization org, STRING[50] number) > 1
+    MESSAGE 'Номер личной карточки должен быть уникален в организации';
+personnelNumberCount(Organization org, STRING[50] number) = GROUP SUM 1 IF
+    cardOrganization(EmployeeCard c) == org AND personnelNumber(c) == number;
+CONSTRAINT personnelNumberCount(Organization org, STRING[50] number) > 1
+    MESSAGE 'Табельный номер должен быть уникален в организации';
+CONSTRAINT consentValidUntil(EmployeeCard c) < consentDate(c)
+    MESSAGE 'Срок согласия не может завершаться раньше даты его получения';
+
+cardEmployeeName 'Ф.И.О. / Т.А.Ә.' (EmployeeCard c) =
+    lastName(cardEmployee(c)) + ' ' + firstName(cardEmployee(c)) +
+    (IF middleName(cardEmployee(c)) THEN ' ' + middleName(cardEmployee(c)) ELSE '');
+cardEmployeeIin 'ИИН / ЖСН' (EmployeeCard c) = iin(cardEmployee(c));
+cardOrganizationName 'Организация / Ұйым' (EmployeeCard c) = name(cardOrganization(c));
+cardOrganizationBin 'БИН / БСН' (EmployeeCard c) = bin(cardOrganization(c));
+cardEmployeeBirthDate 'Дата рождения / Туған күні' (EmployeeCard c) =
+    birthDate(cardEmployee(c));
+cardEmployeeGender 'Пол / Жынысы' (EmployeeCard c) = gender(cardEmployee(c));
+cardEmployeeCitizenship 'Гражданство / Азаматтығы' (EmployeeCard c) =
+    citizenshipCode(cardEmployee(c));
+employeeCardReady(EmployeeCard c) =
+    cardEmployee(c) AND cardOrganization(c) AND cardNumber(c) AND cardDate(c) AND
+    personnelNumber(c) AND iin(cardEmployee(c)) AND lastName(cardEmployee(c)) AND
+    firstName(cardEmployee(c)) AND birthDate(cardEmployee(c)) AND consentDate(c) AND
+    consentPurpose(c) AND consentDataScope(c) AND consentThirdPartyTransfer(c) AND
+    consentCrossBorderTransfer(c) AND consentPublicDistribution(c) AND
+    NOT consentWithdrawnAt(c);
+
+CLASS IdentityDocumentType 'Вид документа' {
+    identityCard 'Удостоверение личности',
+    passport 'Паспорт',
+    residencePermit 'Вид на жительство',
+    other 'Иной документ'
+}
+
+CLASS EmployeeIdentityDocument 'Документ, удостоверяющий личность';
+
+identityCard 'Личная карточка' = DATA EmployeeCard (EmployeeIdentityDocument);
+identityType 'Вид документа' = DATA IdentityDocumentType (EmployeeIdentityDocument);
+identityNumber 'Номер' = DATA STRING[50] (EmployeeIdentityDocument);
+identityIssuedDate 'Дата выдачи' = DATA DATE (EmployeeIdentityDocument);
+identityValidUntil 'Действителен по' = DATA DATE (EmployeeIdentityDocument);
+identityIssuer 'Кем выдан' = DATA STRING[250] (EmployeeIdentityDocument);
+
+CONSTRAINT identityValidUntil(EmployeeIdentityDocument d) < identityIssuedDate(d)
+    MESSAGE 'Срок документа не может завершаться раньше даты выдачи';
+identityDocumentCount(EmployeeCard c) = GROUP SUM 1 IF
+    identityCard(EmployeeIdentityDocument d) == c;
+
+CLASS EducationLevel 'Уровень образования' {
+    generalSecondary 'Общее среднее',
+    technicalVocational 'Техническое и профессиональное',
+    postSecondary 'Послесреднее',
+    higher 'Высшее',
+    postgraduate 'Послевузовское',
+    other 'Иное'
+}
+
+CLASS EmployeeEducation 'Образование работника';
+
+educationCard 'Личная карточка' = DATA EmployeeCard (EmployeeEducation);
+educationLevel 'Уровень' = DATA EducationLevel (EmployeeEducation);
+educationInstitution 'Учебное заведение' = DATA STRING[250] (EmployeeEducation);
+educationGraduationYear 'Год окончания' = DATA INTEGER (EmployeeEducation);
+educationDiplomaNumber 'Номер диплома' = DATA STRING[100] (EmployeeEducation);
+educationSpeciality 'Специальность' = DATA STRING[200] (EmployeeEducation);
+educationQualification 'Квалификация' = DATA STRING[200] (EmployeeEducation);
+
+educationRecordCount(EmployeeCard c) = GROUP SUM 1 IF
+    educationCard(EmployeeEducation e) == c;
+
+CLASS EmployeeFamilyMember 'Член семьи работника';
+
+familyCard 'Личная карточка' = DATA EmployeeCard (EmployeeFamilyMember);
+familyRelation 'Степень родства' = DATA STRING[100] (EmployeeFamilyMember);
+familyLastName 'Фамилия' = DATA STRING[100] (EmployeeFamilyMember);
+familyFirstName 'Имя' = DATA STRING[100] (EmployeeFamilyMember);
+familyMiddleName 'Отчество' = DATA STRING[100] (EmployeeFamilyMember);
+familyBirthDate 'Дата рождения' = DATA DATE (EmployeeFamilyMember);
+familyIin 'ИИН' = DATA STRING[12] (EmployeeFamilyMember);
+
+CONSTRAINT familyIin(EmployeeFamilyMember m) AND length(familyIin(m)) != 12
+    MESSAGE 'ИИН члена семьи должен содержать 12 символов';
+familyMemberCount(EmployeeCard c) = GROUP SUM 1 IF
+    familyCard(EmployeeFamilyMember m) == c;
+
+CLASS MilitaryAccountStatus 'Статус воинского учёта' {
+    notLiable 'Не военнообязанный',
+    conscript 'Призывник',
+    liable 'Военнообязанный',
+    excluded 'Исключён с воинского учёта'
+}
+
+CLASS EmployeeMilitaryRecord 'Воинский учёт работника';
+
+militaryCard 'Личная карточка' = DATA EmployeeCard (EmployeeMilitaryRecord);
+militaryStatus 'Статус учёта' = DATA MilitaryAccountStatus (EmployeeMilitaryRecord);
+militaryCategory 'Категория учёта' = DATA STRING[100] (EmployeeMilitaryRecord);
+militaryRank 'Воинское звание' = DATA STRING[100] (EmployeeMilitaryRecord);
+militaryProfile 'Состав (профиль)' = DATA STRING[100] (EmployeeMilitaryRecord);
+militarySpeciality 'Военно-учётная специальность' = DATA STRING[100] (EmployeeMilitaryRecord);
+militaryFitness 'Годность к воинской службе' = DATA STRING[100] (EmployeeMilitaryRecord);
+militaryAuthority 'Орган воинского учёта' = DATA STRING[250] (EmployeeMilitaryRecord);
+militaryDocument 'Воинский документ' = DATA STRING[150] (EmployeeMilitaryRecord);
+militarySpecialRegister 'Специальный учёт' = DATA STRING[250] (EmployeeMilitaryRecord);
+
+militaryRecordCount(EmployeeCard c) = GROUP SUM 1 IF
+    militaryCard(EmployeeMilitaryRecord r) == c;
+CONSTRAINT militaryRecordCount(EmployeeCard c) > 1
+    MESSAGE 'Для личной карточки допускается только одна запись воинского учёта';
+
+CLASS EmployeePreviousEmployment 'Предыдущая трудовая деятельность';
+
+previousEmploymentCard 'Личная карточка' = DATA EmployeeCard (EmployeePreviousEmployment);
+previousEmployer 'Работодатель' = DATA STRING[250] (EmployeePreviousEmployment);
+previousPosition 'Должность' = DATA STRING[200] (EmployeePreviousEmployment);
+previousDateFrom 'Работал с' = DATA DATE (EmployeePreviousEmployment);
+previousDateTo 'Работал по' = DATA DATE (EmployeePreviousEmployment);
+previousEmploymentBasis 'Подтверждающий документ' =
+    DATA STRING[250] (EmployeePreviousEmployment);
+
+CONSTRAINT previousDateTo(EmployeePreviousEmployment h) < previousDateFrom(h)
+    MESSAGE 'Окончание предыдущей работы не может быть раньше начала';
+previousEmploymentCount(EmployeeCard c) = GROUP SUM 1 IF
+    previousEmploymentCard(EmployeePreviousEmployment h) == c;
+
+internalAssignmentCount(EmployeeCard c) = GROUP SUM 1 IF
+    employee(employment(EmploymentAssignment a)) == cardEmployee(c) AND
+    organization(employment(a)) == cardOrganization(c);
+
+FORM employeeCards 'Личные карточки работников'
+    OBJECTS c = EmployeeCard
+    PROPERTIES(c) cardOrganization, cardEmployee, cardNumber, cardDate,
+                  personnelNumber, cardEmployeeName, cardEmployeeIin,
+                  birthPlace, nationality, maritalStatus, phone, email,
+                  registeredAddress, residentialAddress, consentDate,
+                  consentValidUntil, consentPurpose, consentDataScope,
+                  consentThirdPartyTransfer, consentCrossBorderTransfer,
+                  consentPublicDistribution, consentWithdrawnAt, employeeCardReady
+    OBJECTS id = EmployeeIdentityDocument
+    PROPERTIES(id) identityType, identityNumber, identityIssuedDate,
+                   identityValidUntil, identityIssuer
+    FILTERS identityCard(id) == c
+    OBJECTS education = EmployeeEducation
+    PROPERTIES(education) educationLevel, educationInstitution,
+                          educationGraduationYear, educationDiplomaNumber,
+                          educationSpeciality, educationQualification
+    FILTERS educationCard(education) == c
+    OBJECTS family = EmployeeFamilyMember
+    PROPERTIES(family) familyRelation, familyLastName, familyFirstName,
+                       familyMiddleName, familyBirthDate, familyIin
+    FILTERS familyCard(family) == c
+    OBJECTS military = EmployeeMilitaryRecord
+    PROPERTIES(military) militaryStatus, militaryCategory, militaryRank,
+                         militaryProfile, militarySpeciality, militaryFitness,
+                         militaryAuthority, militaryDocument, militarySpecialRegister
+    FILTERS militaryCard(military) == c
+    OBJECTS history = EmployeePreviousEmployment
+    PROPERTIES(history) previousEmployer, previousPosition, previousDateFrom,
+                        previousDateTo, previousEmploymentBasis
+    FILTERS previousEmploymentCard(history) == c
+    OBJECTS assignment = EmploymentAssignment
+    PROPERTIES(assignment) staffPosition, assignmentFrom, assignmentTo,
+                           fte, assignmentSalary
+    FILTERS employee(employment(assignment)) == cardEmployee(c),
+            organization(employment(assignment)) == cardOrganization(c)
+;
+
+employeeCardTitleRu 'Документ / Құжат (RU)' (EmployeeCard c) =
+    'ЛИЧНАЯ КАРТОЧКА РАБОТНИКА';
+employeeCardTitleKz 'Құжат / Документ (KZ)' (EmployeeCard c) =
+    'ҚЫЗМЕТКЕРДІҢ ЖЕКЕ КАРТОЧКАСЫ';
+
+FORM employeePersonalCard 'Личная карточка / Жеке карточка'
+    OBJECTS c = EmployeeCard PANEL
+    PROPERTIES(c) employeeCardTitleRu, employeeCardTitleKz, cardOrganizationName,
+                  cardOrganizationBin, cardNumber, cardDate, personnelNumber, cardEmployeeName,
+                  cardEmployeeIin, cardEmployeeBirthDate, cardEmployeeGender,
+                  cardEmployeeCitizenship, birthPlace, nationality,
+                  maritalStatus, phone, email, registeredAddress, residentialAddress,
+                  consentDate, consentValidUntil, consentPurpose, consentDataScope,
+                  consentThirdPartyTransfer, consentCrossBorderTransfer,
+                  consentPublicDistribution, consentWithdrawnAt
+    OBJECTS id = EmployeeIdentityDocument
+    PROPERTIES(id) identityType, identityNumber, identityIssuedDate,
+                   identityValidUntil, identityIssuer
+    FILTERS identityCard(id) == c
+    OBJECTS education = EmployeeEducation
+    PROPERTIES(education) educationLevel, educationInstitution,
+                          educationGraduationYear, educationDiplomaNumber,
+                          educationSpeciality, educationQualification
+    FILTERS educationCard(education) == c
+    OBJECTS family = EmployeeFamilyMember
+    PROPERTIES(family) familyRelation, familyLastName, familyFirstName,
+                       familyMiddleName, familyBirthDate, familyIin
+    FILTERS familyCard(family) == c
+    OBJECTS military = EmployeeMilitaryRecord
+    PROPERTIES(military) militaryStatus, militaryCategory, militaryRank,
+                         militaryProfile, militarySpeciality, militaryFitness,
+                         militaryAuthority, militaryDocument, militarySpecialRegister
+    FILTERS militaryCard(military) == c
+    OBJECTS history = EmployeePreviousEmployment
+    PROPERTIES(history) previousEmployer, previousPosition, previousDateFrom,
+                        previousDateTo, previousEmploymentBasis
+    FILTERS previousEmploymentCard(history) == c
+    OBJECTS assignment = EmploymentAssignment
+    PROPERTIES(assignment) staffPosition, assignmentFrom, assignmentTo,
+                           fte, assignmentSalary
+    FILTERS employee(employment(assignment)) == cardEmployee(c),
+            organization(employment(assignment)) == cardOrganization(c)
+;
+
+printEmployeeCard 'Печать / Басып шығару' (EmployeeCard c) {
+    IF NOT employeeCardReady(c) THEN
+        MESSAGE 'Для печати заполните обязательные реквизиты карточки и согласия';
+    ELSE
+        PRINT employeePersonalCard OBJECTS c = c;
+}
+
+printEmployeeCardPdf 'PDF' (EmployeeCard c) {
+    IF NOT employeeCardReady(c) THEN
+        MESSAGE 'Для PDF заполните обязательные реквизиты карточки и согласия';
+    ELSE
+        PRINT employeePersonalCard OBJECTS c = c PDF;
+}
+
+printEmployeeCardDocx 'DOCX' (EmployeeCard c) {
+    IF NOT employeeCardReady(c) THEN
+        MESSAGE 'Для DOCX заполните обязательные реквизиты карточки и согласия';
+    ELSE
+        PRINT employeePersonalCard OBJECTS c = c DOCX;
+}
+
+EXTEND FORM employeeCards
+    PROPERTIES(c) printEmployeeCard TOOLBAR, printEmployeeCardPdf TOOLBAR,
+                  printEmployeeCardDocx TOOLBAR
+;

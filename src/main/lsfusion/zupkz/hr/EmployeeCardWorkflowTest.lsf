@@ -1,0 +1,98 @@
+MODULE EmployeeCardWorkflowTest;
+
+REQUIRE PrintWorkflowTest, HREmployeeCard;
+NAMESPACE ZUPKZ;
+
+employeeCardWorkflowTest() {
+    LOCAL cardPdf = FILE();
+    NEW org = Organization {
+        name(org) <- 'Карточка Тест';
+        bin(org) <- '111111111111';
+        NEW worker = Employee {
+            iin(worker) <- '910101300001';
+            lastName(worker) <- 'Карточкин';
+            firstName(worker) <- 'Тест';
+            middleName(worker) <- 'Кадрович';
+            birthDate(worker) <- 1991_01_01;
+            gender(worker) <- Gender.male;
+            citizenshipCode(worker) <- 'KAZ';
+            NEW card = EmployeeCard {
+                cardEmployee(card) <- worker;
+                cardOrganization(card) <- org;
+                cardNumber(card) <- 'PC-0001';
+                cardDate(card) <- 2026_09_04;
+                personnelNumber(card) <- '0001';
+                birthPlace(card) <- 'г. Алматы';
+                maritalStatus(card) <- MaritalStatus.married;
+                registeredAddress(card) <- 'г. Алматы';
+                residentialAddress(card) <- 'г. Алматы';
+                consentDate(card) <- 2026_09_04;
+                consentPurpose(card) <- 'Кадровый учёт и исполнение трудового договора';
+                consentDataScope(card) <- 'Идентификационные, кадровые и расчётные данные';
+                consentThirdPartyTransfer(card) <- ConsentPermission.prohibited;
+                consentCrossBorderTransfer(card) <- ConsentPermission.prohibited;
+                consentPublicDistribution(card) <- ConsentPermission.prohibited;
+                NEW contract = Employment {
+                    employee(contract) <- worker;
+                    organization(contract) <- org;
+                    hireDate(contract) <- 2026_09_01;
+                    NEW assignment = EmploymentAssignment {
+                        employment(assignment) <- contract;
+                        assignmentFrom(assignment) <- 2026_09_01;
+                        fte(assignment) <- 1.0000;
+                    }
+                }
+                NEW identity = EmployeeIdentityDocument {
+                    identityCard(identity) <- card;
+                    identityType(identity) <- IdentityDocumentType.identityCard;
+                    identityNumber(identity) <- 'ID1234567';
+                    identityIssuedDate(identity) <- 2024_01_01;
+                    identityValidUntil(identity) <- 2034_01_01;
+                    identityIssuer(identity) <- 'МВД РК';
+                    NEW education = EmployeeEducation {
+                        educationCard(education) <- card;
+                        educationLevel(education) <- EducationLevel.higher;
+                        educationInstitution(education) <- 'КазНУ';
+                        educationGraduationYear(education) <- 2013;
+                        educationSpeciality(education) <- 'Экономика';
+                        NEW family = EmployeeFamilyMember {
+                            familyCard(family) <- card;
+                            familyRelation(family) <- 'Супруга';
+                            familyLastName(family) <- 'Карточкина';
+                            familyFirstName(family) <- 'Тест';
+                            familyIin(family) <- '920202400002';
+                            NEW military = EmployeeMilitaryRecord {
+                                militaryCard(military) <- card;
+                                militaryStatus(military) <- MilitaryAccountStatus.liable;
+                                militaryRank(military) <- 'Рядовой';
+                                militarySpeciality(military) <- '999';
+                                NEW history = EmployeePreviousEmployment {
+                                    previousEmploymentCard(history) <- card;
+                                    previousEmployer(history) <- 'Предыдущий работодатель';
+                                    previousPosition(history) <- 'Экономист';
+                                    previousDateFrom(history) <- 2013_09_01;
+                                    previousDateTo(history) <- 2026_08_31;
+                                    previousEmploymentBasis(history) <- 'Трудовая книжка';
+
+                                    PRINT employeePersonalCard OBJECTS c = card PDF TO cardPdf;
+
+                                    EXPORT JSON FROM
+                                        cardReady = employeeCardReady(card),
+                                        employeeName = cardEmployeeName(card),
+                                        cardOrganizationMatches = cardOrganization(card) == org,
+                                        identityDocuments = identityDocumentCount(card),
+                                        educationRecords = educationRecordCount(card),
+                                        familyMembers = familyMemberCount(card),
+                                        militaryRecords = militaryRecordCount(card),
+                                        previousEmployments = previousEmploymentCount(card),
+                                        internalAssignments = internalAssignmentCount(card),
+                                        pdfGenerated = TRUE IF cardPdf();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

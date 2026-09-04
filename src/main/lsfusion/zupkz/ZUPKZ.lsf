@@ -1,7 +1,7 @@
 MODULE ZUPKZ;
 
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
-        HREmployee, HRStaffSchedule, HREmployment, TimeProductionCalendar,
+        HREmployee, HRStaffSchedule, HREmployment, HREmployeeCard, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
         PayrollRecalculation, HRLeave, HRPrintForms, PayrollSickLeave, PayrollInterimPayment,
         PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax,
@@ -28,6 +28,7 @@ NAVIGATOR {
     }
 
     NEW FOLDER personnel 'Кадровый учёт' WINDOW toolbar {
+        NEW employeeCards;
         NEW employments;
         NEW employmentAssignments;
         NEW personnelEvents;
