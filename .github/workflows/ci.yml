@@ -121,6 +121,12 @@ jobs:
 
               python3 tests/assert_employee_card_workflow.py employee-card-workflow-result.json
 
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.planningWorkflowTest' \
+                --output planning-workflow-result.json
+
+              python3 tests/assert_planning_workflow.py planning-workflow-result.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT

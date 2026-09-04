@@ -3,7 +3,8 @@ MODULE ZUPKZ;
 REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         HREmployee, HRStaffSchedule, HREmployment, HREmployeeCard, TimeProductionCalendar,
         TimeWorkSchedule, TimeTimesheet, PayrollCore, AverageEarnings,
-        PayrollRecalculation, HRLeave, HRPrintForms, PayrollSickLeave, PayrollInterimPayment,
+        PayrollRecalculation, HRLeave, HRVacationSchedule, HRBusinessTrip, HRPrintForms,
+        PayrollSickLeave, PayrollInterimPayment,
         PayrollAssessmentBase, TaxesKZSocialPayments, TaxesKZIncomeTax,
         PayrollCivilContract,
         PayrollEnforcement, PayrollSettlement, PayrollPayments,
@@ -34,6 +35,9 @@ NAVIGATOR {
         NEW personnelEvents;
         NEW leaveEntitlements;
         NEW leaveDocuments;
+        NEW vacationSchedules;
+        NEW vacationScheduleLines;
+        NEW businessTrips;
         NEW sickLeaveDocuments;
     }
 

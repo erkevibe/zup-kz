@@ -1,0 +1,216 @@
+MODULE HRVacationSchedule;
+
+REQUIRE HRLeave;
+NAMESPACE ZUPKZ;
+
+CLASS VacationScheduleStatus 'Статус графика отпусков' {
+    draft 'Черновик',
+    approved 'Утверждён',
+    cancelled 'Отменён'
+}
+
+CLASS VacationScheduleAgreement 'Мнение работника' {
+    agreed 'Согласовано',
+    objection 'Есть возражения'
+}
+
+CLASS VacationSchedule 'График отпусков';
+
+vacationScheduleOrganization 'Организация' = DATA Organization (VacationSchedule);
+vacationScheduleNumber 'Номер' = DATA STRING[50] (VacationSchedule);
+vacationScheduleDate 'Дата документа' = DATA DATE (VacationSchedule);
+vacationScheduleYear 'Год' = DATA INTEGER (VacationSchedule);
+vacationScheduleCalendar 'Производственный календарь' = DATA ProductionCalendar (VacationSchedule);
+vacationScheduleStatus 'Статус' = DATA VacationScheduleStatus (VacationSchedule);
+vacationScheduleApprovedAt 'Утверждён' = DATA DATETIME (VacationSchedule);
+vacationScheduleApprovedBy 'Кем утверждён' = DATA STRING[150] (VacationSchedule);
+vacationScheduleCancelledAt 'Отменён' = DATA DATETIME (VacationSchedule);
+
+CONSTRAINT (CHANGED(vacationScheduleOrganization(VacationSchedule s)) OR
+            CHANGED(vacationScheduleNumber(s)) OR CHANGED(vacationScheduleDate(s)) OR
+            CHANGED(vacationScheduleYear(s)) OR CHANGED(vacationScheduleCalendar(s))) AND
+           PREV(vacationScheduleStatus(s)) != VacationScheduleStatus.draft
+    MESSAGE 'Нельзя изменить утверждённый или отменённый график отпусков';
+
+CLASS VacationScheduleLine 'Строка графика отпусков';
+
+vacationLineSchedule 'График отпусков' = DATA VacationSchedule (VacationScheduleLine);
+vacationLineAssignment 'Назначение' = DATA EmploymentAssignment (VacationScheduleLine);
+vacationLineKind 'Вид отпуска' = DATA LeaveKind (VacationScheduleLine);
+vacationLineDateFrom 'Плановая дата с' = DATA DATE (VacationScheduleLine);
+vacationLineDateTo 'Плановая дата по' = DATA DATE (VacationScheduleLine);
+vacationLineEntitlement 'Право на отпуск' = DATA LeaveEntitlement (VacationScheduleLine);
+vacationLineWorkWeek 'Рабочая неделя' = DATA LeaveWorkWeek (VacationScheduleLine);
+vacationLineAgreement 'Мнение работника' = DATA VacationScheduleAgreement (VacationScheduleLine);
+vacationLineOpinionDate 'Дата согласования' = DATA DATE (VacationScheduleLine);
+vacationLineNote 'Примечание' = DATA STRING[500] (VacationScheduleLine);
+vacationLineLeave 'Документ отпуска' = DATA LeaveDocument (VacationScheduleLine);
+
+CONSTRAINT vacationLineDateTo(VacationScheduleLine l) < vacationLineDateFrom(l)
+    MESSAGE 'Окончание планового отпуска не может быть раньше начала';
+CONSTRAINT vacationLineSchedule(VacationScheduleLine l) AND vacationLineAssignment(l) AND
+           organization(employment(vacationLineAssignment(l))) !=
+               vacationScheduleOrganization(vacationLineSchedule(l))
+    MESSAGE 'Назначение должно принадлежать организации графика отпусков';
+CONSTRAINT vacationLineEntitlement(VacationScheduleLine l) AND
+           entitlementAssignment(vacationLineEntitlement(l)) != vacationLineAssignment(l)
+    MESSAGE 'Право на отпуск должно принадлежать назначению строки';
+CONSTRAINT vacationLineKind(VacationScheduleLine l) AND
+           vacationLineKind(l) != LeaveKind.annualPaid AND
+           vacationLineKind(l) != LeaveKind.annualAdditional
+    MESSAGE 'В график включаются только оплачиваемые ежегодные отпуска';
+CONSTRAINT vacationLineDateFrom(VacationScheduleLine l) AND
+           extractYear(vacationLineDateFrom(l)) != vacationScheduleYear(vacationLineSchedule(l))
+    MESSAGE 'Начало отпуска должно относиться к году графика';
+CONSTRAINT vacationLineDateTo(VacationScheduleLine l) AND
+           extractYear(vacationLineDateTo(l)) != vacationScheduleYear(vacationLineSchedule(l))
+    MESSAGE 'Окончание отпуска должно относиться к году графика';
+CONSTRAINT vacationLineAssignment(VacationScheduleLine l) AND vacationLineDateFrom(l) AND
+           vacationLineDateTo(l) AND
+           (vacationLineDateFrom(l) < assignmentFrom(vacationLineAssignment(l)) OR
+            (assignmentTo(vacationLineAssignment(l)) AND
+             vacationLineDateTo(l) > assignmentTo(vacationLineAssignment(l))))
+    MESSAGE 'Плановый отпуск должен входить в период назначения';
+overlappingVacationScheduleLineCount(VacationScheduleLine l) = GROUP SUM 1 IF
+    vacationLineSchedule(VacationScheduleLine other) == vacationLineSchedule(l) AND
+    vacationLineAssignment(other) == vacationLineAssignment(l) AND
+    vacationLineDateFrom(other) <= vacationLineDateTo(l) AND
+    vacationLineDateTo(other) >= vacationLineDateFrom(l);
+CONSTRAINT vacationLineSchedule(VacationScheduleLine l) AND vacationLineAssignment(l) AND
+           vacationLineDateFrom(l) AND vacationLineDateTo(l) AND
+           overlappingVacationScheduleLineCount(l) > 1
+    MESSAGE 'Периоды одного работника в графике отпусков не должны пересекаться';
+CONSTRAINT (CHANGED(vacationLineSchedule(VacationScheduleLine l)) OR
+            CHANGED(vacationLineAssignment(l)) OR CHANGED(vacationLineKind(l)) OR
+            CHANGED(vacationLineDateFrom(l)) OR CHANGED(vacationLineDateTo(l)) OR
+            CHANGED(vacationLineEntitlement(l)) OR CHANGED(vacationLineWorkWeek(l)) OR
+            CHANGED(vacationLineAgreement(l)) OR CHANGED(vacationLineOpinionDate(l))) AND
+           PREV(vacationScheduleStatus(vacationLineSchedule(l))) != VacationScheduleStatus.draft
+    MESSAGE 'Нельзя изменить строку утверждённого или отменённого графика';
+
+vacationScheduleLineCount(VacationSchedule s) = GROUP SUM 1 IF
+    vacationLineSchedule(VacationScheduleLine l) == s;
+invalidVacationScheduleLineCount(VacationSchedule s) = GROUP SUM 1 IF
+    vacationLineSchedule(VacationScheduleLine l) == s AND
+    (NOT vacationLineAssignment(l) OR NOT vacationLineKind(l) OR
+     NOT vacationLineDateFrom(l) OR NOT vacationLineDateTo(l) OR
+     NOT vacationLineWorkWeek(l) OR NOT vacationLineAgreement(l) OR
+     NOT vacationLineOpinionDate(l));
+vacationLineDays 'Дней отпуска' (VacationScheduleLine l) =
+    annualLeaveDays(vacationScheduleCalendar(vacationLineSchedule(l)),
+                    vacationLineDateFrom(l), vacationLineDateTo(l));
+vacationLineFulfilled 'Отпуск утверждён' (VacationScheduleLine l) =
+    leaveStatus(vacationLineLeave(l)) == LeaveStatus.approved;
+activeScheduledLeaveCount(VacationSchedule s) = GROUP SUM 1 IF
+    vacationLineSchedule(VacationScheduleLine l) == s AND vacationLineLeave(l) AND
+    leaveStatus(vacationLineLeave(l)) != LeaveStatus.cancelled;
+
+approveVacationSchedule 'Утвердить график' (VacationSchedule s) {
+    IF vacationScheduleStatus(s) AND
+       vacationScheduleStatus(s) != VacationScheduleStatus.draft THEN
+        MESSAGE 'Можно утвердить только черновик графика';
+    ELSE IF NOT vacationScheduleOrganization(s) OR NOT vacationScheduleNumber(s) OR
+            NOT vacationScheduleDate(s) OR NOT vacationScheduleYear(s) OR
+            NOT vacationScheduleCalendar(s) OR NOT vacationScheduleLineCount(s) THEN
+        MESSAGE 'Заполните организацию, реквизиты, год, календарь и строки';
+    ELSE IF invalidVacationScheduleLineCount(s) THEN
+        MESSAGE 'Заполните обязательные реквизиты всех строк графика';
+    ELSE {
+        vacationScheduleStatus(s) <- VacationScheduleStatus.approved;
+        vacationScheduleApprovedAt(s) <- currentDateTime();
+        APPLY;
+    }
+}
+
+cancelVacationSchedule 'Отменить график' (VacationSchedule s) {
+    IF vacationScheduleStatus(s) != VacationScheduleStatus.approved THEN
+        MESSAGE 'Отменить можно только утверждённый график';
+    ELSE IF activeScheduledLeaveCount(s) THEN
+        MESSAGE 'Нельзя отменить график, по которому созданы действующие отпуска';
+    ELSE {
+        vacationScheduleStatus(s) <- VacationScheduleStatus.cancelled;
+        vacationScheduleCancelledAt(s) <- currentDateTime();
+        APPLY;
+    }
+}
+
+createLeaveFromSchedule 'Создать отпуск' (VacationScheduleLine l) {
+    IF vacationScheduleStatus(vacationLineSchedule(l)) != VacationScheduleStatus.approved THEN
+        MESSAGE 'Сначала утвердите график отпусков';
+    ELSE IF vacationLineLeave(l) THEN
+        MESSAGE 'По строке уже создан документ отпуска';
+    ELSE {
+        NEW leave = LeaveDocument {
+            leaveAssignment(leave) <- vacationLineAssignment(l);
+            leaveKind(leave) <- vacationLineKind(l);
+            leaveDateFrom(leave) <- vacationLineDateFrom(l);
+            leaveDateTo(leave) <- vacationLineDateTo(l);
+            leaveEntitlement(leave) <- vacationLineEntitlement(l);
+            leaveCalendar(leave) <- vacationScheduleCalendar(vacationLineSchedule(l));
+            leaveWorkWeek(leave) <- vacationLineWorkWeek(l);
+            leaveBasis(leave) <- 'Утверждённый график отпусков';
+            leaveStatus(leave) <- LeaveStatus.draft;
+            vacationLineLeave(l) <- leave;
+        }
+        APPLY;
+    }
+}
+
+FORM vacationSchedules 'Графики отпусков'
+    OBJECTS s = VacationSchedule
+    PROPERTIES(s) vacationScheduleOrganization, vacationScheduleNumber,
+                  vacationScheduleDate, vacationScheduleYear, vacationScheduleCalendar,
+                  vacationScheduleStatus, vacationScheduleApprovedAt,
+                  vacationScheduleApprovedBy, vacationScheduleCancelledAt
+    PROPERTIES(s) approveVacationSchedule, cancelVacationSchedule
+;
+
+FORM vacationScheduleLines 'Строки графика отпусков'
+    OBJECTS l = VacationScheduleLine
+    PROPERTIES(l) vacationLineSchedule, vacationLineAssignment, vacationLineKind,
+                  vacationLineDateFrom, vacationLineDateTo, vacationLineDays,
+                  vacationLineEntitlement, vacationLineWorkWeek,
+                  vacationLineAgreement, vacationLineOpinionDate, vacationLineNote,
+                  vacationLineLeave, vacationLineFulfilled
+    PROPERTIES(l) createLeaveFromSchedule
+;
+
+vacationScheduleTitleRu 'Документ / Құжат (RU)' (VacationSchedule s) =
+    'ГРАФИК ОПЛАЧИВАЕМЫХ ЕЖЕГОДНЫХ ТРУДОВЫХ ОТПУСКОВ';
+vacationScheduleTitleKz 'Құжат / Документ (KZ)' (VacationSchedule s) =
+    'ЖЫЛ САЙЫНҒЫ АҚЫ ТӨЛЕНЕТІН ЕҢБЕК ДЕМАЛЫСТАРЫНЫҢ КЕСТЕСІ';
+vacationScheduleOrganizationName 'Организация / Ұйым' (VacationSchedule s) =
+    name(vacationScheduleOrganization(s));
+vacationLineEmployeeName 'Работник / Қызметкер' (VacationScheduleLine l) =
+    lastName(employee(employment(vacationLineAssignment(l)))) + ' ' +
+    firstName(employee(employment(vacationLineAssignment(l))));
+
+FORM vacationSchedulePrint 'График отпусков / Демалыс кестесі'
+    OBJECTS s = VacationSchedule PANEL
+    PROPERTIES(s) vacationScheduleTitleRu, vacationScheduleTitleKz,
+                  vacationScheduleOrganizationName, vacationScheduleNumber,
+                  vacationScheduleDate, vacationScheduleYear
+    OBJECTS l = VacationScheduleLine
+    PROPERTIES(l) vacationLineEmployeeName, vacationLineKind,
+                  vacationLineDateFrom, vacationLineDateTo, vacationLineDays,
+                  vacationLineAgreement, vacationLineOpinionDate, vacationLineNote
+    FILTERS vacationLineSchedule(l) == s
+;
+
+printVacationSchedulePdf 'PDF' (VacationSchedule s) {
+    IF vacationScheduleStatus(s) != VacationScheduleStatus.approved THEN
+        MESSAGE 'Печать доступна только для утверждённого графика';
+    ELSE
+        PRINT vacationSchedulePrint OBJECTS s = s PDF;
+}
+
+printVacationScheduleDocx 'DOCX' (VacationSchedule s) {
+    IF vacationScheduleStatus(s) != VacationScheduleStatus.approved THEN
+        MESSAGE 'Печать доступна только для утверждённого графика';
+    ELSE
+        PRINT vacationSchedulePrint OBJECTS s = s DOCX;
+}
+
+EXTEND FORM vacationSchedules
+    PROPERTIES(s) printVacationSchedulePdf TOOLBAR, printVacationScheduleDocx TOOLBAR
+;

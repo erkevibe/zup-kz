@@ -1,0 +1,276 @@
+MODULE HRBusinessTrip;
+
+REQUIRE HRVacationSchedule, PayrollSickLeave, TimeTimesheet, AverageEarnings;
+NAMESPACE ZUPKZ;
+
+CLASS BusinessTripKind 'Вид командировки' {
+    domestic 'По Казахстану',
+    international 'Зарубежная'
+}
+
+CLASS BusinessTripStatus 'Статус командировки' {
+    draft 'Черновик',
+    approved 'Утверждена',
+    cancelled 'Отменена'
+}
+
+CLASS BusinessTripDocument 'Командировка';
+
+tripNumber 'Номер акта' = DATA STRING[50] (BusinessTripDocument);
+tripOrderDate 'Дата акта' = DATA DATE (BusinessTripDocument);
+tripAssignment 'Назначение' = DATA EmploymentAssignment (BusinessTripDocument);
+tripKind 'Вид командировки' = DATA BusinessTripKind (BusinessTripDocument);
+tripDateFrom 'Командировка с' = DATA DATE (BusinessTripDocument);
+tripDateTo 'Командировка по' = DATA DATE (BusinessTripDocument);
+tripDeparturePlace 'Место отправления' = DATA STRING[200] (BusinessTripDocument);
+tripDestination 'Место назначения' = DATA STRING[300] (BusinessTripDocument);
+tripHostOrganization 'Принимающая организация' = DATA STRING[250] (BusinessTripDocument);
+tripPurpose 'Цель командировки' = DATA STRING[500] (BusinessTripDocument);
+tripBasis 'Основание' = DATA STRING[500] (BusinessTripDocument);
+tripCalendar 'Производственный календарь' = DATA ProductionCalendar (BusinessTripDocument);
+tripWorkWeek 'Рабочая неделя' = DATA LeaveWorkWeek (BusinessTripDocument);
+tripAverageEarnings 'Средний заработок' = DATA AverageEarningsDocument (BusinessTripDocument);
+tripTimesheet 'Табель' = DATA Timesheet (BusinessTripDocument);
+tripDailyAllowanceRate 'Суточные за день' = DATA NUMERIC[18,2] (BusinessTripDocument);
+tripTravelAdvance 'Аванс на проезд' = DATA NUMERIC[18,2] (BusinessTripDocument);
+tripAccommodationAdvance 'Аванс на проживание' = DATA NUMERIC[18,2] (BusinessTripDocument);
+tripOtherAdvance 'Прочий аванс' = DATA NUMERIC[18,2] (BusinessTripDocument);
+tripStatus 'Статус' = DATA BusinessTripStatus (BusinessTripDocument);
+tripApprovedAt 'Утверждена' = DATA DATETIME (BusinessTripDocument);
+tripApprovedBy 'Кем утверждена' = DATA STRING[150] (BusinessTripDocument);
+tripCancelledAt 'Отменена' = DATA DATETIME (BusinessTripDocument);
+
+CONSTRAINT tripDateTo(BusinessTripDocument d) < tripDateFrom(d)
+    MESSAGE 'Окончание командировки не может быть раньше начала';
+CONSTRAINT tripAssignment(BusinessTripDocument d) AND tripDateFrom(d) AND tripDateTo(d) AND
+           (tripDateFrom(d) < assignmentFrom(tripAssignment(d)) OR
+            (assignmentTo(tripAssignment(d)) AND tripDateTo(d) > assignmentTo(tripAssignment(d))))
+    MESSAGE 'Командировка должна входить в период назначения';
+CONSTRAINT tripAverageEarnings(BusinessTripDocument d) AND
+           averageAssignment(tripAverageEarnings(d)) != tripAssignment(d)
+    MESSAGE 'Средний заработок должен принадлежать назначению командировки';
+CONSTRAINT tripTimesheet(BusinessTripDocument d) AND
+           timesheetOrganization(tripTimesheet(d)) != organization(employment(tripAssignment(d)))
+    MESSAGE 'Табель и командировка должны принадлежать одной организации';
+CONSTRAINT tripDailyAllowanceRate(BusinessTripDocument d) < 0.00 OR
+           tripTravelAdvance(d) < 0.00 OR tripAccommodationAdvance(d) < 0.00 OR
+           tripOtherAdvance(d) < 0.00
+    MESSAGE 'Суммы командировки не могут быть отрицательными';
+CONSTRAINT (CHANGED(tripNumber(BusinessTripDocument d)) OR
+            CHANGED(tripOrderDate(d)) OR CHANGED(tripAssignment(d)) OR
+            CHANGED(tripKind(d)) OR CHANGED(tripDateFrom(d)) OR
+            CHANGED(tripDateTo(d)) OR CHANGED(tripDestination(d)) OR
+            CHANGED(tripPurpose(d)) OR CHANGED(tripBasis(d)) OR
+            CHANGED(tripCalendar(d)) OR CHANGED(tripWorkWeek(d))) AND
+           PREV(tripStatus(d)) != BusinessTripStatus.draft
+    MESSAGE 'Нельзя изменить утверждённую или отменённую командировку';
+
+tripOrganization(BusinessTripDocument d) = organization(employment(tripAssignment(d)));
+tripEmployee(BusinessTripDocument d) = employee(employment(tripAssignment(d)));
+tripEmployeeName 'Работник / Қызметкер' (BusinessTripDocument d) =
+    lastName(tripEmployee(d)) + ' ' + firstName(tripEmployee(d)) +
+    (IF middleName(tripEmployee(d)) THEN ' ' + middleName(tripEmployee(d)) ELSE '');
+tripCalendarDays 'Календарных дней' (BusinessTripDocument d) = GROUP SUM 1 IF
+    productionCalendar(CalendarDay day) == tripCalendar(d) AND
+    calendarDate(day) >= tripDateFrom(d) AND calendarDate(day) <= tripDateTo(d);
+tripWorkDays 'Рабочих дней' (BusinessTripDocument d) = GROUP SUM 1 IF
+    productionCalendar(CalendarDay day) == tripCalendar(d) AND
+    calendarDate(day) >= tripDateFrom(d) AND calendarDate(day) <= tripDateTo(d) AND
+    calendarWorkDay(day, tripWorkWeek(d));
+tripDailyAllowance 'Суточные' (BusinessTripDocument d) =
+    ROUND(tripDailyAllowanceRate(d) * tripCalendarDays(d), 2);
+tripAdvanceTotal 'Всего аванс' (BusinessTripDocument d) =
+    (IF tripDailyAllowance(d) THEN tripDailyAllowance(d) ELSE 0.00) +
+    (IF tripTravelAdvance(d) THEN tripTravelAdvance(d) ELSE 0.00) +
+    (IF tripAccommodationAdvance(d) THEN tripAccommodationAdvance(d) ELSE 0.00) +
+    (IF tripOtherAdvance(d) THEN tripOtherAdvance(d) ELSE 0.00);
+tripPreservedPay 'Сохраняемая зарплата' (BusinessTripDocument d) =
+    averagePayable(tripAverageEarnings(d));
+
+approvedTripOverlapCount(BusinessTripDocument d) = GROUP SUM 1 IF
+    tripAssignment(BusinessTripDocument other) == tripAssignment(d) AND other != d AND
+    tripStatus(other) == BusinessTripStatus.approved AND
+    tripDateFrom(other) <= tripDateTo(d) AND tripDateTo(other) >= tripDateFrom(d);
+approvedLeaveTripOverlapCount(BusinessTripDocument d) = GROUP SUM 1 IF
+    leaveAssignment(LeaveDocument l) == tripAssignment(d) AND
+    leaveStatus(l) == LeaveStatus.approved AND
+    leaveDateFrom(l) <= tripDateTo(d) AND leaveDateTo(l) >= tripDateFrom(d);
+approvedSickTripOverlapCount(BusinessTripDocument d) = GROUP SUM 1 IF
+    sickLeaveAssignment(SickLeaveDocument s) == tripAssignment(d) AND
+    sickLeaveStatus(s) == SickLeaveStatus.approved AND
+    sickLeaveFrom(s) <= tripDateTo(d) AND sickLeaveTo(s) >= tripDateFrom(d);
+
+prepareAverageForTrip 'Заполнить средний заработок' (BusinessTripDocument d) {
+    IF tripStatus(d) AND tripStatus(d) != BusinessTripStatus.draft THEN
+        MESSAGE 'Средний заработок заполняется только для черновика';
+    ELSE IF NOT tripAverageEarnings(d) THEN
+        MESSAGE 'Создайте или выберите расчёт среднего заработка';
+    ELSE IF averageStatus(tripAverageEarnings(d)) != AverageEarningsStatus.draft THEN
+        MESSAGE 'База среднего заработка уже зафиксирована';
+    ELSE {
+        averageAssignment(tripAverageEarnings(d)) <- tripAssignment(d);
+        averageEventKind(tripAverageEarnings(d)) <- AverageEarningsEventKind.businessTrip;
+        averageEventFrom(tripAverageEarnings(d)) <- tripDateFrom(d);
+        averageEventTo(tripAverageEarnings(d)) <- tripDateTo(d);
+        averageMode(tripAverageEarnings(d)) <- AverageEarningsMode.daily;
+        averageEventWorkDays(tripAverageEarnings(d)) <- tripWorkDays(d);
+    }
+}
+
+approveBusinessTrip 'Утвердить командировку' (BusinessTripDocument d) {
+    IF tripStatus(d) AND tripStatus(d) != BusinessTripStatus.draft THEN
+        MESSAGE 'Можно утвердить только черновик командировки';
+    ELSE IF NOT tripNumber(d) OR NOT tripOrderDate(d) OR NOT tripAssignment(d) OR
+            NOT tripKind(d) OR NOT tripDateFrom(d) OR NOT tripDateTo(d) OR
+            NOT tripDestination(d) OR NOT tripPurpose(d) OR NOT tripBasis(d) OR
+            NOT tripCalendar(d) OR NOT tripWorkWeek(d) THEN
+        MESSAGE 'Заполните реквизиты, работника, период, маршрут, цель и календарь';
+    ELSE IF approvedTripOverlapCount(d) OR approvedLeaveTripOverlapCount(d) OR
+            approvedSickTripOverlapCount(d) THEN
+        MESSAGE 'Период пересекается с другой командировкой, отпуском или больничным';
+    ELSE {
+        tripStatus(d) <- BusinessTripStatus.approved;
+        tripApprovedAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+lineBusinessTrip 'Командировка' = DATA BusinessTripDocument (TimesheetLine);
+businessTripCreatedLine 'Создано командировкой' = DATA BOOLEAN (TimesheetLine);
+CONSTRAINT lineBusinessTrip(TimesheetLine l) AND
+           lineEmploymentAssignment(l) != tripAssignment(lineBusinessTrip(l))
+    MESSAGE 'Строка табеля должна принадлежать назначению командировки';
+CONSTRAINT (CHANGED(lineBusinessTrip(TimesheetLine l)) OR
+            CHANGED(businessTripCreatedLine(l))) AND
+           (PREV(timesheetStatus(lineTimesheet(l))) == TimesheetStatus.approved OR
+            PREV(timesheetStatus(lineTimesheet(l))) == TimesheetStatus.closed)
+    MESSAGE 'Нельзя изменить связь командировки в проведённом табеле';
+tripTimesheetLineCount(BusinessTripDocument d) = GROUP SUM 1 IF
+    lineBusinessTrip(TimesheetLine l) == d;
+tripManualTimesheetConflictCount(BusinessTripDocument d) = GROUP SUM 1 IF
+    lineTimesheet(TimesheetLine l) == tripTimesheet(d) AND
+    lineEmploymentAssignment(l) == tripAssignment(d) AND
+    lineDate(l) >= tripDateFrom(d) AND lineDate(l) <= tripDateTo(d) AND
+    NOT generatedLine(l) AND lineBusinessTrip(l) != d;
+tripLockedTimesheetLineCount(BusinessTripDocument d) = GROUP SUM 1 IF
+    lineBusinessTrip(TimesheetLine l) == d AND
+    (timesheetStatus(lineTimesheet(l)) == TimesheetStatus.approved OR
+     timesheetStatus(lineTimesheet(l)) == TimesheetStatus.closed);
+
+fillTripTimesheet 'Заполнить табель' (BusinessTripDocument d) {
+    IF tripStatus(d) != BusinessTripStatus.approved THEN
+        MESSAGE 'Сначала утвердите командировку';
+    ELSE IF NOT tripTimesheet(d) OR timesheetStatus(tripTimesheet(d)) != TimesheetStatus.draft THEN
+        MESSAGE 'Выберите черновик табеля';
+    ELSE IF timesheetPeriodFrom(tripTimesheet(d)) > tripDateFrom(d) OR
+            timesheetPeriodTo(tripTimesheet(d)) < tripDateTo(d) THEN
+        MESSAGE 'Период табеля должен полностью включать командировку';
+    ELSE IF tripManualTimesheetConflictCount(d) THEN
+        MESSAGE 'В периоде командировки есть введённые вручную строки табеля';
+    ELSE {
+        FOR iterate(DATE date, tripDateFrom(d), tripDateTo(d)) AND
+            plannedHoursForAssignment(tripAssignment(d), date) > 0.00
+        ORDER date DO {
+            IF timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date) THEN {
+                attendanceKind(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <-
+                    AttendanceKind.businessTrip;
+                workedHours(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <- NULL;
+                nightHours(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <- NULL;
+                overtimeHours(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <- NULL;
+                holidayHours(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <- NULL;
+                weekendHours(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <- NULL;
+                businessTripHours(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <-
+                    plannedHoursForAssignment(tripAssignment(d), date);
+                lineBusinessTrip(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <- d;
+                employerAct(timesheetLineByKey(tripTimesheet(d), tripAssignment(d), date)) <- tripNumber(d);
+            } ELSE NEW l = TimesheetLine {
+                lineTimesheet(l) <- tripTimesheet(d);
+                lineEmploymentAssignment(l) <- tripAssignment(d);
+                lineDate(l) <- date;
+                attendanceKind(l) <- AttendanceKind.businessTrip;
+                plannedHoursLine(l) <- plannedHoursForAssignment(tripAssignment(d), date);
+                businessTripHours(l) <- plannedHoursForAssignment(tripAssignment(d), date);
+                lineBusinessTrip(l) <- d;
+                employerAct(l) <- tripNumber(d);
+                generatedLine(l) <- TRUE;
+                businessTripCreatedLine(l) <- TRUE;
+            }
+        }
+        APPLY;
+    }
+}
+
+cancelBusinessTrip 'Отменить командировку' (BusinessTripDocument d) {
+    IF tripStatus(d) != BusinessTripStatus.approved THEN
+        MESSAGE 'Отменить можно только утверждённую командировку';
+    ELSE IF tripLockedTimesheetLineCount(d) THEN
+        MESSAGE 'Нельзя отменить командировку после утверждения табеля';
+    ELSE {
+        FOR lineBusinessTrip(TimesheetLine l) == d AND NOT businessTripCreatedLine(l) DO {
+            attendanceKind(l) <- AttendanceKind.worked;
+            workedHours(l) <- plannedHoursLine(l);
+            nightHours(l) <- plannedNightHoursForAssignment(tripAssignment(d), lineDate(l));
+            holidayHours(l) <- NULL;
+            IF holidayForAssignment(tripAssignment(d), lineDate(l)) THEN
+                holidayHours(l) <- plannedHoursLine(l);
+            businessTripHours(l) <- NULL;
+            lineBusinessTrip(l) <- NULL;
+            employerAct(l) <- NULL;
+        }
+        DELETE TimesheetLine l WHERE lineBusinessTrip(l) == d AND businessTripCreatedLine(l);
+        tripStatus(d) <- BusinessTripStatus.cancelled;
+        tripCancelledAt(d) <- currentDateTime();
+        APPLY;
+    }
+}
+
+FORM businessTrips 'Командировки'
+    OBJECTS d = BusinessTripDocument
+    PROPERTIES(d) tripNumber, tripOrderDate, tripAssignment, tripKind,
+                  tripDateFrom, tripDateTo, tripCalendarDays, tripWorkDays,
+                  tripDeparturePlace, tripDestination, tripHostOrganization,
+                  tripPurpose, tripBasis, tripCalendar, tripWorkWeek,
+                  tripAverageEarnings, tripPreservedPay, tripTimesheet,
+                  tripDailyAllowanceRate, tripDailyAllowance, tripTravelAdvance,
+                  tripAccommodationAdvance, tripOtherAdvance, tripAdvanceTotal,
+                  tripStatus, tripApprovedAt, tripApprovedBy, tripCancelledAt
+    PROPERTIES(d) prepareAverageForTrip, approveBusinessTrip,
+                  fillTripTimesheet, cancelBusinessTrip
+;
+
+businessTripTitleRu 'Документ / Құжат (RU)' (BusinessTripDocument d) =
+    'ПРИКАЗ О НАПРАВЛЕНИИ В КОМАНДИРОВКУ';
+businessTripTitleKz 'Құжат / Документ (KZ)' (BusinessTripDocument d) =
+    'ІССАПАРҒА ЖІБЕРУ ТУРАЛЫ БҰЙРЫҚ';
+tripOrganizationName 'Организация / Ұйым' (BusinessTripDocument d) = name(tripOrganization(d));
+
+FORM businessTripOrder 'Приказ о командировке / Іссапар туралы бұйрық'
+    OBJECTS d = BusinessTripDocument PANEL
+    PROPERTIES(d) businessTripTitleRu, businessTripTitleKz, tripOrganizationName,
+                  tripNumber, tripOrderDate, tripEmployeeName, tripKind,
+                  tripDateFrom, tripDateTo, tripCalendarDays, tripWorkDays,
+                  tripDeparturePlace, tripDestination, tripHostOrganization,
+                  tripPurpose, tripBasis, tripDailyAllowanceRate,
+                  tripDailyAllowance, tripTravelAdvance, tripAccommodationAdvance,
+                  tripOtherAdvance, tripAdvanceTotal
+;
+
+printBusinessTripPdf 'PDF' (BusinessTripDocument d) {
+    IF tripStatus(d) != BusinessTripStatus.approved THEN
+        MESSAGE 'Печать доступна только для утверждённой командировки';
+    ELSE
+        PRINT businessTripOrder OBJECTS d = d PDF;
+}
+
+printBusinessTripDocx 'DOCX' (BusinessTripDocument d) {
+    IF tripStatus(d) != BusinessTripStatus.approved THEN
+        MESSAGE 'Печать доступна только для утверждённой командировки';
+    ELSE
+        PRINT businessTripOrder OBJECTS d = d DOCX;
+}
+
+EXTEND FORM businessTrips
+    PROPERTIES(d) printBusinessTripPdf TOOLBAR, printBusinessTripDocx TOOLBAR
+;
+
+EXTEND FORM timesheetLines PROPERTIES(l) lineBusinessTrip;

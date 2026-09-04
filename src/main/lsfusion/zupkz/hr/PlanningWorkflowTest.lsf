@@ -1,0 +1,148 @@
+MODULE PlanningWorkflowTest;
+
+REQUIRE EmployeeCardWorkflowTest, HRBusinessTrip;
+NAMESPACE ZUPKZ;
+
+planningWorkflowTest() {
+    LOCAL schedulePdf = FILE();
+    LOCAL tripPdf = FILE();
+    NEW org = Organization {
+        name(org) <- 'Планирование Тест';
+        bin(org) <- '101010101010';
+        NEW worker = Employee {
+            iin(worker) <- '900101300010';
+            lastName(worker) <- 'Плановый';
+            firstName(worker) <- 'Тест';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                hireDate(contract) <- 2026_01_01;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    NEW entitlement = LeaveEntitlement {
+                        entitlementAssignment(entitlement) <- assignment;
+                        entitlementWorkYearFrom(entitlement) <- 2026_01_01;
+                        entitlementWorkYearTo(entitlement) <- 2026_12_31;
+                        entitlementBasicDays(entitlement) <- 24.00;
+                        NEW schedule = VacationSchedule {
+                            vacationScheduleOrganization(schedule) <- org;
+                            vacationScheduleNumber(schedule) <- 'VS-2026';
+                            vacationScheduleDate(schedule) <- 2025_12_15;
+                            vacationScheduleYear(schedule) <- 2026;
+                            vacationScheduleCalendar(schedule) <- calendarByYear(2026);
+                            vacationScheduleStatus(schedule) <- VacationScheduleStatus.draft;
+                            NEW scheduleLine = VacationScheduleLine {
+                                vacationLineSchedule(scheduleLine) <- schedule;
+                                vacationLineAssignment(scheduleLine) <- assignment;
+                                vacationLineKind(scheduleLine) <- LeaveKind.annualPaid;
+                                vacationLineDateFrom(scheduleLine) <- 2026_06_01;
+                                vacationLineDateTo(scheduleLine) <- 2026_06_14;
+                                vacationLineEntitlement(scheduleLine) <- entitlement;
+                                vacationLineWorkWeek(scheduleLine) <- LeaveWorkWeek.fiveDay;
+                                vacationLineAgreement(scheduleLine) <- VacationScheduleAgreement.agreed;
+                                vacationLineOpinionDate(scheduleLine) <- 2025_12_10;
+                                approveVacationSchedule(schedule);
+                                createLeaveFromSchedule(scheduleLine);
+                                NEW workSchedule = WorkSchedule {
+                                    scheduleOrganization(workSchedule) <- org;
+                                    scheduleCode(workSchedule) <- 'PLAN-5-2';
+                                    scheduleType(workSchedule) <- WorkScheduleType.fiveDay;
+                                    weeklyHours(workSchedule) <- 40.00;
+                                    scheduleValidFrom(workSchedule) <- 2026_01_01;
+                                    NEW scheduleAssignment = EmployeeScheduleAssignment {
+                                        scheduleEmploymentAssignment(scheduleAssignment) <- assignment;
+                                        employeeWorkSchedule(scheduleAssignment) <- workSchedule;
+                                        employeeScheduleFrom(scheduleAssignment) <- 2026_01_01;
+                                        NEW timesheet = Timesheet {
+                                            timesheetOrganization(timesheet) <- org;
+                                            timesheetNumber(timesheet) <- 'TS-TRIP-09';
+                                            timesheetPeriodFrom(timesheet) <- 2026_09_01;
+                                            timesheetPeriodTo(timesheet) <- 2026_09_30;
+                                            timesheetStatus(timesheet) <- TimesheetStatus.draft;
+                                            fillTimesheet(timesheet);
+                                            NEW average = AverageEarningsDocument {
+                                                averageNumber(average) <- 'AVG-TRIP-1';
+                                                averagePeriodFrom(average) <- 2025_09_01;
+                                                averagePeriodTo(average) <- 2026_08_31;
+                                                averageStatus(average) <- AverageEarningsStatus.draft;
+                                                NEW trip = BusinessTripDocument {
+                                                    tripNumber(trip) <- 'TRIP-1';
+                                                    tripOrderDate(trip) <- 2026_09_01;
+                                                    tripAssignment(trip) <- assignment;
+                                                    tripKind(trip) <- BusinessTripKind.domestic;
+                                                    tripDateFrom(trip) <- 2026_09_07;
+                                                    tripDateTo(trip) <- 2026_09_09;
+                                                    tripDeparturePlace(trip) <- 'Алматы';
+                                                    tripDestination(trip) <- 'Астана';
+                                                    tripPurpose(trip) <- 'Переговоры';
+                                                    tripBasis(trip) <- 'Служебная записка';
+                                                    tripCalendar(trip) <- calendarByYear(2026);
+                                                    tripWorkWeek(trip) <- LeaveWorkWeek.fiveDay;
+                                                    tripAverageEarnings(trip) <- average;
+                                                    tripTimesheet(trip) <- timesheet;
+                                                    tripDailyAllowanceRate(trip) <- 10000.00;
+                                                    tripTravelAdvance(trip) <- 50000.00;
+                                                    tripAccommodationAdvance(trip) <- 60000.00;
+                                                    tripStatus(trip) <- BusinessTripStatus.draft;
+                                                    prepareAverageForTrip(trip);
+                                                    NEW baseLine = AverageEarningsBaseLine {
+                                                        baseAverageDocument(baseLine) <- average;
+                                                        baseEarnings(baseLine) <- 200000.00;
+                                                        baseWorkedDays(baseLine) <- 20.00;
+                                                        baseIncreaseCoefficient(baseLine) <- 1.000000;
+                                                        baseIncluded(baseLine) <- TRUE;
+                                                        averageStatus(average) <- AverageEarningsStatus.baseCollected;
+                                                        calculateAverageEarnings(average);
+                                                        approveBusinessTrip(trip);
+                                                        fillTripTimesheet(trip);
+                                                        NEW cancellable = BusinessTripDocument {
+                                                            tripNumber(cancellable) <- 'TRIP-2';
+                                                            tripOrderDate(cancellable) <- 2026_09_01;
+                                                            tripAssignment(cancellable) <- assignment;
+                                                            tripKind(cancellable) <- BusinessTripKind.domestic;
+                                                            tripDateFrom(cancellable) <- 2026_10_05;
+                                                            tripDateTo(cancellable) <- 2026_10_06;
+                                                            tripDestination(cancellable) <- 'Шымкент';
+                                                            tripPurpose(cancellable) <- 'Обучение';
+                                                            tripBasis(cancellable) <- 'План обучения';
+                                                            tripCalendar(cancellable) <- calendarByYear(2026);
+                                                            tripWorkWeek(cancellable) <- LeaveWorkWeek.fiveDay;
+                                                            tripStatus(cancellable) <- BusinessTripStatus.draft;
+                                                            approveBusinessTrip(cancellable);
+                                                            cancelBusinessTrip(cancellable);
+
+                                                            PRINT vacationSchedulePrint OBJECTS s = schedule PDF TO schedulePdf;
+                                                            PRINT businessTripOrder OBJECTS d = trip PDF TO tripPdf;
+
+                                                            EXPORT JSON FROM
+                                                                scheduleApproved = vacationScheduleStatus(schedule) ==
+                                                                    VacationScheduleStatus.approved,
+                                                                plannedDays = vacationLineDays(scheduleLine),
+                                                                leaveDraftCreated = leaveStatus(vacationLineLeave(scheduleLine)) ==
+                                                                    LeaveStatus.draft,
+                                                                schedulePdfGenerated = TRUE IF schedulePdf(),
+                                                                tripApproved = tripStatus(trip) == BusinessTripStatus.approved,
+                                                                tripCalendarDaysResult = tripCalendarDays(trip),
+                                                                tripWorkDaysResult = tripWorkDays(trip),
+                                                                tripLines = tripTimesheetLineCount(trip),
+                                                                tripPayResult = tripPreservedPay(trip),
+                                                                tripAdvanceResult = tripAdvanceTotal(trip),
+                                                                tripPdfGenerated = TRUE IF tripPdf(),
+                                                                cancellableTripCancelled = tripStatus(cancellable) ==
+                                                                    BusinessTripStatus.cancelled;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
