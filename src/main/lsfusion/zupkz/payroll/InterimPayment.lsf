@@ -57,6 +57,32 @@ interimPaymentOnTime 'Оплачено в срок' (InterimPayment p) =
     interimPaymentPaidDate(p) <= interimPaymentDueDate(p)
     IF interimPaymentPaidDate(p) AND interimPaymentDueDate(p);
 
+activeInterimPaymentForLeaveCount(LeaveDocument l) = GROUP SUM 1 IF
+    interimPaymentLeave(InterimPayment p) == l AND
+    (interimPaymentStatus(p) == InterimPaymentStatus.calculated OR
+     interimPaymentStatus(p) == InterimPaymentStatus.approved OR
+     interimPaymentStatus(p) == InterimPaymentStatus.paid);
+CONSTRAINT CHANGED(leaveStatus(LeaveDocument l)) AND
+           PREV(leaveStatus(l)) == LeaveStatus.approved AND
+           leaveStatus(l) == LeaveStatus.cancelled AND activeInterimPaymentForLeaveCount(l)
+    MESSAGE 'Нельзя отменить отпуск, уже включённый в межрасчётную выплату';
+
+cancelLeave 'Отменить отпуск' (LeaveDocument l) {
+    IF leaveStatus(l) != LeaveStatus.approved THEN
+        MESSAGE 'Отменить можно только утверждённый отпуск';
+    ELSE IF activeInterimPaymentForLeaveCount(l) THEN
+        MESSAGE 'Нельзя отменить отпуск, уже включённый в межрасчётную выплату';
+    ELSE {
+        leaveStatus(l) <- LeaveStatus.cancelled;
+        leaveCancelledAt(l) <- currentDateTime();
+        APPLY;
+    }
+}
+
+EXTEND FORM leaveDocuments
+    PROPERTIES(l) cancelLeave
+;
+
 calculateInterimPayment 'Рассчитать' (InterimPayment p) {
     IF interimPaymentStatus(p) AND interimPaymentStatus(p) != InterimPaymentStatus.draft THEN
         MESSAGE 'Выплата уже рассчитана';

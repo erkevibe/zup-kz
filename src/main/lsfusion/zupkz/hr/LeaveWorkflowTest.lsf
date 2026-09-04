@@ -1,0 +1,118 @@
+MODULE LeaveWorkflowTest;
+
+REQUIRE TimeWorkflowTest;
+NAMESPACE ZUPKZ;
+
+leaveWorkflowTest() {
+    NEW org = Organization {
+        bin(org) <- '555555555555';
+        NEW worker = Employee {
+            iin(worker) <- '950505300005';
+            lastName(worker) <- 'Отпускной';
+            firstName(worker) <- 'Тест';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                hireDate(contract) <- 2026_01_01;
+                salary(contract) <- 200000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    assignmentSalary(assignment) <- 200000.00;
+                    NEW entitlement = LeaveEntitlement {
+                        entitlementAssignment(entitlement) <- assignment;
+                        entitlementWorkYearFrom(entitlement) <- 2026_01_01;
+                        entitlementWorkYearTo(entitlement) <- 2026_12_31;
+                        entitlementBasicDays(entitlement) <- 24.00;
+                        NEW average = AverageEarningsDocument {
+                            averageNumber(average) <- 'AVG-LEAVE-1';
+                            averageAssignment(average) <- assignment;
+                            averagePeriodFrom(average) <- 2025_06_01;
+                            averagePeriodTo(average) <- 2026_05_31;
+                            averageStatus(average) <- AverageEarningsStatus.draft;
+                            NEW baseLine = AverageEarningsBaseLine {
+                                baseAverageDocument(baseLine) <- average;
+                                baseEarnings(baseLine) <- 100000.00;
+                                baseWorkedDays(baseLine) <- 20.00;
+                                baseIncreaseCoefficient(baseLine) <- 1.000000;
+                                baseIncluded(baseLine) <- TRUE;
+                                NEW annualLeave = LeaveDocument {
+                                    leaveNumber(annualLeave) <- 'LEAVE-ANNUAL-1';
+                                    leaveOrderDate(annualLeave) <- 2026_05_20;
+                                    leaveAssignment(annualLeave) <- assignment;
+                                    leaveKind(annualLeave) <- LeaveKind.annualPaid;
+                                    leaveDateFrom(annualLeave) <- 2026_06_01;
+                                    leaveDateTo(annualLeave) <- 2026_06_03;
+                                    leaveEntitlement(annualLeave) <- entitlement;
+                                    leaveCalendar(annualLeave) <- calendarByYear(2026);
+                                    leaveWorkWeek(annualLeave) <- LeaveWorkWeek.fiveDay;
+                                    leaveAverageEarnings(annualLeave) <- average;
+                                    leaveBasis(annualLeave) <- 'График отпусков';
+                                    leaveStatus(annualLeave) <- LeaveStatus.draft;
+                                    prepareAverageForLeave(annualLeave);
+                                    averageStatus(average) <- AverageEarningsStatus.baseCollected;
+                                    calculateAverageEarnings(average);
+                                    approveLeave(annualLeave);
+                                    NEW overlap = LeaveDocument {
+                                        leaveNumber(overlap) <- 'LEAVE-OVERLAP-1';
+                                        leaveOrderDate(overlap) <- 2026_05_21;
+                                        leaveAssignment(overlap) <- assignment;
+                                        leaveKind(overlap) <- LeaveKind.unpaid;
+                                        leaveDateFrom(overlap) <- 2026_06_02;
+                                        leaveDateTo(overlap) <- 2026_06_04;
+                                        leaveCalendar(overlap) <- calendarByYear(2026);
+                                        leaveWorkWeek(overlap) <- LeaveWorkWeek.fiveDay;
+                                        leaveBasis(overlap) <- 'Проверка пересечения';
+                                        leaveStatus(overlap) <- LeaveStatus.draft;
+                                        approveLeave(overlap);
+                                        NEW payment = InterimPayment {
+                                            interimPaymentNumber(payment) <- 'VAC-PAY-1';
+                                            interimPaymentDate(payment) <- 2026_05_20;
+                                            interimPaymentAssignment(payment) <- assignment;
+                                            interimPaymentKind(payment) <- InterimPaymentKind.vacation;
+                                            interimPaymentLeave(payment) <- annualLeave;
+                                            interimPaymentReason(payment) <- 'Отпускные';
+                                            interimPaymentStatus(payment) <- InterimPaymentStatus.draft;
+                                            calculateInterimPayment(payment);
+                                            cancelLeave(annualLeave);
+                                            NEW cancellable = LeaveDocument {
+                                                leaveNumber(cancellable) <- 'LEAVE-UNPAID-1';
+                                                leaveOrderDate(cancellable) <- 2026_06_20;
+                                                leaveAssignment(cancellable) <- assignment;
+                                                leaveKind(cancellable) <- LeaveKind.unpaid;
+                                                leaveDateFrom(cancellable) <- 2026_07_01;
+                                                leaveDateTo(cancellable) <- 2026_07_02;
+                                                leaveCalendar(cancellable) <- calendarByYear(2026);
+                                                leaveWorkWeek(cancellable) <- LeaveWorkWeek.fiveDay;
+                                                leaveBasis(cancellable) <- 'Личное заявление';
+                                                leaveStatus(cancellable) <- LeaveStatus.draft;
+                                                approveLeave(cancellable);
+                                                cancelLeave(cancellable);
+
+                                                EXPORT JSON FROM
+                                                    annualLeaveApproved = leaveStatus(annualLeave) ==
+                                                        LeaveStatus.approved,
+                                                    approvalTimestampSet = TRUE IF leaveApprovedAt(annualLeave),
+                                                    chargedDaysResult = leaveChargedDays(annualLeave),
+                                                    grossAmountResult = leaveGrossAmount(annualLeave),
+                                                    remainingDaysResult = remainingLeaveDays(entitlement),
+                                                    overlapRejected = leaveStatus(overlap) == LeaveStatus.draft,
+                                                    paymentCalculated = interimPaymentStatus(payment) ==
+                                                        InterimPaymentStatus.calculated,
+                                                    usedLeaveCancellationRejected = leaveStatus(annualLeave) ==
+                                                        LeaveStatus.approved,
+                                                    unusedLeaveCancelled = leaveStatus(cancellable) ==
+                                                        LeaveStatus.cancelled,
+                                                    cancellationTimestampSet = TRUE IF leaveCancelledAt(cancellable);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

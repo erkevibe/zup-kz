@@ -91,6 +91,12 @@ jobs:
 
               python3 tests/assert_time_workflow.py time-workflow-result.json
 
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.leaveWorkflowTest' \
+                --output leave-workflow-result.json
+
+              python3 tests/assert_leave_workflow.py leave-workflow-result.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT

@@ -56,6 +56,10 @@ leaveOutsideSchedule 'Вне графика отпусков' = DATA BOOLEAN (Le
 leaveAverageEarnings 'Средний заработок' = DATA AverageEarningsDocument (LeaveDocument);
 leaveBasis 'Основание' = DATA STRING[500] (LeaveDocument);
 leaveStatus 'Статус' = DATA LeaveStatus (LeaveDocument);
+leaveApprovedAt 'Утверждён' = DATA DATETIME (LeaveDocument);
+leaveApprovedBy 'Кем утверждён' = DATA STRING[150] (LeaveDocument);
+leaveCancelledAt 'Отменён' = DATA DATETIME (LeaveDocument);
+leaveCancelledBy 'Кем отменён' = DATA STRING[150] (LeaveDocument);
 
 CONSTRAINT leaveDateTo(LeaveDocument l) < leaveDateFrom(l)
     MESSAGE 'Окончание отпуска не может быть раньше начала';
@@ -65,6 +69,20 @@ CONSTRAINT leaveEntitlement(LeaveDocument l) AND
 CONSTRAINT leaveAverageEarnings(LeaveDocument l) AND
            averageAssignment(leaveAverageEarnings(l)) != leaveAssignment(l)
     MESSAGE 'Расчёт среднего заработка должен принадлежать тому же назначению';
+CONSTRAINT leaveAssignment(LeaveDocument l) AND leaveDateFrom(l) AND leaveDateTo(l) AND
+           (leaveDateFrom(l) < assignmentFrom(leaveAssignment(l)) OR
+            (assignmentTo(leaveAssignment(l)) AND
+             leaveDateTo(l) > assignmentTo(leaveAssignment(l))))
+    MESSAGE 'Период отпуска должен входить в период назначения';
+CONSTRAINT (CHANGED(leaveNumber(LeaveDocument l)) OR CHANGED(leaveOrderDate(l)) OR
+            CHANGED(leaveAssignment(l)) OR CHANGED(leaveKind(l)) OR
+            CHANGED(leaveDateFrom(l)) OR CHANGED(leaveDateTo(l)) OR
+            CHANGED(leaveEntitlement(l)) OR CHANGED(leaveCalendar(l)) OR
+            CHANGED(leaveWorkWeek(l)) OR CHANGED(leaveOutsideSchedule(l)) OR
+            CHANGED(leaveAverageEarnings(l)) OR CHANGED(leaveBasis(l))) AND
+           (PREV(leaveStatus(l)) == LeaveStatus.approved OR
+            PREV(leaveStatus(l)) == LeaveStatus.cancelled)
+    MESSAGE 'Нельзя изменить утверждённый или отменённый отпуск';
 
 annualPaidLeave(LeaveDocument l) = leaveKind(l) == LeaveKind.annualPaid OR
     leaveKind(l) == LeaveKind.annualAdditional;
@@ -117,8 +135,18 @@ hasFourteenDayPart 'Есть часть не менее 14 дней' (LeaveEntit
     IF leaveEntitlement(LeaveDocument l) == e AND leaveStatus(l) == LeaveStatus.approved AND
        annualPaidLeave(l) AND leaveChargedDays(l) >= 14.00;
 
+approvedLeaveOverlapCount(LeaveDocument l) = GROUP SUM 1 IF
+    leaveAssignment(LeaveDocument other) == leaveAssignment(l) AND other != l AND
+    leaveStatus(other) == LeaveStatus.approved AND
+    leaveDateFrom(other) <= leaveDateTo(l) AND leaveDateTo(other) >= leaveDateFrom(l);
+CONSTRAINT leaveStatus(LeaveDocument l) == LeaveStatus.approved AND
+           approvedLeaveOverlapCount(l)
+    MESSAGE 'Период отпуска пересекается с другим утверждённым отпуском';
+
 prepareAverageForLeave 'Заполнить средний заработок' (LeaveDocument l) {
-    IF NOT leaveAverageEarnings(l) THEN
+    IF leaveStatus(l) AND leaveStatus(l) != LeaveStatus.draft THEN
+        MESSAGE 'Подготовить средний заработок можно только для черновика отпуска';
+    ELSE IF NOT leaveAverageEarnings(l) THEN
         MESSAGE 'Создайте или выберите расчёт среднего заработка';
     ELSE IF averageStatus(leaveAverageEarnings(l)) != AverageEarningsStatus.draft THEN
         MESSAGE 'База среднего заработка уже зафиксирована';
@@ -140,6 +168,12 @@ approveLeave 'Утвердить отпуск' (LeaveDocument l) {
         MESSAGE 'Заполните сотрудника, вид, даты, календарь и реквизиты акта';
     ELSE IF NOT leaveChargedDays(l) THEN
         MESSAGE 'В календаре нет дней указанного периода';
+    ELSE IF leaveDateFrom(l) < assignmentFrom(leaveAssignment(l)) OR
+            (assignmentTo(leaveAssignment(l)) AND
+             leaveDateTo(l) > assignmentTo(leaveAssignment(l))) THEN
+        MESSAGE 'Период отпуска должен входить в период назначения';
+    ELSE IF approvedLeaveOverlapCount(l) THEN
+        MESSAGE 'Период отпуска пересекается с другим утверждённым отпуском';
     ELSE IF annualPaidLeave(l) AND (NOT leaveEntitlement(l) OR
             leaveChargedDays(l) > remainingLeaveDays(leaveEntitlement(l))) THEN
         MESSAGE 'Нет права или недостаточно остатка дней отпуска';
@@ -148,6 +182,7 @@ approveLeave 'Утвердить отпуск' (LeaveDocument l) {
         MESSAGE 'Рассчитайте средний заработок';
     ELSE {
         leaveStatus(l) <- LeaveStatus.approved;
+        leaveApprovedAt(l) <- currentDateTime();
         APPLY;
     }
 }
@@ -166,5 +201,6 @@ FORM leaveDocuments 'Отпуска'
                   leaveWorkWeek, leaveOutsideSchedule, leaveCalendarDays,
                   leaveChargedDays, leaveEventWorkDays, leavePaymentDueDate,
                   leaveAverageEarnings, leaveGrossAmount, leaveBasis, leaveStatus
+    PROPERTIES(l) leaveApprovedAt, leaveApprovedBy, leaveCancelledAt, leaveCancelledBy
     PROPERTIES(l) prepareAverageForLeave, approveLeave
 ;
