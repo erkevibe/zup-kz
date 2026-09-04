@@ -57,11 +57,31 @@ CONSTRAINT assignmentSalary(EmploymentAssignment a) AND staffPosition(a) AND
 CONSTRAINT assignmentSalary(EmploymentAssignment a) AND staffPosition(a) AND
            salaryMax(staffPosition(a)) AND assignmentSalary(a) > salaryMax(staffPosition(a))
     MESSAGE 'Оклад назначения выше диапазона штатной единицы';
+overlappingAssignmentCount(EmploymentAssignment a) = GROUP SUM 1 IF
+    employment(EmploymentAssignment other) == employment(a) AND
+    assignmentFrom(other) <= (IF assignmentTo(a) THEN assignmentTo(a) ELSE 9999_12_31) AND
+    (IF assignmentTo(other) THEN assignmentTo(other) ELSE 9999_12_31) >= assignmentFrom(a);
+CONSTRAINT employment(EmploymentAssignment a) AND assignmentFrom(a) AND
+           overlappingAssignmentCount(a) > 1
+    MESSAGE 'Периоды назначений одного договора не должны пересекаться';
+
+activeAssignmentOn(Employment contract, DATE date) = GROUP LAST EmploymentAssignment a
+    IF employment(a) == contract AND assignmentFrom(a) <= date AND
+       (NOT assignmentTo(a) OR assignmentTo(a) >= date)
+    ORDER assignmentFrom(a), a;
+assignmentCount(Employment contract) = GROUP SUM 1 IF
+    employment(EmploymentAssignment a) == contract;
 
 CLASS PersonnelEventKind 'Вид кадрового события' {
     hire 'Приём',
     transfer 'Перевод',
     termination 'Увольнение'
+}
+
+CLASS PersonnelEventStatus 'Статус кадрового события' {
+    draft 'Черновик',
+    posted 'Проведён',
+    cancelled 'Отменён'
 }
 
 CLASS EsutdStatus 'Статус ЕСУТД' {
@@ -76,6 +96,9 @@ CLASS PersonnelEvent 'Кадровое событие';
 eventKind 'Вид события' = DATA PersonnelEventKind (PersonnelEvent);
 eventEmployment 'Трудовой договор' = DATA Employment (PersonnelEvent);
 eventAssignment 'Назначение' = DATA EmploymentAssignment (PersonnelEvent);
+eventStaffPosition 'Штатная единица' = DATA StaffPosition (PersonnelEvent);
+eventFte 'Доля ставки' = DATA NUMERIC[8,4] (PersonnelEvent);
+eventSalary 'Оклад' = DATA NUMERIC[16,2] (PersonnelEvent);
 effectiveDate 'Дата вступления в силу' = DATA DATE (PersonnelEvent);
 orderNumber 'Номер акта работодателя' = DATA STRING[50] (PersonnelEvent);
 orderDate 'Дата акта' = DATA DATE (PersonnelEvent);
@@ -83,6 +106,114 @@ basis 'Основание' = DATA STRING[500] (PersonnelEvent);
 esutdStatus 'Статус ЕСУТД' = DATA EsutdStatus (PersonnelEvent);
 esutdSubmittedAt 'Передано в ЕСУТД' = DATA DATETIME (PersonnelEvent);
 esutdExternalId 'Идентификатор ЕСУТД' = DATA STRING[100] (PersonnelEvent);
+eventStatus 'Статус' = DATA PersonnelEventStatus (PersonnelEvent);
+eventPostedAt 'Проведён' = DATA DATETIME (PersonnelEvent);
+eventCancelledAt 'Отменён' = DATA DATETIME (PersonnelEvent);
+
+// Values required to reverse a posted event without reconstructing history.
+eventPreviousAssignment 'Предыдущее назначение' =
+    DATA EmploymentAssignment (PersonnelEvent);
+eventPreviousAssignmentTo 'Прежнее окончание назначения' = DATA DATE (PersonnelEvent);
+eventPreviousHireDate 'Прежняя дата приёма' = DATA DATE (PersonnelEvent);
+eventPreviousContractEndDate 'Прежнее окончание договора' = DATA DATE (PersonnelEvent);
+
+postedPersonnelEventFromDateCount(Employment contract, DATE date) = GROUP SUM 1 IF
+    eventEmployment(PersonnelEvent other) == contract AND
+    eventStatus(other) == PersonnelEventStatus.posted AND effectiveDate(other) >= date;
+laterPostedPersonnelEventCount(PersonnelEvent e) = GROUP SUM 1 IF
+    eventEmployment(PersonnelEvent other) == eventEmployment(e) AND other != e AND
+    eventStatus(other) == PersonnelEventStatus.posted AND effectiveDate(other) > effectiveDate(e);
+
+CONSTRAINT (CHANGED(eventKind(PersonnelEvent e)) OR CHANGED(eventEmployment(e)) OR
+            CHANGED(eventStaffPosition(e)) OR CHANGED(eventFte(e)) OR
+            CHANGED(eventSalary(e)) OR CHANGED(effectiveDate(e)) OR
+            CHANGED(orderNumber(e)) OR CHANGED(orderDate(e)) OR CHANGED(basis(e))) AND
+           PREV(eventStatus(e)) != PersonnelEventStatus.draft
+    MESSAGE 'Нельзя изменить проведённое кадровое событие';
+
+postPersonnelEvent 'Провести' (PersonnelEvent e) {
+    IF eventStatus(e) AND eventStatus(e) != PersonnelEventStatus.draft THEN
+        MESSAGE 'Кадровое событие уже проведено';
+    ELSE IF NOT eventKind(e) OR NOT eventEmployment(e) OR NOT effectiveDate(e) OR
+            NOT orderNumber(e) OR NOT orderDate(e) OR NOT basis(e) THEN
+        MESSAGE 'Заполните вид, договор, даты, номер и основание';
+    ELSE IF (eventKind(e) == PersonnelEventKind.hire OR
+             eventKind(e) == PersonnelEventKind.transfer) AND
+            (NOT eventStaffPosition(e) OR NOT eventFte(e) OR NOT eventSalary(e)) THEN
+        MESSAGE 'Для приёма и перевода заполните штатную единицу, долю ставки и оклад';
+    ELSE IF eventStaffPosition(e) AND
+            organization(eventStaffPosition(e)) != organization(eventEmployment(e)) THEN
+        MESSAGE 'Штатная единица должна принадлежать организации договора';
+    ELSE IF postedPersonnelEventFromDateCount(eventEmployment(e), effectiveDate(e)) THEN
+        MESSAGE 'Кадровые события нужно проводить в хронологическом порядке';
+    ELSE IF eventKind(e) == PersonnelEventKind.hire AND assignmentCount(eventEmployment(e)) THEN
+        MESSAGE 'По договору уже есть назначение';
+    ELSE IF eventKind(e) != PersonnelEventKind.hire AND
+            NOT activeAssignmentOn(eventEmployment(e), effectiveDate(e)) THEN
+        MESSAGE 'На дату события нет действующего назначения';
+    ELSE {
+        eventPreviousHireDate(e) <- hireDate(eventEmployment(e));
+        eventPreviousContractEndDate(e) <- contractEndDate(eventEmployment(e));
+
+        IF eventKind(e) == PersonnelEventKind.hire THEN {
+            hireDate(eventEmployment(e)) <- effectiveDate(e);
+            NEW assignment = EmploymentAssignment {
+                employment(assignment) <- eventEmployment(e);
+                staffPosition(assignment) <- eventStaffPosition(e);
+                assignmentFrom(assignment) <- effectiveDate(e);
+                fte(assignment) <- eventFte(e);
+                assignmentSalary(assignment) <- eventSalary(e);
+                eventAssignment(e) <- assignment;
+            }
+        } ELSE {
+            eventPreviousAssignment(e) <- activeAssignmentOn(eventEmployment(e), effectiveDate(e));
+            eventPreviousAssignmentTo(e) <- assignmentTo(eventPreviousAssignment(e));
+
+            IF eventKind(e) == PersonnelEventKind.transfer THEN {
+                assignmentTo(eventPreviousAssignment(e)) <- effectiveDate(e) - 1;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- eventEmployment(e);
+                    staffPosition(assignment) <- eventStaffPosition(e);
+                    assignmentFrom(assignment) <- effectiveDate(e);
+                    fte(assignment) <- eventFte(e);
+                    assignmentSalary(assignment) <- eventSalary(e);
+                    eventAssignment(e) <- assignment;
+                }
+            } ELSE {
+                assignmentTo(eventPreviousAssignment(e)) <- effectiveDate(e);
+                contractEndDate(eventEmployment(e)) <- effectiveDate(e);
+                eventAssignment(e) <- eventPreviousAssignment(e);
+            }
+        }
+
+        eventStatus(e) <- PersonnelEventStatus.posted;
+        eventPostedAt(e) <- currentDateTime();
+        APPLY;
+    }
+}
+
+cancelPersonnelEvent 'Отменить' (PersonnelEvent e) {
+    IF eventStatus(e) != PersonnelEventStatus.posted THEN
+        MESSAGE 'Отменить можно только проведённое кадровое событие';
+    ELSE IF laterPostedPersonnelEventCount(e) THEN
+        MESSAGE 'Сначала отмените более поздние кадровые события';
+    ELSE {
+        hireDate(eventEmployment(e)) <- eventPreviousHireDate(e);
+        contractEndDate(eventEmployment(e)) <- eventPreviousContractEndDate(e);
+
+        IF eventKind(e) == PersonnelEventKind.transfer THEN {
+            assignmentTo(eventPreviousAssignment(e)) <- eventPreviousAssignmentTo(e);
+            DELETE EmploymentAssignment a WHERE a == eventAssignment(e);
+        } ELSE IF eventKind(e) == PersonnelEventKind.termination THEN
+            assignmentTo(eventPreviousAssignment(e)) <- eventPreviousAssignmentTo(e);
+        ELSE
+            DELETE EmploymentAssignment a WHERE a == eventAssignment(e);
+
+        eventStatus(e) <- PersonnelEventStatus.cancelled;
+        eventCancelledAt(e) <- currentDateTime();
+        APPLY;
+    }
+}
 
 FORM employments 'Трудовые договоры'
     OBJECTS e = Employment
@@ -99,7 +230,9 @@ FORM employmentAssignments 'Назначения'
 
 FORM personnelEvents 'Кадровые события'
     OBJECTS e = PersonnelEvent
-    PROPERTIES(e) eventKind, eventEmployment, eventAssignment, effectiveDate,
-                  orderNumber, orderDate, basis, esutdStatus,
+    PROPERTIES(e) eventKind, eventEmployment, eventAssignment, eventStaffPosition,
+                  eventFte, eventSalary, effectiveDate, orderNumber, orderDate, basis,
+                  eventStatus, eventPostedAt, eventCancelledAt, esutdStatus,
                   esutdSubmittedAt, esutdExternalId
+    PROPERTIES(e) postPersonnelEvent, cancelPersonnelEvent
 ;

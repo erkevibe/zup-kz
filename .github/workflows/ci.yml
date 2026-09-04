@@ -79,6 +79,12 @@ jobs:
 
               python3 tests/assert_stage0.py stage0-result.json
 
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.hrWorkflowTest' \
+                --output hr-workflow-result.json
+
+              python3 tests/assert_hr_workflow.py hr-workflow-result.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT

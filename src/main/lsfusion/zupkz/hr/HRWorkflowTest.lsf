@@ -1,0 +1,103 @@
+MODULE HRWorkflowTest;
+
+REQUIRE ZUPKZ;
+NAMESPACE ZUPKZ;
+
+hrWorkflowTest() {
+    NEW org = Organization {
+        bin(org) <- '777777777777';
+        NEW firstStaff = StaffPosition {
+            staffCode(firstStaff) <- 'HR-TEST-1';
+            organization(firstStaff) <- org;
+            validFrom(firstStaff) <- 2026_01_01;
+            plannedFTE(firstStaff) <- 1.0000;
+            salaryMin(firstStaff) <- 100000.00;
+            salaryMax(firstStaff) <- 200000.00;
+            NEW secondStaff = StaffPosition {
+                staffCode(secondStaff) <- 'HR-TEST-2';
+                organization(secondStaff) <- org;
+                validFrom(secondStaff) <- 2026_01_01;
+                plannedFTE(secondStaff) <- 1.0000;
+                salaryMin(secondStaff) <- 150000.00;
+                salaryMax(secondStaff) <- 250000.00;
+                NEW worker = Employee {
+                    iin(worker) <- '930303300003';
+                    lastName(worker) <- 'Кадров';
+                    firstName(worker) <- 'Тест';
+                    NEW contract = Employment {
+                        employee(contract) <- worker;
+                        organization(contract) <- org;
+                        NEW hire = PersonnelEvent {
+                            eventKind(hire) <- PersonnelEventKind.hire;
+                            eventEmployment(hire) <- contract;
+                            eventStaffPosition(hire) <- firstStaff;
+                            eventFte(hire) <- 1.0000;
+                            eventSalary(hire) <- 150000.00;
+                            effectiveDate(hire) <- 2026_01_10;
+                            orderNumber(hire) <- 'HR-HIRE-1';
+                            orderDate(hire) <- 2026_01_09;
+                            basis(hire) <- 'Трудовой договор';
+                            eventStatus(hire) <- PersonnelEventStatus.draft;
+                            postPersonnelEvent(hire);
+                            NEW transfer = PersonnelEvent {
+                                eventKind(transfer) <- PersonnelEventKind.transfer;
+                                eventEmployment(transfer) <- contract;
+                                eventStaffPosition(transfer) <- secondStaff;
+                                eventFte(transfer) <- 1.0000;
+                                eventSalary(transfer) <- 200000.00;
+                                effectiveDate(transfer) <- 2026_02_01;
+                                orderNumber(transfer) <- 'HR-TRANSFER-1';
+                                orderDate(transfer) <- 2026_01_30;
+                                basis(transfer) <- 'Изменение условий труда';
+                                eventStatus(transfer) <- PersonnelEventStatus.draft;
+                                postPersonnelEvent(transfer);
+                                NEW termination = PersonnelEvent {
+                                    eventKind(termination) <- PersonnelEventKind.termination;
+                                    eventEmployment(termination) <- contract;
+                                    effectiveDate(termination) <- 2026_03_15;
+                                    orderNumber(termination) <- 'HR-TERM-1';
+                                    orderDate(termination) <- 2026_03_14;
+                                    basis(termination) <- 'Соглашение сторон';
+                                    eventStatus(termination) <- PersonnelEventStatus.draft;
+                                    postPersonnelEvent(termination);
+                                    cancelPersonnelEvent(termination);
+                                    NEW backdated = PersonnelEvent {
+                                        eventKind(backdated) <- PersonnelEventKind.transfer;
+                                        eventEmployment(backdated) <- contract;
+                                        eventStaffPosition(backdated) <- secondStaff;
+                                        eventFte(backdated) <- 1.0000;
+                                        eventSalary(backdated) <- 200000.00;
+                                        effectiveDate(backdated) <- 2026_01_20;
+                                        orderNumber(backdated) <- 'HR-BACKDATED-1';
+                                        orderDate(backdated) <- 2026_01_19;
+                                        basis(backdated) <- 'Проверка хронологии';
+                                        eventStatus(backdated) <- PersonnelEventStatus.draft;
+                                        postPersonnelEvent(backdated);
+                                        cancelPersonnelEvent(hire);
+
+                                        EXPORT JSON FROM
+                                            hirePosted = eventStatus(hire) == PersonnelEventStatus.posted,
+                                            transferPosted = eventStatus(transfer) == PersonnelEventStatus.posted,
+                                            terminationCancelled = eventStatus(termination) ==
+                                                PersonnelEventStatus.cancelled,
+                                            backdatedRejected = eventStatus(backdated) ==
+                                                PersonnelEventStatus.draft,
+                                            earlierCancellationRejected = eventStatus(hire) ==
+                                                PersonnelEventStatus.posted,
+                                            hireDateResult = hireDate(contract),
+                                            contractEndRestored = NOT contractEndDate(contract),
+                                            assignmentCountResult = assignmentCount(contract),
+                                            firstAssignmentTo = assignmentTo(eventAssignment(hire)),
+                                            currentStaffIsTransferred = staffPosition(eventAssignment(transfer)) ==
+                                                secondStaff,
+                                            currentAssignmentRestored = NOT assignmentTo(eventAssignment(transfer));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
