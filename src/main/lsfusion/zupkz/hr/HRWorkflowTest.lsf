@@ -42,13 +42,11 @@ hrWorkflowTest() {
                             submitPersonnelEventEsutd(hire);
                             esutdExternalId(hire) <- 'ESUTD-HIRE-1';
                             acceptPersonnelEventEsutd(hire);
-                            NEW transfer = PersonnelEvent {
-                                eventKind(transfer) <- PersonnelEventKind.transfer;
-                                eventEmployment(transfer) <- contract;
+                                NEW transfer = PersonnelEvent {
+                                initializePersonnelEvent(transfer, contract,
+                                    PersonnelEventKind.transfer, 2026_02_01);
                                 eventStaffPosition(transfer) <- secondStaff;
-                                eventFte(transfer) <- 1.0000;
                                 eventSalary(transfer) <- 200000.00;
-                                effectiveDate(transfer) <- 2026_02_01;
                                 orderNumber(transfer) <- 'HR-TRANSFER-1';
                                 orderDate(transfer) <- 2026_01_30;
                                 basis(transfer) <- 'Изменение условий труда';
@@ -109,7 +107,9 @@ hrWorkflowTest() {
                                             employeeDisplayName = employeeFullName(worker),
                                             contractEmployeeDisplayName = employmentEmployeeName(contract),
                                             assignmentEmployeeDisplayName =
-                                                assignmentEmployeeName(eventAssignment(transfer));
+                                                assignmentEmployeeName(eventAssignment(transfer)),
+                                            transferDefaultsFromCurrentAssignment =
+                                                eventFte(transfer) == 1.0000;
                                     }
                                 }
                             }

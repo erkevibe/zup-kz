@@ -126,6 +126,11 @@ eventCancelledAt 'Отменён' = DATA DATETIME (PersonnelEvent);
 personnelEventLifecycleTransition = DATA LOCAL BOOLEAN (PersonnelEvent);
 esutdLifecycleTransition = DATA LOCAL BOOLEAN (PersonnelEvent);
 
+eventEmployeeName 'Ф.И.О.' (PersonnelEvent e) =
+    employmentEmployeeName(eventEmployment(e));
+eventOrganizationName 'Организация (название)' (PersonnelEvent e) =
+    employmentOrganizationName(eventEmployment(e));
+
 // Values required to reverse a posted event without reconstructing history.
 eventPreviousAssignment 'Предыдущее назначение' =
     DATA EmploymentAssignment (PersonnelEvent);
@@ -305,6 +310,54 @@ rejectPersonnelEventEsutd 'Зафиксировать отказ ЕСУТД' (Pe
     }
 }
 
+FORM personnelEventCard 'Кадровое событие'
+    OBJECTS e = PersonnelEvent PANEL
+    PROPERTIES(e) READONLY eventEmployeeName, eventOrganizationName
+    PROPERTIES(e) eventKind, eventEmployment, eventStaffPosition,
+                  eventFte, eventSalary, effectiveDate, orderNumber, orderDate, basis,
+                  esutdExternalId, esutdRejectionReason
+    PROPERTIES(e) READONLY eventStatus, eventPostedAt, eventCancelledAt,
+                           esutdStatus, esutdSubmittedAt, esutdRespondedAt
+    PROPERTIES(e) postPersonnelEvent, cancelPersonnelEvent, submitPersonnelEventEsutd,
+                  acceptPersonnelEventEsutd, rejectPersonnelEventEsutd
+;
+
+initializePersonnelEvent(PersonnelEvent event, Employment contract,
+                         PersonnelEventKind kind, DATE date) {
+    eventKind(event) <- kind;
+    eventEmployment(event) <- contract;
+    effectiveDate(event) <- date;
+    orderDate(event) <- currentDate();
+    eventStatus(event) <- PersonnelEventStatus.draft;
+
+    IF kind == PersonnelEventKind.transfer THEN {
+        eventStaffPosition(event) <- staffPosition(activeAssignmentOn(contract, date));
+        eventFte(event) <- fte(activeAssignmentOn(contract, date));
+        eventSalary(event) <- assignmentSalary(activeAssignmentOn(contract, date));
+    }
+}
+
+preparePersonnelEvent(Employment contract, PersonnelEventKind kind) {
+    NEWSESSION {
+        NEW event = PersonnelEvent {
+            initializePersonnelEvent(event, contract, kind, currentDate());
+            DIALOG personnelEventCard OBJECTS e = event INPUT;
+        }
+    }
+}
+
+prepareHireEvent 'Подготовить приём' (Employment contract) {
+    preparePersonnelEvent(contract, PersonnelEventKind.hire);
+}
+
+prepareTransferEvent 'Подготовить перевод' (Employment contract) {
+    preparePersonnelEvent(contract, PersonnelEventKind.transfer);
+}
+
+prepareTerminationEvent 'Подготовить увольнение' (Employment contract) {
+    preparePersonnelEvent(contract, PersonnelEventKind.termination);
+}
+
 FORM employments 'Трудовые договоры'
     OBJECTS e = Employment
     PROPERTIES(e) READONLY employmentEmployeeName, employmentOrganizationName,
@@ -331,4 +384,32 @@ FORM personnelEvents 'Кадровые события'
                            esutdStatus, esutdSubmittedAt, esutdRespondedAt
     PROPERTIES(e) postPersonnelEvent, cancelPersonnelEvent, submitPersonnelEventEsutd,
                   acceptPersonnelEventEsutd, rejectPersonnelEventEsutd
+;
+
+FORM personnelWorkplace 'Приём, перевод и увольнение'
+    OBJECTS contract = Employment
+    PROPERTIES(contract) READONLY employmentEmployeeName, employmentOrganizationName,
+                                  employmentDepartmentName, employmentPositionName
+    PROPERTIES(contract) employee, organization, department, position,
+                         hireDate, contractNumber, contractDate, employmentKind,
+                         contractTermKind, contractEndDate, workPlace, workConditions, salary
+    PROPERTIES(contract) prepareHireEvent TOOLBAR, prepareTransferEvent TOOLBAR,
+                         prepareTerminationEvent TOOLBAR
+
+    OBJECTS assignment = EmploymentAssignment
+    PROPERTIES(assignment) READONLY assignmentEmployeeName, assignmentStaffCode,
+                                    assignmentPositionName
+    PROPERTIES(assignment) staffPosition, assignmentFrom, assignmentTo,
+                           fte, assignmentSalary
+    FILTERS employment(assignment) == contract
+
+    OBJECTS event = PersonnelEvent
+    PROPERTIES(event) eventKind, eventStaffPosition, eventFte, eventSalary,
+                      effectiveDate, orderNumber, orderDate, basis,
+                      esutdExternalId, esutdRejectionReason
+    PROPERTIES(event) READONLY eventStatus, eventPostedAt, eventCancelledAt,
+                               esutdStatus, esutdSubmittedAt, esutdRespondedAt
+    PROPERTIES(event) postPersonnelEvent, cancelPersonnelEvent, submitPersonnelEventEsutd,
+                      acceptPersonnelEventEsutd, rejectPersonnelEventEsutd
+    FILTERS eventEmployment(event) == contract
 ;

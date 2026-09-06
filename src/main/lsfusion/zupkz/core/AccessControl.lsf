@@ -208,9 +208,12 @@ EXTEND FORM employees FILTERS employeeAllowed(e);
 EXTEND FORM employeeCards FILTERS organizationAllowed(cardOrganization(c));
 EXTEND FORM employeePersonalCard FILTERS organizationAllowed(cardOrganization(c));
 EXTEND FORM employments FILTERS organizationAllowed(organization(e));
+EXTEND FORM personnelWorkplace FILTERS organizationAllowed(organization(contract));
 EXTEND FORM employmentAssignments
     FILTERS organizationAllowed(organization(employment(a)));
 EXTEND FORM personnelEvents
+    FILTERS organizationAllowed(organization(eventEmployment(e)));
+EXTEND FORM personnelEventCard
     FILTERS organizationAllowed(organization(eventEmployment(e)));
 EXTEND FORM personnelEventOrder
     FILTERS organizationAllowed(personnelEventOrganization(e));

@@ -38,9 +38,7 @@ NAVIGATOR {
     NEW FOLDER personnel 'Кадровый учёт' WINDOW toolbar {
         NEW FOLDER personnelEmployees 'Сотрудники и трудовые отношения' {
             NEW employeeCards;
-            NEW employments;
-            NEW employmentAssignments;
-            NEW personnelEvents;
+            NEW personnelWorkplace;
         }
         NEW FOLDER personnelAbsences 'Отпуска и отсутствия' {
             NEW leaveEntitlements;

@@ -25,3 +25,4 @@ assert actual["currentAssignmentRestored"] is True
 assert actual["employeeDisplayName"] == "Кадров Тест"
 assert actual["contractEmployeeDisplayName"] == "Кадров Тест"
 assert actual["assignmentEmployeeDisplayName"] == "Кадров Тест"
+assert actual["transferDefaultsFromCurrentAssignment"] is True
