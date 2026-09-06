@@ -1,0 +1,215 @@
+MODULE PilotUiWorkflowTest;
+
+REQUIRE AccessWorkflowTest;
+NAMESPACE ZUPKZ;
+
+pilotUiOrganization() = organizationByBin('555555555555');
+pilotUiEmployee() = GROUP LAST Employee e IF iin(e) == '900101350001' ORDER e;
+pilotUiCard() = GROUP LAST EmployeeCard c IF cardEmployee(c) == pilotUiEmployee() ORDER c;
+pilotUiTimesheet() = GROUP LAST Timesheet t IF timesheetNumber(t) == 'UI-TS-2026-08' ORDER t;
+pilotUiPayrollRun() = GROUP LAST PayrollRun r IF payrollNumber(r) == 'UI-PAY-2026-08' ORDER r;
+pilotUiBonus() = GROUP LAST PayrollInput i IF inputPayrollRun(i) == pilotUiPayrollRun() ORDER i;
+pilotUiEmployment() = GROUP LAST Employment e IF
+    employee(e) == pilotUiEmployee() AND organization(e) == pilotUiOrganization() ORDER e;
+pilotUiAssignment() = activeAssignmentOn(pilotUiEmployment(), 2026_08_01);
+pilotUiFullTimesheet() = GROUP LAST Timesheet t IF
+    timesheetOrganization(t) == pilotUiOrganization() AND timesheetNumber(t) == 'UI-TS-FULL-2026-08' ORDER t;
+pilotUiSchedule() = GROUP LAST WorkSchedule s IF
+    scheduleOrganization(s) == pilotUiOrganization() AND scheduleCode(s) == 'UI-5-40' ORDER s;
+
+// Старый однодневный табель сохраняется отменённым; полный табель создаётся один раз.
+pilotUiFullMonthSetupTest() {
+    IF NOT pilotUiAssignment() OR NOT calendarByYear(2026) THEN
+        MESSAGE 'Сначала подготовьте сотрудника и календарь 2026';
+    ELSE IF pilotUiFullTimesheet() THEN
+        EXPORT JSON FROM alreadyExists = TRUE, days = timesheetLineCount(pilotUiFullTimesheet());
+    ELSE IF payrollRunStatus(pilotUiPayrollRun()) != PayrollRunStatus.draft THEN
+        MESSAGE 'Нельзя менять набор времени уже начатого расчёта';
+    ELSE {
+        IF NOT pilotUiSchedule() THEN NEW s = WorkSchedule {
+            scheduleOrganization(s) <- pilotUiOrganization();
+            scheduleCode(s) <- 'UI-5-40';
+            scheduleName(s) <- 'UI — пятидневка 40 часов';
+            scheduleType(s) <- WorkScheduleType.fiveDay;
+            weeklyHours(s) <- 40.00;
+            accountingPeriodKind(s) <- AccountingPeriodKind.month;
+            scheduleValidFrom(s) <- 2026_08_01;
+            NEW a = EmployeeScheduleAssignment {
+                scheduleEmploymentAssignment(a) <- pilotUiAssignment();
+                employeeWorkSchedule(a) <- s;
+                employeeScheduleFrom(a) <- 2026_08_01;
+            }
+        }
+        APPLY;
+        IF timesheetStatus(pilotUiTimesheet()) == TimesheetStatus.approved THEN
+            cancelTimesheet(pilotUiTimesheet());
+        NEW t = Timesheet {
+            timesheetOrganization(t) <- pilotUiOrganization();
+            timesheetNumber(t) <- 'UI-TS-FULL-2026-08';
+            timesheetPeriodFrom(t) <- 2026_08_01;
+            timesheetPeriodTo(t) <- 2026_08_31;
+            timesheetStatus(t) <- TimesheetStatus.draft;
+            APPLY;
+            fillTimesheet(t);
+        }
+        EXPORT JSON FROM created = TRUE, days = timesheetLineCount(pilotUiFullTimesheet()),
+            originalPreserved = timesheetStatus(pilotUiTimesheet()) == TimesheetStatus.cancelled;
+    }
+}
+
+pilotUiVerificationTest() {
+    EXPORT JSON FROM
+        employee = employeeFullName(pilotUiEmployee()),
+        fullMonthDays = timesheetLineCount(pilotUiFullTimesheet()),
+        timesheetApproved = timesheetStatus(pilotUiFullTimesheet()) == TimesheetStatus.approved,
+        approver = login(approvedBy(pilotUiFullTimesheet())),
+        approverLabel = timesheetApproverName(pilotUiFullTimesheet()),
+        originalPreserved = timesheetStatus(pilotUiTimesheet()) == TimesheetStatus.cancelled,
+        plannedHours = summaryPlannedHours(payrollTimeSummaryByKey(pilotUiPayrollRun(), pilotUiAssignment())),
+        workedHours = summaryWorkedHours(payrollTimeSummaryByKey(pilotUiPayrollRun(), pilotUiAssignment())),
+        calculated = payrollRunStatus(pilotUiPayrollRun()) == PayrollRunStatus.calculated,
+        lineCount = payrollLineCount(pilotUiPayrollRun()),
+        accrued = totalAccrued(pilotUiPayrollRun()),
+        expectedAccrued = totalAccrued(pilotUiPayrollRun()) == 400000.00;
+}
+
+// Постоянный набор для ручной ролевой проверки. Повторный запуск ничего не создаёт.
+pilotUiDataSetupTest() {
+    IF pilotUiPayrollRun() THEN
+        EXPORT JSON FROM
+            alreadyExists = TRUE,
+            employee = employeeFullName(pilotUiEmployee()),
+            timesheetStatus = timesheetStatus(pilotUiTimesheet()),
+            payrollStatus = payrollRunStatus(pilotUiPayrollRun());
+    ELSE IF NOT pilotUiOrganization() THEN
+        MESSAGE 'Сначала выполните uiRoleSetupTest';
+    ELSE {
+        NEW department = Department {
+            organization(department) <- pilotUiOrganization();
+            code(department) <- 'UI-ACC';
+            name(department) <- 'Бухгалтерия';
+            NEW position = Position {
+                organization(position) <- pilotUiOrganization();
+                code(position) <- 'UI-ACCOUNTANT';
+                name(position) <- 'Бухгалтер по расчёту зарплаты';
+                NEW staff = StaffPosition {
+                    organization(staff) <- pilotUiOrganization();
+                    department(staff) <- department;
+                    position(staff) <- position;
+                    staffCode(staff) <- 'UI-ACC-001';
+                    validFrom(staff) <- 2026_01_01;
+                    plannedFTE(staff) <- 1.0000;
+                    salaryMin(staff) <- 250000.00;
+                    salaryMax(staff) <- 500000.00;
+                    NEW worker = Employee {
+                        iin(worker) <- '900101350001';
+                        lastName(worker) <- 'Серикова';
+                        firstName(worker) <- 'Айгуль';
+                        middleName(worker) <- 'Маратовна';
+                        birthDate(worker) <- 1990_01_01;
+                        gender(worker) <- Gender.female;
+                        citizenshipCode(worker) <- 'KAZ';
+                        personalDataConsentDate(worker) <- 2026_07_20;
+                        personalDataPurpose(worker) <- 'Кадровый учёт и расчёт заработной платы';
+                        salaryBankName(worker) <- 'Тестовый банк';
+                        salaryBankBic(worker) <- 'TESTKZKX';
+                        salaryIban(worker) <- 'KZ000000000000000001';
+                        NEW card = EmployeeCard {
+                            cardEmployee(card) <- worker;
+                            cardOrganization(card) <- pilotUiOrganization();
+                            cardNumber(card) <- 'UI-T2-001';
+                            cardDate(card) <- 2026_07_20;
+                            personnelNumber(card) <- 'UI-0001';
+                            maritalStatus(card) <- MaritalStatus.married;
+                            consentDate(card) <- 2026_07_20;
+                            consentPurpose(card) <- 'Кадровый учёт и расчёт заработной платы';
+                            consentDataScope(card) <- 'Персональные, кадровые и расчётные данные';
+                            consentThirdPartyTransfer(card) <- ConsentPermission.allowed;
+                            consentCrossBorderTransfer(card) <- ConsentPermission.prohibited;
+                            consentPublicDistribution(card) <- ConsentPermission.prohibited;
+                            NEW contract = Employment {
+                                employee(contract) <- worker;
+                                organization(contract) <- pilotUiOrganization();
+                                department(contract) <- department;
+                                position(contract) <- position;
+                                hireDate(contract) <- 2026_08_01;
+                                contractNumber(contract) <- 'UI-TD-001';
+                                contractDate(contract) <- 2026_07_20;
+                                employmentKind(contract) <- EmploymentKind.primary;
+                                contractTermKind(contract) <- ContractTermKind.indefinite;
+                                workPlace(contract) <- 'г. Алматы';
+                                workConditions(contract) <- 'Нормальные условия труда';
+                                salary(contract) <- 350000.00;
+                                NEW assignment = EmploymentAssignment {
+                                    employment(assignment) <- contract;
+                                    staffPosition(assignment) <- staff;
+                                    assignmentFrom(assignment) <- 2026_08_01;
+                                    fte(assignment) <- 1.0000;
+                                    assignmentSalary(assignment) <- 350000.00;
+                                    NEW hire = PersonnelEvent {
+                                        eventKind(hire) <- PersonnelEventKind.hire;
+                                        eventEmployment(hire) <- contract;
+                                        eventAssignment(hire) <- assignment;
+                                        eventStaffPosition(hire) <- staff;
+                                        eventFte(hire) <- 1.0000;
+                                        eventSalary(hire) <- 350000.00;
+                                        effectiveDate(hire) <- 2026_08_01;
+                                        orderNumber(hire) <- 'UI-HIRE-001';
+                                        orderDate(hire) <- 2026_07_20;
+                                        basis(hire) <- 'Трудовой договор UI-TD-001';
+                                        eventStatus(hire) <- PersonnelEventStatus.posted;
+                                        eventPostedAt(hire) <- currentDateTime();
+                                        esutdStatus(hire) <- EsutdStatus.notSubmitted;
+                                        NEW timesheet = Timesheet {
+                                            timesheetOrganization(timesheet) <- pilotUiOrganization();
+                                            timesheetNumber(timesheet) <- 'UI-TS-2026-08';
+                                            timesheetPeriodFrom(timesheet) <- 2026_08_01;
+                                            timesheetPeriodTo(timesheet) <- 2026_08_31;
+                                            timesheetStatus(timesheet) <- TimesheetStatus.draft;
+                                            NEW line = TimesheetLine {
+                                                lineTimesheet(line) <- timesheet;
+                                                lineEmploymentAssignment(line) <- assignment;
+                                                lineDate(line) <- 2026_08_03;
+                                                attendanceKind(line) <- AttendanceKind.worked;
+                                                plannedHoursLine(line) <- 8.00;
+                                                workedHours(line) <- 8.00;
+                                                lineComment(line) <- 'Строка для ролевого UI-теста';
+                                                NEW run = PayrollRun {
+                                                    payrollOrganization(run) <- pilotUiOrganization();
+                                                    payrollNumber(run) <- 'UI-PAY-2026-08';
+                                                    payrollPeriodFrom(run) <- 2026_08_01;
+                                                    payrollPeriodTo(run) <- 2026_08_31;
+                                                    payrollPaymentDueDate(run) <- 2026_09_10;
+                                                    payrollRunStatus(run) <- PayrollRunStatus.draft;
+                                                    NEW bonus = PayrollInput {
+                                                        inputPayrollRun(bonus) <- run;
+                                                        inputAssignment(bonus) <- assignment;
+                                                        inputCalculationType(bonus) <- calculationTypeByCode('FIXED_BONUS');
+                                                        inputManualAmount(bonus) <- 50000.00;
+                                                        inputBasis(bonus) <- 'Премия за август 2026 года';
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        payrollBankName(pilotUiOrganization()) <- 'Тестовый банк';
+        payrollBankBic(pilotUiOrganization()) <- 'TESTKZKX';
+        payrollIban(pilotUiOrganization()) <- 'KZ000000000000000002';
+        APPLY;
+
+        EXPORT JSON FROM
+            created = TRUE,
+            employee = employeeFullName(pilotUiEmployee()),
+            cardReady = employeeCardReady(pilotUiCard()),
+            timesheetStatus = timesheetStatus(pilotUiTimesheet()),
+            payrollStatus = payrollRunStatus(pilotUiPayrollRun()),
+            bonusAmount = inputAmount(pilotUiBonus());
+    }
+}

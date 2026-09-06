@@ -1,6 +1,6 @@
 MODULE StatutoryGuardTest;
 
-REQUIRE PayrollRecalculationWorkflowTest;
+REQUIRE PayrollRecalculationWorkflowTest, PilotUiWorkflowTest;
 NAMESPACE ZUPKZ;
 
 // A period without an approved and complete legal pack must stop both

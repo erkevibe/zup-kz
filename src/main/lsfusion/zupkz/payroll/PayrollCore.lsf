@@ -515,18 +515,30 @@ FORM payrollRules 'Правила расчёта'
                   ruleCoefficientParameter, rulePriority, ruleConditionDescription
 ;
 
+payrollOrganizationName 'Организация' (PayrollRun r) = name(payrollOrganization(r));
+payrollStatusName 'Статус' (PayrollRun r) = caption(payrollRunStatus(r));
+changePayrollOrganization(PayrollRun r) {
+    DIALOG organizations OBJECTS o = payrollOrganization(r) NULL INPUT selected NULL
+    DO payrollOrganization(r) <- selected;
+}
+summaryRunNumber 'Расчёт зарплаты' (PayrollTimeSummary s) = payrollNumber(summaryPayrollRun(s));
+summaryEmployeeName 'Сотрудник' (PayrollTimeSummary s) = assignmentEmployeeName(summaryAssignment(s));
+lineRunNumber 'Расчёт зарплаты' (PayrollLine l) = payrollNumber(linePayrollRun(l));
+lineEmployeeName 'Сотрудник' (PayrollLine l) = assignmentEmployeeName(linePayrollAssignment(l));
+lineTypeName 'Вид расчёта' (PayrollLine l) = calculationName(lineCalculationType(l));
+
 FORM payrollRuns 'Расчёты зарплаты'
     OBJECTS r = PayrollRun
-    PROPERTIES(r) payrollOrganization, payrollNumber, payrollPeriodFrom,
+    PROPERTIES(r) payrollOrganizationName ON CHANGE changePayrollOrganization(r), payrollNumber, payrollPeriodFrom,
                   payrollPeriodTo
-    PROPERTIES(r) READONLY payrollRunStatus, payrollCalculatedAt,
+    PROPERTIES(r) READONLY payrollStatusName, payrollCalculatedAt,
                            totalAccrued, totalDeducted, totalPayable
     PROPERTIES(r) collectApprovedTime, calculatePayroll
 ;
 
 FORM payrollTimeSummaries 'Данные табеля для расчёта'
     OBJECTS s = PayrollTimeSummary
-    PROPERTIES(s) READONLY summaryPayrollRun, summaryAssignment, summaryPlannedHours,
+    PROPERTIES(s) READONLY summaryRunNumber, summaryEmployeeName, summaryPlannedHours,
                            summaryWorkedHours, summaryWorkedDays, summaryNightHours,
                            summaryOvertimeHours, summaryHolidayHours, summaryWeekendHours,
                            summaryBusinessTripHours, summaryAbsenceHours
@@ -540,8 +552,7 @@ FORM payrollInputs 'Начисления и удержания периода'
 
 FORM payrollLines 'Строки расчёта зарплаты'
     OBJECTS l = PayrollLine
-    PROPERTIES(l) READONLY linePayrollRun, linePayrollAssignment, lineCalculationType,
-                           lineTimeSummary, linePayrollInput, calculationBase,
+    PROPERTIES(l) READONLY lineRunNumber, lineEmployeeName, lineTypeName, calculationBase,
                            calculationQuantity, calculationRate, calculationCoefficient,
                            calculationAmount, calculationNote
 ;

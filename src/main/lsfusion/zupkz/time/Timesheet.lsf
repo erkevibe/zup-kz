@@ -215,12 +215,24 @@ approveTimesheet 'Утвердить табель' (Timesheet t) {
     }
 }
 
+timesheetOrganizationName 'Организация' (Timesheet t) = name(timesheetOrganization(t));
+timesheetStatusName 'Статус' (Timesheet t) = caption(timesheetStatus(t));
+timesheetApproverName 'Кем утверждён' (Timesheet t) =
+    IF name(approvedBy(t)) THEN name(approvedBy(t)) ELSE login(approvedBy(t));
+timesheetCancellerName 'Кем отменён' (Timesheet t) =
+    IF name(cancelledBy(t)) THEN name(cancelledBy(t)) ELSE login(cancelledBy(t));
+
+changeTimesheetOrganization(Timesheet t) {
+    DIALOG organizations OBJECTS o = timesheetOrganization(t) NULL INPUT selected NULL
+    DO timesheetOrganization(t) <- selected;
+}
+
 FORM timesheets 'Табели рабочего времени'
     OBJECTS t = Timesheet
-    PROPERTIES(t) timesheetOrganization, timesheetNumber, timesheetPeriodFrom,
+    PROPERTIES(t) timesheetOrganizationName ON CHANGE changeTimesheetOrganization(t), timesheetNumber, timesheetPeriodFrom,
                   timesheetPeriodTo
-    PROPERTIES(t) READONLY timesheetStatus, approvedAt, approvedBy,
-                           cancelledAt, cancelledBy
+    PROPERTIES(t) READONLY timesheetStatusName, approvedAt, timesheetApproverName,
+                           cancelledAt, timesheetCancellerName
     PROPERTIES(t) fillTimesheet, approveTimesheet
 ;
 
