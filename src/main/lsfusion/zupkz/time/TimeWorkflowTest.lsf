@@ -60,10 +60,14 @@ timeWorkflowTest() {
                                         EXPORT JSON FROM
                                             januaryApproved = timesheetStatus(january) ==
                                                 TimesheetStatus.approved,
+                                            januaryApproverSet = approvedBy(january) ==
+                                                currentUser() AS CustomUser,
                                             usedTimesheetCancellationRejected = timesheetStatus(january) ==
                                                 TimesheetStatus.approved,
                                             februaryCancelled = timesheetStatus(february) ==
                                                 TimesheetStatus.cancelled,
+                                            februaryCancellerSet = cancelledBy(february) ==
+                                                currentUser() AS CustomUser,
                                             payrollTimeCollected = payrollRunStatus(run) ==
                                                 PayrollRunStatus.timeCollected,
                                             summaryPlannedHoursResult = summaryPlannedHours(

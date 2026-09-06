@@ -1,6 +1,6 @@
 MODULE HRLeave;
 
-REQUIRE HREmployment, TimeProductionCalendar, AverageEarnings;
+REQUIRE Authentication, HREmployment, TimeProductionCalendar, AverageEarnings;
 NAMESPACE ZUPKZ;
 
 CLASS LeaveKind 'Вид отпуска' {
@@ -57,9 +57,9 @@ leaveAverageEarnings 'Средний заработок' = DATA AverageEarningsD
 leaveBasis 'Основание' = DATA STRING[500] (LeaveDocument);
 leaveStatus 'Статус' = DATA LeaveStatus (LeaveDocument);
 leaveApprovedAt 'Утверждён' = DATA DATETIME (LeaveDocument);
-leaveApprovedBy 'Кем утверждён' = DATA STRING[150] (LeaveDocument);
+leaveApprovedBy 'Кем утверждён' = DATA CustomUser (LeaveDocument);
 leaveCancelledAt 'Отменён' = DATA DATETIME (LeaveDocument);
-leaveCancelledBy 'Кем отменён' = DATA STRING[150] (LeaveDocument);
+leaveCancelledBy 'Кем отменён' = DATA CustomUser (LeaveDocument);
 
 CONSTRAINT leaveDateTo(LeaveDocument l) < leaveDateFrom(l)
     MESSAGE 'Окончание отпуска не может быть раньше начала';
@@ -183,6 +183,7 @@ approveLeave 'Утвердить отпуск' (LeaveDocument l) {
     ELSE {
         leaveStatus(l) <- LeaveStatus.approved;
         leaveApprovedAt(l) <- currentDateTime();
+        leaveApprovedBy(l) <- currentUser() AS CustomUser;
         APPLY;
     }
 }
@@ -201,6 +202,6 @@ FORM leaveDocuments 'Отпуска'
                   leaveWorkWeek, leaveOutsideSchedule, leaveCalendarDays,
                   leaveChargedDays, leaveEventWorkDays, leavePaymentDueDate,
                   leaveAverageEarnings, leaveGrossAmount, leaveBasis, leaveStatus
-    PROPERTIES(l) leaveApprovedAt, leaveApprovedBy, leaveCancelledAt, leaveCancelledBy
+    PROPERTIES(l) READONLY leaveApprovedAt, leaveApprovedBy, leaveCancelledAt, leaveCancelledBy
     PROPERTIES(l) prepareAverageForLeave, approveLeave
 ;

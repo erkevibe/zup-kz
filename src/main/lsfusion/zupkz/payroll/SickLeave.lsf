@@ -1,6 +1,6 @@
 MODULE PayrollSickLeave;
 
-REQUIRE AverageEarnings;
+REQUIRE Authentication, AverageEarnings;
 NAMESPACE ZUPKZ;
 
 // Приказ № 907 и статья 133 ТК РК. Расчёт разбит по календарным месяцам,
@@ -51,9 +51,9 @@ sickLeaveExclusionReason 'Причина неоплаты' = DATA SickLeaveExclu
 sickLeaveStatus 'Статус' = DATA SickLeaveStatus (SickLeaveDocument);
 sickLeaveCalculatedAt 'Рассчитан' = DATA DATETIME (SickLeaveDocument);
 sickLeaveApprovedAt 'Утверждён' = DATA DATETIME (SickLeaveDocument);
-sickLeaveApprovedBy 'Кем утверждён' = DATA STRING[150] (SickLeaveDocument);
+sickLeaveApprovedBy 'Кем утверждён' = DATA CustomUser (SickLeaveDocument);
 sickLeaveCancelledAt 'Отменён' = DATA DATETIME (SickLeaveDocument);
-sickLeaveCancelledBy 'Кем отменён' = DATA STRING[150] (SickLeaveDocument);
+sickLeaveCancelledBy 'Кем отменён' = DATA CustomUser (SickLeaveDocument);
 sickLeaveLegalSource 'Нормативное основание' (SickLeaveDocument d) =
     legalSourceByCode('SICK_LEAVE_RULES_907');
 
@@ -191,6 +191,7 @@ approveSickLeave 'Утвердить' (SickLeaveDocument d) {
     ELSE {
         sickLeaveStatus(d) <- SickLeaveStatus.approved;
         sickLeaveApprovedAt(d) <- currentDateTime();
+        sickLeaveApprovedBy(d) <- currentUser() AS CustomUser;
         APPLY;
     }
 }
@@ -204,8 +205,8 @@ FORM sickLeaveDocuments 'Больничные листы'
                   sickLeaveExclusionReason, sickLeaveExcluded, sickLeaveCapExempt,
                   sickLeaveStatus, sickLeaveCalculatedAt, sickLeaveLegalSource,
                   sickLeaveGrossAmount
-    PROPERTIES(d) sickLeaveApprovedAt, sickLeaveApprovedBy,
-                  sickLeaveCancelledAt, sickLeaveCancelledBy
+    PROPERTIES(d) READONLY sickLeaveApprovedAt, sickLeaveApprovedBy,
+                           sickLeaveCancelledAt, sickLeaveCancelledBy
     PROPERTIES(d) calculateSickLeave, approveSickLeave
 ;
 

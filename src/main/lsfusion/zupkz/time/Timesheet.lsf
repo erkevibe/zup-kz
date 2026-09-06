@@ -30,9 +30,9 @@ timesheetPeriodFrom 'Период с' = DATA DATE (Timesheet);
 timesheetPeriodTo 'Период по' = DATA DATE (Timesheet);
 timesheetStatus 'Статус' = DATA TimesheetStatus (Timesheet);
 approvedAt 'Утверждён' = DATA DATETIME (Timesheet);
-approvedBy 'Кем утверждён' = DATA STRING[150] (Timesheet);
+approvedBy 'Кем утверждён' = DATA CustomUser (Timesheet);
 cancelledAt 'Отменён' = DATA DATETIME (Timesheet);
-cancelledBy 'Кем отменён' = DATA STRING[150] (Timesheet);
+cancelledBy 'Кем отменён' = DATA CustomUser (Timesheet);
 timesheetLifecycleTransition = DATA LOCAL BOOLEAN (Timesheet);
 
 CONSTRAINT timesheetPeriodTo(Timesheet t) < timesheetPeriodFrom(t)
@@ -210,7 +210,7 @@ approveTimesheet 'Утвердить табель' (Timesheet t) {
         timesheetLifecycleTransition(t) <- TRUE;
         timesheetStatus(t) <- TimesheetStatus.approved;
         approvedAt(t) <- currentDateTime();
-        approvedBy(t) <- currentUserName();
+        approvedBy(t) <- currentUser() AS CustomUser;
         APPLY;
     }
 }

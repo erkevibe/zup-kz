@@ -346,7 +346,7 @@ cancelTimesheet 'Отменить табель' (Timesheet t) {
         timesheetLifecycleTransition(t) <- TRUE;
         timesheetStatus(t) <- TimesheetStatus.cancelled;
         cancelledAt(t) <- currentDateTime();
-        cancelledBy(t) <- currentUserName();
+        cancelledBy(t) <- currentUser() AS CustomUser;
         APPLY;
     }
 }

@@ -1,6 +1,6 @@
 MODULE HREmployment;
 
-REQUIRE KZOrganization, HRDepartment, HRPosition, HREmployee, HRStaffSchedule;
+REQUIRE Authentication, KZOrganization, HRDepartment, HRPosition, HREmployee, HRStaffSchedule;
 NAMESPACE ZUPKZ;
 
 CLASS EmploymentKind 'Вид занятости' {
@@ -105,11 +105,14 @@ orderDate 'Дата акта' = DATA DATE (PersonnelEvent);
 basis 'Основание' = DATA STRING[500] (PersonnelEvent);
 esutdStatus 'Статус ЕСУТД' = DATA EsutdStatus (PersonnelEvent);
 esutdSubmittedAt 'Передано в ЕСУТД' = DATA DATETIME (PersonnelEvent);
+esutdRespondedAt 'Ответ ЕСУТД получен' = DATA DATETIME (PersonnelEvent);
 esutdExternalId 'Идентификатор ЕСУТД' = DATA STRING[100] (PersonnelEvent);
+esutdRejectionReason 'Причина отклонения ЕСУТД' = DATA STRING[500] (PersonnelEvent);
 eventStatus 'Статус' = DATA PersonnelEventStatus (PersonnelEvent);
 eventPostedAt 'Проведён' = DATA DATETIME (PersonnelEvent);
 eventCancelledAt 'Отменён' = DATA DATETIME (PersonnelEvent);
 personnelEventLifecycleTransition = DATA LOCAL BOOLEAN (PersonnelEvent);
+esutdLifecycleTransition = DATA LOCAL BOOLEAN (PersonnelEvent);
 
 // Values required to reverse a posted event without reconstructing history.
 eventPreviousAssignment 'Предыдущее назначение' =
@@ -139,6 +142,21 @@ CONSTRAINT (CHANGED(eventPostedAt(PersonnelEvent e)) OR CHANGED(eventCancelledAt
             CHANGED(eventPreviousHireDate(e)) OR CHANGED(eventPreviousContractEndDate(e))) AND
            PREV(eventStatus(e)) AND NOT personnelEventLifecycleTransition(e)
     MESSAGE 'Служебные реквизиты кадрового события изменяются только штатными действиями';
+CONSTRAINT CHANGED(esutdStatus(PersonnelEvent e)) AND
+           PREV(eventStatus(e)) == PersonnelEventStatus.posted AND
+           NOT esutdLifecycleTransition(e)
+    MESSAGE 'Статус ЕСУТД изменяется только штатными действиями';
+CONSTRAINT (CHANGED(esutdSubmittedAt(PersonnelEvent e)) OR
+            CHANGED(esutdRespondedAt(e))) AND
+           PREV(eventStatus(e)) == PersonnelEventStatus.posted AND
+           NOT esutdLifecycleTransition(e)
+    MESSAGE 'Даты обмена с ЕСУТД изменяются только штатными действиями';
+CONSTRAINT (CHANGED(esutdExternalId(PersonnelEvent e)) OR
+            CHANGED(esutdRejectionReason(e))) AND
+           PREV(eventStatus(e)) == PersonnelEventStatus.posted AND
+           PREV(esutdStatus(e)) != EsutdStatus.submitted AND
+           NOT esutdLifecycleTransition(e)
+    MESSAGE 'Ответ ЕСУТД можно заполнить только для переданного события';
 
 postPersonnelEvent 'Провести' (PersonnelEvent e) {
     IF eventStatus(e) AND eventStatus(e) != PersonnelEventStatus.draft THEN
@@ -198,6 +216,8 @@ postPersonnelEvent 'Провести' (PersonnelEvent e) {
         personnelEventLifecycleTransition(e) <- TRUE;
         eventStatus(e) <- PersonnelEventStatus.posted;
         eventPostedAt(e) <- currentDateTime();
+        esutdLifecycleTransition(e) <- TRUE;
+        esutdStatus(e) <- EsutdStatus.notSubmitted;
         APPLY;
     }
 }
@@ -205,6 +225,9 @@ postPersonnelEvent 'Провести' (PersonnelEvent e) {
 cancelPersonnelEvent 'Отменить' (PersonnelEvent e) {
     IF eventStatus(e) != PersonnelEventStatus.posted THEN
         MESSAGE 'Отменить можно только проведённое кадровое событие';
+    ELSE IF esutdStatus(e) == EsutdStatus.submitted OR
+            esutdStatus(e) == EsutdStatus.accepted THEN
+        MESSAGE 'Нельзя отменить событие, переданное или принятое ЕСУТД';
     ELSE IF laterPostedPersonnelEventCount(e) THEN
         MESSAGE 'Сначала отмените более поздние кадровые события';
     ELSE {
@@ -226,6 +249,50 @@ cancelPersonnelEvent 'Отменить' (PersonnelEvent e) {
     }
 }
 
+submitPersonnelEventEsutd 'Передать в ЕСУТД' (PersonnelEvent e) {
+    IF eventStatus(e) != PersonnelEventStatus.posted THEN
+        MESSAGE 'В ЕСУТД передаётся только проведённое кадровое событие';
+    ELSE IF esutdStatus(e) == EsutdStatus.submitted OR
+            esutdStatus(e) == EsutdStatus.accepted THEN
+        MESSAGE 'Кадровое событие уже передано в ЕСУТД';
+    ELSE {
+        esutdLifecycleTransition(e) <- TRUE;
+        esutdStatus(e) <- EsutdStatus.submitted;
+        esutdSubmittedAt(e) <- currentDateTime();
+        esutdRespondedAt(e) <- NULL;
+        esutdExternalId(e) <- NULL;
+        esutdRejectionReason(e) <- NULL;
+        APPLY;
+    }
+}
+
+acceptPersonnelEventEsutd 'Подтвердить приём ЕСУТД' (PersonnelEvent e) {
+    IF esutdStatus(e) != EsutdStatus.submitted THEN
+        MESSAGE 'Подтвердить можно только переданное событие';
+    ELSE IF NOT esutdExternalId(e) THEN
+        MESSAGE 'Заполните идентификатор ЕСУТД';
+    ELSE {
+        esutdLifecycleTransition(e) <- TRUE;
+        esutdStatus(e) <- EsutdStatus.accepted;
+        esutdRespondedAt(e) <- currentDateTime();
+        esutdRejectionReason(e) <- NULL;
+        APPLY;
+    }
+}
+
+rejectPersonnelEventEsutd 'Зафиксировать отказ ЕСУТД' (PersonnelEvent e) {
+    IF esutdStatus(e) != EsutdStatus.submitted THEN
+        MESSAGE 'Отклонить можно только переданное событие';
+    ELSE IF NOT esutdRejectionReason(e) THEN
+        MESSAGE 'Заполните причину отклонения ЕСУТД';
+    ELSE {
+        esutdLifecycleTransition(e) <- TRUE;
+        esutdStatus(e) <- EsutdStatus.rejected;
+        esutdRespondedAt(e) <- currentDateTime();
+        APPLY;
+    }
+}
+
 FORM employments 'Трудовые договоры'
     OBJECTS e = Employment
     PROPERTIES(e) employee, organization, department, position,
@@ -243,7 +310,9 @@ FORM personnelEvents 'Кадровые события'
     OBJECTS e = PersonnelEvent
     PROPERTIES(e) eventKind, eventEmployment, eventStaffPosition,
                   eventFte, eventSalary, effectiveDate, orderNumber, orderDate, basis,
-                  esutdStatus, esutdSubmittedAt, esutdExternalId
-    PROPERTIES(e) READONLY eventAssignment, eventStatus, eventPostedAt, eventCancelledAt
-    PROPERTIES(e) postPersonnelEvent, cancelPersonnelEvent
+                  esutdExternalId, esutdRejectionReason
+    PROPERTIES(e) READONLY eventAssignment, eventStatus, eventPostedAt, eventCancelledAt,
+                           esutdStatus, esutdSubmittedAt, esutdRespondedAt
+    PROPERTIES(e) postPersonnelEvent, cancelPersonnelEvent, submitPersonnelEventEsutd,
+                  acceptPersonnelEventEsutd, rejectPersonnelEventEsutd
 ;

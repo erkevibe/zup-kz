@@ -75,6 +75,7 @@ cancelLeave 'Отменить отпуск' (LeaveDocument l) {
     ELSE {
         leaveStatus(l) <- LeaveStatus.cancelled;
         leaveCancelledAt(l) <- currentDateTime();
+        leaveCancelledBy(l) <- currentUser() AS CustomUser;
         APPLY;
     }
 }
@@ -102,6 +103,7 @@ cancelSickLeave 'Отменить больничный' (SickLeaveDocument d) {
     ELSE {
         sickLeaveStatus(d) <- SickLeaveStatus.cancelled;
         sickLeaveCancelledAt(d) <- currentDateTime();
+        sickLeaveCancelledBy(d) <- currentUser() AS CustomUser;
         APPLY;
     }
 }

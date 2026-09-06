@@ -1,6 +1,6 @@
 MODULE HRBusinessTrip;
 
-REQUIRE HRVacationSchedule, PayrollSickLeave, TimeTimesheet, AverageEarnings;
+REQUIRE Authentication, HRVacationSchedule, PayrollSickLeave, TimeTimesheet, AverageEarnings;
 NAMESPACE ZUPKZ;
 
 CLASS BusinessTripKind 'Вид командировки' {
@@ -37,8 +37,9 @@ tripAccommodationAdvance 'Аванс на проживание' = DATA NUMERIC[1
 tripOtherAdvance 'Прочий аванс' = DATA NUMERIC[18,2] (BusinessTripDocument);
 tripStatus 'Статус' = DATA BusinessTripStatus (BusinessTripDocument);
 tripApprovedAt 'Утверждена' = DATA DATETIME (BusinessTripDocument);
-tripApprovedBy 'Кем утверждена' = DATA STRING[150] (BusinessTripDocument);
+tripApprovedBy 'Кем утверждена' = DATA CustomUser (BusinessTripDocument);
 tripCancelledAt 'Отменена' = DATA DATETIME (BusinessTripDocument);
+tripCancelledBy 'Кем отменена' = DATA CustomUser (BusinessTripDocument);
 
 CONSTRAINT tripDateTo(BusinessTripDocument d) < tripDateFrom(d)
     MESSAGE 'Окончание командировки не может быть раньше начала';
@@ -131,6 +132,7 @@ approveBusinessTrip 'Утвердить командировку' (BusinessTripD
     ELSE {
         tripStatus(d) <- BusinessTripStatus.approved;
         tripApprovedAt(d) <- currentDateTime();
+        tripApprovedBy(d) <- currentUser() AS CustomUser;
         APPLY;
     }
 }
@@ -220,6 +222,7 @@ cancelBusinessTrip 'Отменить командировку' (BusinessTripDocu
         DELETE TimesheetLine l WHERE lineBusinessTrip(l) == d AND businessTripCreatedLine(l);
         tripStatus(d) <- BusinessTripStatus.cancelled;
         tripCancelledAt(d) <- currentDateTime();
+        tripCancelledBy(d) <- currentUser() AS CustomUser;
         APPLY;
     }
 }
@@ -232,8 +235,8 @@ FORM businessTrips 'Командировки'
                   tripPurpose, tripBasis, tripCalendar, tripWorkWeek,
                   tripAverageEarnings, tripPreservedPay, tripTimesheet,
                   tripDailyAllowanceRate, tripDailyAllowance, tripTravelAdvance,
-                  tripAccommodationAdvance, tripOtherAdvance, tripAdvanceTotal,
-                  tripStatus, tripApprovedAt, tripApprovedBy, tripCancelledAt
+                  tripAccommodationAdvance, tripOtherAdvance, tripAdvanceTotal, tripStatus
+    PROPERTIES(d) READONLY tripApprovedAt, tripApprovedBy, tripCancelledAt, tripCancelledBy
     PROPERTIES(d) prepareAverageForTrip, approveBusinessTrip,
                   fillTripTimesheet, cancelBusinessTrip
 ;

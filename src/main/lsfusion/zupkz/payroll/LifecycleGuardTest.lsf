@@ -67,6 +67,8 @@ lifecycleGuardSetupTest() {
     NEW personnelEvent = PersonnelEvent {
         orderNumber(personnelEvent) <- 'LIFECYCLE-GUARD';
         eventStatus(personnelEvent) <- PersonnelEventStatus.posted;
+        esutdStatus(personnelEvent) <- EsutdStatus.accepted;
+        esutdExternalId(personnelEvent) <- 'ESUTD-LIFECYCLE-GUARD';
     }
     NEW payment = PaymentStatement {
         paymentStatementNumber(payment) <- 'LIFECYCLE-GUARD';
@@ -162,6 +164,18 @@ personnelEventStatusGuardTest() {
     EXPORT JSON FROM personnelEventStatusBlocked = canceled();
 }
 
+esutdStatusGuardTest() {
+    esutdStatus(lifecycleGuardPersonnelEvent()) <- EsutdStatus.rejected;
+    APPLY;
+    EXPORT JSON FROM esutdStatusBlocked = canceled();
+}
+
+esutdResponseGuardTest() {
+    esutdExternalId(lifecycleGuardPersonnelEvent()) <- 'ESUTD-TAMPERED';
+    APPLY;
+    EXPORT JSON FROM esutdResponseBlocked = canceled();
+}
+
 paymentStatementStatusGuardTest() {
     paymentStatementStatus(lifecycleGuardPaymentStatement()) <- PaymentStatementStatus.draft;
     APPLY;
@@ -246,6 +260,10 @@ lifecycleGuardVerificationTest() {
         taxSnapshotPreserved = NOT taxCalculationResident(lifecycleGuardTaxLine()),
         personnelEventStatusPreserved = eventStatus(lifecycleGuardPersonnelEvent()) ==
             PersonnelEventStatus.posted,
+        esutdStatusPreserved = esutdStatus(lifecycleGuardPersonnelEvent()) ==
+            EsutdStatus.accepted,
+        esutdResponsePreserved = esutdExternalId(lifecycleGuardPersonnelEvent()) ==
+            'ESUTD-LIFECYCLE-GUARD',
         paymentStatementStatusPreserved = paymentStatementStatus(lifecycleGuardPaymentStatement()) ==
             PaymentStatementStatus.approved,
         paymentStatementSnapshotPreserved = paymentLineAmount(lifecycleGuardPaymentLine()) == 100.00,

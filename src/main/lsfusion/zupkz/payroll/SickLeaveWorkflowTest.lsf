@@ -106,6 +106,8 @@ sickLeaveWorkflowTest() {
                                                                 sickLeaveCalculatedAt(mainSick),
                                                             approvalTimestampSet = TRUE IF
                                                                 sickLeaveApprovedAt(mainSick),
+                                                            approverSet = sickLeaveApprovedBy(mainSick) ==
+                                                                currentUser() AS CustomUser,
                                                             grossAmountResult = sickLeaveGrossAmount(mainSick),
                                                             overlapRejected = sickLeaveStatus(overlap) ==
                                                                 SickLeaveStatus.calculated,
@@ -116,7 +118,9 @@ sickLeaveWorkflowTest() {
                                                             unusedSickCancelled = sickLeaveStatus(cancellable) ==
                                                                 SickLeaveStatus.cancelled,
                                                             cancellationTimestampSet = TRUE IF
-                                                                sickLeaveCancelledAt(cancellable);
+                                                                sickLeaveCancelledAt(cancellable),
+                                                            cancellerSet = sickLeaveCancelledBy(cancellable) ==
+                                                                currentUser() AS CustomUser;
                                                     }
                                                 }
                                             }

@@ -1,6 +1,6 @@
 MODULE HRVacationSchedule;
 
-REQUIRE HRLeave;
+REQUIRE Authentication, HRLeave;
 NAMESPACE ZUPKZ;
 
 CLASS VacationScheduleStatus 'Статус графика отпусков' {
@@ -23,8 +23,9 @@ vacationScheduleYear 'Год' = DATA INTEGER (VacationSchedule);
 vacationScheduleCalendar 'Производственный календарь' = DATA ProductionCalendar (VacationSchedule);
 vacationScheduleStatus 'Статус' = DATA VacationScheduleStatus (VacationSchedule);
 vacationScheduleApprovedAt 'Утверждён' = DATA DATETIME (VacationSchedule);
-vacationScheduleApprovedBy 'Кем утверждён' = DATA STRING[150] (VacationSchedule);
+vacationScheduleApprovedBy 'Кем утверждён' = DATA CustomUser (VacationSchedule);
 vacationScheduleCancelledAt 'Отменён' = DATA DATETIME (VacationSchedule);
+vacationScheduleCancelledBy 'Кем отменён' = DATA CustomUser (VacationSchedule);
 
 CONSTRAINT (CHANGED(vacationScheduleOrganization(VacationSchedule s)) OR
             CHANGED(vacationScheduleNumber(s)) OR CHANGED(vacationScheduleDate(s)) OR
@@ -118,6 +119,7 @@ approveVacationSchedule 'Утвердить график' (VacationSchedule s) {
     ELSE {
         vacationScheduleStatus(s) <- VacationScheduleStatus.approved;
         vacationScheduleApprovedAt(s) <- currentDateTime();
+        vacationScheduleApprovedBy(s) <- currentUser() AS CustomUser;
         APPLY;
     }
 }
@@ -130,6 +132,7 @@ cancelVacationSchedule 'Отменить график' (VacationSchedule s) {
     ELSE {
         vacationScheduleStatus(s) <- VacationScheduleStatus.cancelled;
         vacationScheduleCancelledAt(s) <- currentDateTime();
+        vacationScheduleCancelledBy(s) <- currentUser() AS CustomUser;
         APPLY;
     }
 }
@@ -160,8 +163,9 @@ FORM vacationSchedules 'Графики отпусков'
     OBJECTS s = VacationSchedule
     PROPERTIES(s) vacationScheduleOrganization, vacationScheduleNumber,
                   vacationScheduleDate, vacationScheduleYear, vacationScheduleCalendar,
-                  vacationScheduleStatus, vacationScheduleApprovedAt,
-                  vacationScheduleApprovedBy, vacationScheduleCancelledAt
+                  vacationScheduleStatus
+    PROPERTIES(s) READONLY vacationScheduleApprovedAt, vacationScheduleApprovedBy,
+                           vacationScheduleCancelledAt, vacationScheduleCancelledBy
     PROPERTIES(s) approveVacationSchedule, cancelVacationSchedule
 ;
 

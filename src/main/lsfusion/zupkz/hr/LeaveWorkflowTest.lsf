@@ -93,6 +93,8 @@ leaveWorkflowTest() {
                                                     annualLeaveApproved = leaveStatus(annualLeave) ==
                                                         LeaveStatus.approved,
                                                     approvalTimestampSet = TRUE IF leaveApprovedAt(annualLeave),
+                                                    approverSet = leaveApprovedBy(annualLeave) ==
+                                                        currentUser() AS CustomUser,
                                                     chargedDaysResult = leaveChargedDays(annualLeave),
                                                     grossAmountResult = leaveGrossAmount(annualLeave),
                                                     remainingDaysResult = remainingLeaveDays(entitlement),
@@ -103,7 +105,9 @@ leaveWorkflowTest() {
                                                         LeaveStatus.approved,
                                                     unusedLeaveCancelled = leaveStatus(cancellable) ==
                                                         LeaveStatus.cancelled,
-                                                    cancellationTimestampSet = TRUE IF leaveCancelledAt(cancellable);
+                                                    cancellationTimestampSet = TRUE IF leaveCancelledAt(cancellable),
+                                                    cancellerSet = leaveCancelledBy(cancellable) ==
+                                                        currentUser() AS CustomUser;
                                             }
                                         }
                                     }

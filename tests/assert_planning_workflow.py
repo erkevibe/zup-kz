@@ -7,10 +7,12 @@ with open(sys.argv[1], encoding="utf-8") as result_file:
 
 expected = {
     "scheduleApproved": True,
+    "scheduleApproverSet": True,
     "plannedDays": 14,
     "leaveDraftCreated": True,
     "schedulePdfGenerated": True,
     "tripApproved": True,
+    "tripApproverSet": True,
     "tripCalendarDaysResult": 3,
     "tripWorkDaysResult": 3,
     "tripLines": 3,
@@ -18,6 +20,7 @@ expected = {
     "tripAdvanceResult": 140000,
     "tripPdfGenerated": True,
     "cancellableTripCancelled": True,
+    "tripCancellerSet": True,
 }
 
 for key, expected_value in expected.items():

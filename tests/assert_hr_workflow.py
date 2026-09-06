@@ -8,6 +8,11 @@ with open(sys.argv[1], encoding="utf-8") as source:
 
 assert actual["hirePosted"] is True
 assert actual["transferPosted"] is True
+assert actual["hireAcceptedByEsutd"] is True
+assert actual["transferResubmittedAndAccepted"] is True
+assert actual["esutdSubmittedTimestampSet"] is True
+assert actual["esutdRespondedTimestampSet"] is True
+assert actual["esutdExternalIdResult"] == "ESUTD-HIRE-1"
 assert actual["terminationCancelled"] is True
 assert actual["backdatedRejected"] is True
 assert actual["earlierCancellationRejected"] is True

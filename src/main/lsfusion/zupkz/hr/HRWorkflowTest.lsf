@@ -39,6 +39,9 @@ hrWorkflowTest() {
                             basis(hire) <- 'Трудовой договор';
                             eventStatus(hire) <- PersonnelEventStatus.draft;
                             postPersonnelEvent(hire);
+                            submitPersonnelEventEsutd(hire);
+                            esutdExternalId(hire) <- 'ESUTD-HIRE-1';
+                            acceptPersonnelEventEsutd(hire);
                             NEW transfer = PersonnelEvent {
                                 eventKind(transfer) <- PersonnelEventKind.transfer;
                                 eventEmployment(transfer) <- contract;
@@ -51,6 +54,12 @@ hrWorkflowTest() {
                                 basis(transfer) <- 'Изменение условий труда';
                                 eventStatus(transfer) <- PersonnelEventStatus.draft;
                                 postPersonnelEvent(transfer);
+                                submitPersonnelEventEsutd(transfer);
+                                esutdRejectionReason(transfer) <- 'Тестовый отказ';
+                                rejectPersonnelEventEsutd(transfer);
+                                submitPersonnelEventEsutd(transfer);
+                                esutdExternalId(transfer) <- 'ESUTD-TRANSFER-1';
+                                acceptPersonnelEventEsutd(transfer);
                                 NEW termination = PersonnelEvent {
                                     eventKind(termination) <- PersonnelEventKind.termination;
                                     eventEmployment(termination) <- contract;
@@ -78,6 +87,12 @@ hrWorkflowTest() {
                                         EXPORT JSON FROM
                                             hirePosted = eventStatus(hire) == PersonnelEventStatus.posted,
                                             transferPosted = eventStatus(transfer) == PersonnelEventStatus.posted,
+                                            hireAcceptedByEsutd = esutdStatus(hire) == EsutdStatus.accepted,
+                                            transferResubmittedAndAccepted = esutdStatus(transfer) ==
+                                                EsutdStatus.accepted,
+                                            esutdSubmittedTimestampSet = TRUE IF esutdSubmittedAt(hire),
+                                            esutdRespondedTimestampSet = TRUE IF esutdRespondedAt(hire),
+                                            esutdExternalIdResult = esutdExternalId(hire),
                                             terminationCancelled = eventStatus(termination) ==
                                                 PersonnelEventStatus.cancelled,
                                             backdatedRejected = eventStatus(backdated) ==

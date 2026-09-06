@@ -159,6 +159,8 @@ jobs:
                 payrollSnapshotDeleteGuardTest \
                 taxSnapshotGuardTest \
                 personnelEventStatusGuardTest \
+                esutdStatusGuardTest \
+                esutdResponseGuardTest \
                 paymentStatementStatusGuardTest \
                 paymentStatementSnapshotGuardTest \
                 form200StatusGuardTest \
@@ -186,6 +188,8 @@ jobs:
                 payrollSnapshotDeleteGuardTest.json \
                 taxSnapshotGuardTest.json \
                 personnelEventStatusGuardTest.json \
+                esutdStatusGuardTest.json \
+                esutdResponseGuardTest.json \
                 paymentStatementStatusGuardTest.json \
                 paymentStatementSnapshotGuardTest.json \
                 form200StatusGuardTest.json \

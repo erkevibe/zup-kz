@@ -118,11 +118,15 @@ planningWorkflowTest() {
                                                             EXPORT JSON FROM
                                                                 scheduleApproved = vacationScheduleStatus(schedule) ==
                                                                     VacationScheduleStatus.approved,
+                                                                scheduleApproverSet = vacationScheduleApprovedBy(schedule) ==
+                                                                    currentUser() AS CustomUser,
                                                                 plannedDays = vacationLineDays(scheduleLine),
                                                                 leaveDraftCreated = leaveStatus(vacationLineLeave(scheduleLine)) ==
                                                                     LeaveStatus.draft,
                                                                 schedulePdfGenerated = TRUE IF schedulePdf(),
                                                                 tripApproved = tripStatus(trip) == BusinessTripStatus.approved,
+                                                                tripApproverSet = tripApprovedBy(trip) ==
+                                                                    currentUser() AS CustomUser,
                                                                 tripCalendarDaysResult = tripCalendarDays(trip),
                                                                 tripWorkDaysResult = tripWorkDays(trip),
                                                                 tripLines = tripTimesheetLineCount(trip),
@@ -130,7 +134,9 @@ planningWorkflowTest() {
                                                                 tripAdvanceResult = tripAdvanceTotal(trip),
                                                                 tripPdfGenerated = TRUE IF tripPdf(),
                                                                 cancellableTripCancelled = tripStatus(cancellable) ==
-                                                                    BusinessTripStatus.cancelled;
+                                                                    BusinessTripStatus.cancelled,
+                                                                tripCancellerSet = tripCancelledBy(cancellable) ==
+                                                                    currentUser() AS CustomUser;
                                                         }
                                                     }
                                                 }
