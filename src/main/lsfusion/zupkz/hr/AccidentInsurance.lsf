@@ -71,6 +71,7 @@ insurancePolicyTerminationDate 'Действовал по при прекращ�
     DATA DATE (AccidentInsurancePolicy);
 insurancePolicyTerminationReason 'Основание прекращения' =
     DATA STRING[500] (AccidentInsurancePolicy);
+insuranceLifecycleTransition = DATA LOCAL BOOLEAN ();
 
 CONSTRAINT insurancePolicyValidTo(AccidentInsurancePolicy p) < insurancePolicyValidFrom(p)
     MESSAGE 'Окончание договора не может быть раньше начала';
@@ -110,6 +111,14 @@ CONSTRAINT (CHANGED(insurancePolicyTerminationDate(AccidentInsurancePolicy p)) O
             CHANGED(insurancePolicyTerminationReason(p))) AND
            PREV(insurancePolicyStatus(p)) != AccidentInsurancePolicyStatus.active
     MESSAGE 'Нельзя изменить реквизиты прекращённого договора страхования';
+CONSTRAINT CHANGED(insurancePolicyStatus(AccidentInsurancePolicy p)) AND
+           PREV(insurancePolicyStatus(p)) AND NOT insuranceLifecycleTransition()
+    MESSAGE 'Статус договора страхования изменяется только штатными действиями';
+CONSTRAINT (CHANGED(insurancePolicyRateRule(AccidentInsurancePolicy p)) OR
+            CHANGED(insurancePolicyRatePercent(p)) OR CHANGED(insurancePolicyPremium(p)) OR
+            CHANGED(insurancePolicyActivatedAt(p)) OR CHANGED(insurancePolicyCancelledAt(p))) AND
+           PREV(insurancePolicyStatus(p)) AND NOT insuranceLifecycleTransition()
+    MESSAGE 'Расчётные и служебные реквизиты договора изменяются только штатными действиями';
 
 insurancePolicyOn(Organization org, DATE date) = GROUP LAST AccidentInsurancePolicy p IF
     insurancePolicyOrganization(p) == org AND
@@ -131,6 +140,7 @@ activateInsurancePolicy 'Ввести в действие' (AccidentInsurancePol
                                         insurancePolicyValidFrom(p)) THEN
         MESSAGE 'На дату начала договора не найден тариф для класса риска';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         insurancePolicyRateRule(p) <- accidentInsuranceRateOn(
             insurancePolicyRiskClass(p), insurancePolicyValidFrom(p));
         insurancePolicyRatePercent(p) <- insuranceRatePercent(insurancePolicyRateRule(p));
@@ -149,6 +159,7 @@ cancelInsurancePolicy 'Прекратить' (AccidentInsurancePolicy p) {
             NOT insurancePolicyTerminationReason(p) THEN
         MESSAGE 'Укажите фактическую дату и основание прекращения договора';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         insurancePolicyStatus(p) <- AccidentInsurancePolicyStatus.cancelled;
         insurancePolicyCancelledAt(p) <- currentDateTime();
         APPLY;
@@ -200,6 +211,14 @@ workAccidentLostWorkDays 'Дней нетрудоспособности' = DATA 
 workAccidentStatus 'Статус' = DATA WorkAccidentStatus (WorkAccident);
 workAccidentClosedAt 'Закрыт' = DATA DATETIME (WorkAccident);
 
+CONSTRAINT CHANGED(workAccidentStatus(WorkAccident a)) AND PREV(workAccidentStatus(a)) AND
+           NOT insuranceLifecycleTransition()
+    MESSAGE 'Статус происшествия изменяется только штатными действиями';
+CONSTRAINT (CHANGED(workAccidentPolicy(WorkAccident a)) OR
+            CHANGED(workAccidentRegisteredAt(a)) OR CHANGED(workAccidentClosedAt(a))) AND
+           PREV(workAccidentStatus(a)) AND NOT insuranceLifecycleTransition()
+    MESSAGE 'Служебные реквизиты происшествия изменяются только штатными действиями';
+
 workAccidentUninsured 'Нет покрытия на дату события' (WorkAccident a) =
     workAccidentStatus(a) != WorkAccidentStatus.draft AND NOT workAccidentPolicy(a);
 workAccidentInvestigationOverdue 'Расследование просрочено' (WorkAccident a) =
@@ -248,6 +267,7 @@ registerWorkAccident 'Зарегистрировать происшествие'
             NOT workAccidentDescription(a) OR NOT workAccidentSeverity(a) THEN
         MESSAGE 'Заполните организацию, работника, назначение и сведения о происшествии';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         workAccidentPolicy(a) <- insurancePolicyOn(workAccidentOrganization(a),
                                                    workAccidentDate(a));
         workAccidentStatus(a) <- WorkAccidentStatus.investigating;
@@ -264,6 +284,7 @@ completeWorkAccidentInvestigation 'Завершить расследование
             NOT workAccidentCommissionOrder(a) OR NOT workAccidentCommissionChair(a) THEN
         MESSAGE 'Заполните комиссию, результат, заключение и акт расследования';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         workAccidentStatus(a) <- IF workAccidentOutcome(a) == WorkAccidentOutcome.workRelated
             THEN WorkAccidentStatus.confirmed ELSE WorkAccidentStatus.notWorkRelated;
         APPLY;
@@ -293,6 +314,14 @@ insuranceClaimStatus 'Статус' = DATA AccidentInsuranceClaimStatus (Acciden
 insuranceClaimSubmittedAt 'Передано' = DATA DATETIME (AccidentInsuranceClaim);
 insuranceClaimDecidedAt 'Решение' = DATA DATETIME (AccidentInsuranceClaim);
 insuranceClaimPaidDate 'Дата выплаты' = DATA DATE (AccidentInsuranceClaim);
+
+CONSTRAINT CHANGED(insuranceClaimStatus(AccidentInsuranceClaim c)) AND
+           PREV(insuranceClaimStatus(c)) AND NOT insuranceLifecycleTransition()
+    MESSAGE 'Статус страхового требования изменяется только штатными действиями';
+CONSTRAINT (CHANGED(insuranceClaimPolicy(AccidentInsuranceClaim c)) OR
+            CHANGED(insuranceClaimSubmittedAt(c)) OR CHANGED(insuranceClaimDecidedAt(c))) AND
+           PREV(insuranceClaimStatus(c)) AND NOT insuranceLifecycleTransition()
+    MESSAGE 'Служебные реквизиты требования изменяются только штатными действиями';
 
 CONSTRAINT insuranceClaimAmount(AccidentInsuranceClaim c) <= 0.00
     MESSAGE 'Заявленная сумма должна быть положительной';
@@ -331,6 +360,7 @@ submitInsuranceClaim 'Передать страховщику' (AccidentInsuranc
     ELSE IF NOT workAccidentPolicy(insuranceClaimAccident(c)) THEN
         MESSAGE 'На дату происшествия отсутствует договор страхования';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         insuranceClaimPolicy(c) <- workAccidentPolicy(insuranceClaimAccident(c));
         insuranceClaimStatus(c) <- AccidentInsuranceClaimStatus.submitted;
         insuranceClaimSubmittedAt(c) <- currentDateTime();
@@ -344,6 +374,7 @@ acceptInsuranceClaim 'Зарегистрировать признание' (Acci
     ELSE IF NOT insuranceClaimAcceptedAmount(c) THEN
         MESSAGE 'Укажите признанную сумму';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         insuranceClaimStatus(c) <- AccidentInsuranceClaimStatus.accepted;
         insuranceClaimDecidedAt(c) <- currentDateTime();
         APPLY;
@@ -356,6 +387,7 @@ rejectInsuranceClaim 'Зарегистрировать отказ' (AccidentInsu
     ELSE IF NOT insuranceClaimRejectionReason(c) THEN
         MESSAGE 'Укажите причину отказа';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         insuranceClaimStatus(c) <- AccidentInsuranceClaimStatus.rejected;
         insuranceClaimDecidedAt(c) <- currentDateTime();
         APPLY;
@@ -368,6 +400,7 @@ payInsuranceClaim 'Зарегистрировать выплату' (AccidentIns
     ELSE IF NOT insuranceClaimPaidAmount(c) OR NOT insuranceClaimPaidDate(c) THEN
         MESSAGE 'Укажите сумму и дату выплаты';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         insuranceClaimStatus(c) <- AccidentInsuranceClaimStatus.paid;
         APPLY;
     }
@@ -389,6 +422,7 @@ closeWorkAccident 'Закрыть происшествие' (WorkAccident a) {
             (NOT insuranceClaimCount(a) OR unresolvedInsuranceClaimCount(a)) THEN
         MESSAGE 'Сначала завершите страховое требование';
     ELSE {
+        insuranceLifecycleTransition() <- TRUE;
         workAccidentStatus(a) <- WorkAccidentStatus.closed;
         workAccidentClosedAt(a) <- currentDateTime();
         APPLY;
@@ -412,11 +446,11 @@ FORM accidentInsurancePolicies 'Договоры страхования рабо
                   insurancePolicyInsurerBin, insurancePolicyNumber, insurancePolicyDate,
                   insurancePolicyValidFrom, insurancePolicyValidTo,
                   insurancePolicyRiskClass, insurancePolicyPayrollBase,
-                  insurancePolicyRateRule, insurancePolicyRatePercent,
-                  insurancePolicyPremium, insurancePolicyStatus,
-                  insurancePolicyActivatedAt, insurancePolicyCancelledAt,
-                  insurancePolicyTerminationDate, insurancePolicyTerminationReason,
-                  insurancePolicyEffectiveValidTo
+                  insurancePolicyTerminationDate, insurancePolicyTerminationReason
+    PROPERTIES(p) READONLY insurancePolicyRateRule, insurancePolicyRatePercent,
+                           insurancePolicyPremium, insurancePolicyStatus,
+                           insurancePolicyActivatedAt, insurancePolicyCancelledAt,
+                           insurancePolicyEffectiveValidTo
     PROPERTIES(p) activateInsurancePolicy, cancelInsurancePolicy
 ;
 
@@ -425,24 +459,26 @@ FORM workAccidents 'Несчастные случаи'
     PROPERTIES(a) workAccidentOrganization, workAccidentEmployee,
                   workAccidentAssignment, workAccidentNumber, workAccidentDate,
                   workAccidentTime, workAccidentPlace, workAccidentDescription,
-                  workAccidentSeverity, workAccidentPolicy, workAccidentUninsured,
-                  workAccidentRegisteredAt, workAccidentInsurerNotifiedDate,
-                  workAccidentInvestigationDueDate, workAccidentInvestigationOverdue,
+                  workAccidentSeverity, workAccidentInsurerNotifiedDate,
+                  workAccidentInvestigationDueDate,
                   workAccidentCommissionOrder, workAccidentCommissionChair,
                   workAccidentOutcome, workAccidentConclusion, workAccidentActNumber,
-                  workAccidentActDate, workAccidentLostWorkDays, workAccidentStatus
+                  workAccidentActDate, workAccidentLostWorkDays
+    PROPERTIES(a) READONLY workAccidentPolicy, workAccidentUninsured,
+                           workAccidentRegisteredAt, workAccidentInvestigationOverdue,
+                           workAccidentStatus, workAccidentClosedAt
     PROPERTIES(a) registerWorkAccident, completeWorkAccidentInvestigation,
                   closeWorkAccident
 ;
 
 FORM accidentInsuranceClaims 'Страховые требования'
     OBJECTS c = AccidentInsuranceClaim
-    PROPERTIES(c) insuranceClaimAccident, insuranceClaimPolicy, insuranceClaimNumber,
+    PROPERTIES(c) insuranceClaimAccident, insuranceClaimNumber,
                   insuranceClaimDate, insuranceClaimAmount, insuranceClaimAcceptedAmount,
                   insuranceClaimPaidAmount, insuranceClaimInsurerReference,
-                  insuranceClaimRejectionReason, insuranceClaimStatus,
-                  insuranceClaimSubmittedAt, insuranceClaimDecidedAt,
-                  insuranceClaimPaidDate
+                  insuranceClaimRejectionReason, insuranceClaimPaidDate
+    PROPERTIES(c) READONLY insuranceClaimPolicy, insuranceClaimStatus,
+                           insuranceClaimSubmittedAt, insuranceClaimDecidedAt
     PROPERTIES(c) submitInsuranceClaim, acceptInsuranceClaim,
                   rejectInsuranceClaim, payInsuranceClaim
 ;

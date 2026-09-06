@@ -38,6 +38,28 @@ form200AcceptedAt 'Принята' = DATA DATETIME (Form200Declaration);
 form200ExternalId 'Идентификатор КНП' = DATA STRING[100] (Form200Declaration);
 form200ReceiptNumber 'Номер уведомления' = DATA STRING[100] (Form200Declaration);
 form200RejectionReason 'Причина непринятия' = DATA STRING[500] (Form200Declaration);
+form200LifecycleTransition = DATA LOCAL BOOLEAN (Form200Declaration);
+
+CONSTRAINT CHANGED(form200Status(Form200Declaration d)) AND PREV(form200Status(d)) AND
+           NOT form200LifecycleTransition(d)
+    MESSAGE 'Статус формы 200.00 изменяется только штатными действиями';
+CONSTRAINT (CHANGED(form200CalculatedAt(Form200Declaration d)) OR
+            CHANGED(form200ApprovedAt(d)) OR CHANGED(form200SubmittedAt(d)) OR
+            CHANGED(form200AcceptedAt(d))) AND PREV(form200Status(d)) AND
+           NOT form200LifecycleTransition(d)
+    MESSAGE 'Служебные даты формы 200.00 изменяются только штатными действиями';
+CONSTRAINT (CHANGED(form200Organization(Form200Declaration d)) OR
+            CHANGED(form200PeriodStart(d)) OR CHANGED(form200Kind(d)) OR
+            CHANGED(form200CorrectionNumber(d)) OR CHANGED(form200Version(d))) AND
+           PREV(form200Status(d)) != Form200Status.draft
+    MESSAGE 'Нельзя изменить реквизиты сформированной формы 200.00';
+CONSTRAINT CHANGED(form200ExternalId(Form200Declaration d)) AND
+           PREV(form200Status(d)) != Form200Status.approved
+    MESSAGE 'Идентификатор отправки указывается только для утверждённой формы 200.00';
+CONSTRAINT (CHANGED(form200ReceiptNumber(Form200Declaration d)) OR
+            CHANGED(form200RejectionReason(d))) AND
+           PREV(form200Status(d)) != Form200Status.submitted
+    MESSAGE 'Результат обработки указывается только для отправленной формы 200.00';
 
 form200PeriodEnd 'Конец квартала' (Form200Declaration d) =
     lastDayOfMonth(sumMonth(form200PeriodStart(d), 2));
@@ -88,6 +110,23 @@ form200LineSo '200.00.008 Социальные отчисления' = DATA NUME
 form200LineOosms '200.00.010 Отчисления ОСМС' = DATA NUMERIC[18,2] (Form200MonthLine);
 form200LineVosms '200.00.011 Взносы ОСМС' = DATA NUMERIC[18,2] (Form200MonthLine);
 form200LineOpvr '200.00.013 ОПВР' = DATA NUMERIC[18,2] (Form200MonthLine);
+
+CONSTRAINT (CHANGED(form200LineDeclaration(Form200MonthLine line)) OR
+            CHANGED(form200LineQuarterMonth(line)) OR CHANGED(form200LineMonth(line)) OR
+            CHANGED(form200LineEmployeeCount(line)) OR CHANGED(form200LineAccruedIncome(line)) OR
+            CHANGED(form200LineCalculatedIpn(line)) OR CHANGED(form200LinePaidIncome(line)) OR
+            CHANGED(form200LineTaxableIncome(line)) OR CHANGED(form200LineOpvBase(line)) OR
+            CHANGED(form200LineOpvrBase(line)) OR CHANGED(form200LineSocialTaxBase(line)) OR
+            CHANGED(form200LineSoBase(line)) OR CHANGED(form200LineOosmsBase(line)) OR
+            CHANGED(form200LineVosmsBase(line)) OR CHANGED(form200LineIpn(line)) OR
+            CHANGED(form200LineOpv(line)) OR CHANGED(form200LineSocialTax(line)) OR
+            CHANGED(form200LineSo(line)) OR CHANGED(form200LineOosms(line)) OR
+            CHANGED(form200LineVosms(line)) OR CHANGED(form200LineOpvr(line))) AND
+           PREV(form200LineDeclaration(line))
+    MESSAGE 'Нельзя изменить снимок сформированной формы 200.00';
+CONSTRAINT DROPPED(Form200MonthLine line IS Form200MonthLine) AND
+           PREV(form200LineDeclaration(line))
+    MESSAGE 'Нельзя удалить строку сформированной формы 200.00';
 
 form200Month(Form200Declaration d, Form200QuarterMonth month) =
     IF month == Form200QuarterMonth.first THEN form200PeriodStart(d)
@@ -230,6 +269,7 @@ generateForm200 'Сформировать 200.00' (Form200Declaration d) {
                     form200Organization(d), form200Month(d, month));
             }
         }
+        form200LifecycleTransition(d) <- TRUE;
         form200Status(d) <- Form200Status.calculated;
         form200CalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -279,6 +319,7 @@ approveForm200 'Утвердить 200.00' (Form200Declaration d) {
     IF form200Status(d) != Form200Status.calculated OR form200LineCount(d) != 3 THEN
         MESSAGE 'Сначала сформируйте три месячных строки декларации';
     ELSE {
+        form200LifecycleTransition(d) <- TRUE;
         form200Status(d) <- Form200Status.approved;
         form200ApprovedAt(d) <- currentDateTime();
         APPLY;
@@ -291,6 +332,7 @@ submitForm200 'Отметить отправленной' (Form200Declaration d)
     ELSE IF NOT form200ExternalId(d) THEN
         MESSAGE 'Укажите идентификатор отправки в Кабинет налогоплательщика';
     ELSE {
+        form200LifecycleTransition(d) <- TRUE;
         form200Status(d) <- Form200Status.submitted;
         form200SubmittedAt(d) <- currentDateTime();
         APPLY;
@@ -301,6 +343,7 @@ acceptForm200 'Подтвердить приём' (Form200Declaration d) {
     IF form200Status(d) != Form200Status.submitted OR NOT form200ReceiptNumber(d) THEN
         MESSAGE 'Для принятой декларации укажите номер уведомления';
     ELSE {
+        form200LifecycleTransition(d) <- TRUE;
         form200Status(d) <- Form200Status.accepted;
         form200AcceptedAt(d) <- currentDateTime();
         APPLY;
@@ -311,6 +354,7 @@ rejectForm200 'Отметить непринятой' (Form200Declaration d) {
     IF form200Status(d) != Form200Status.submitted OR NOT form200RejectionReason(d) THEN
         MESSAGE 'Для непринятой декларации укажите причину';
     ELSE {
+        form200LifecycleTransition(d) <- TRUE;
         form200Status(d) <- Form200Status.rejected;
         APPLY;
     }
@@ -318,12 +362,13 @@ rejectForm200 'Отметить непринятой' (Form200Declaration d) {
 
 FORM form200Declarations 'Декларации 200.00'
     OBJECTS d = Form200Declaration
-    PROPERTIES(d) form200Organization, form200PeriodStart, form200PeriodEnd,
-                  form200Year, form200Quarter, form200Kind, form200CorrectionNumber,
-                  form200Version, form200DueDate, form200Overdue, form200Status,
+    PROPERTIES(d) form200Organization, form200PeriodStart,
+                  form200Kind, form200CorrectionNumber, form200Version,
+                  form200ExternalId, form200ReceiptNumber, form200RejectionReason
+    PROPERTIES(d) READONLY form200PeriodEnd,
+                  form200Year, form200Quarter, form200DueDate, form200Overdue, form200Status,
                   form200CalculatedAt, form200ApprovedAt, form200SubmittedAt,
-                  form200AcceptedAt, form200ExternalId, form200ReceiptNumber,
-                  form200RejectionReason, form200TotalAccrued, form200TotalIpn,
+                  form200AcceptedAt, form200TotalAccrued, form200TotalIpn,
                   form200TotalCalculatedIpn, form200TotalPaidIncome,
                   form200TotalTaxableIncome, form200TotalOpvBase, form200TotalOpvrBase,
                   form200TotalSocialTaxBase, form200TotalSoBase,
@@ -336,7 +381,7 @@ FORM form200Declarations 'Декларации 200.00'
 
 FORM form200MonthLines 'Месячные показатели 200.00'
     OBJECTS line = Form200MonthLine
-    PROPERTIES(line) form200LineDeclaration, form200LineQuarterMonth,
+    PROPERTIES(line) READONLY form200LineDeclaration, form200LineQuarterMonth,
                      form200LineMonth, form200LineEmployeeCount,
                      form200LineAccruedIncome, form200LineCalculatedIpn,
                      form200LinePaidIncome, form200LineTaxableIncome,

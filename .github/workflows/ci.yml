@@ -158,6 +158,19 @@ jobs:
                 payrollSnapshotGuardTest \
                 payrollSnapshotDeleteGuardTest \
                 taxSnapshotGuardTest \
+                personnelEventStatusGuardTest \
+                paymentStatementStatusGuardTest \
+                paymentStatementSnapshotGuardTest \
+                form200StatusGuardTest \
+                form200SnapshotGuardTest \
+                approvalStatusGuardTest \
+                approvalStepStatusGuardTest \
+                archiveStatusGuardTest \
+                archiveDocumentStatusGuardTest \
+                insurancePolicyStatusGuardTest \
+                insurancePolicySnapshotGuardTest \
+                workAccidentStatusGuardTest \
+                insuranceClaimStatusGuardTest \
                 lifecycleGuardVerificationTest; do
                 curl --fail --silent --show-error \
                   "http://localhost:7651/exec?action=ZUPKZ.${action}" \
@@ -172,6 +185,19 @@ jobs:
                 payrollSnapshotGuardTest.json \
                 payrollSnapshotDeleteGuardTest.json \
                 taxSnapshotGuardTest.json \
+                personnelEventStatusGuardTest.json \
+                paymentStatementStatusGuardTest.json \
+                paymentStatementSnapshotGuardTest.json \
+                form200StatusGuardTest.json \
+                form200SnapshotGuardTest.json \
+                approvalStatusGuardTest.json \
+                approvalStepStatusGuardTest.json \
+                archiveStatusGuardTest.json \
+                archiveDocumentStatusGuardTest.json \
+                insurancePolicyStatusGuardTest.json \
+                insurancePolicySnapshotGuardTest.json \
+                workAccidentStatusGuardTest.json \
+                insuranceClaimStatusGuardTest.json \
                 lifecycleGuardVerificationTest.json
 
               kill -TERM "$server_pid"

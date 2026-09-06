@@ -109,6 +109,7 @@ esutdExternalId 'Идентификатор ЕСУТД' = DATA STRING[100] (Pers
 eventStatus 'Статус' = DATA PersonnelEventStatus (PersonnelEvent);
 eventPostedAt 'Проведён' = DATA DATETIME (PersonnelEvent);
 eventCancelledAt 'Отменён' = DATA DATETIME (PersonnelEvent);
+personnelEventLifecycleTransition = DATA LOCAL BOOLEAN (PersonnelEvent);
 
 // Values required to reverse a posted event without reconstructing history.
 eventPreviousAssignment 'Предыдущее назначение' =
@@ -125,11 +126,19 @@ laterPostedPersonnelEventCount(PersonnelEvent e) = GROUP SUM 1 IF
     eventStatus(other) == PersonnelEventStatus.posted AND effectiveDate(other) > effectiveDate(e);
 
 CONSTRAINT (CHANGED(eventKind(PersonnelEvent e)) OR CHANGED(eventEmployment(e)) OR
-            CHANGED(eventStaffPosition(e)) OR CHANGED(eventFte(e)) OR
+            CHANGED(eventAssignment(e)) OR CHANGED(eventStaffPosition(e)) OR CHANGED(eventFte(e)) OR
             CHANGED(eventSalary(e)) OR CHANGED(effectiveDate(e)) OR
             CHANGED(orderNumber(e)) OR CHANGED(orderDate(e)) OR CHANGED(basis(e))) AND
            PREV(eventStatus(e)) != PersonnelEventStatus.draft
     MESSAGE 'Нельзя изменить проведённое кадровое событие';
+CONSTRAINT CHANGED(eventStatus(PersonnelEvent e)) AND PREV(eventStatus(e)) AND
+           NOT personnelEventLifecycleTransition(e)
+    MESSAGE 'Статус кадрового события изменяется только штатными действиями';
+CONSTRAINT (CHANGED(eventPostedAt(PersonnelEvent e)) OR CHANGED(eventCancelledAt(e)) OR
+            CHANGED(eventPreviousAssignment(e)) OR CHANGED(eventPreviousAssignmentTo(e)) OR
+            CHANGED(eventPreviousHireDate(e)) OR CHANGED(eventPreviousContractEndDate(e))) AND
+           PREV(eventStatus(e)) AND NOT personnelEventLifecycleTransition(e)
+    MESSAGE 'Служебные реквизиты кадрового события изменяются только штатными действиями';
 
 postPersonnelEvent 'Провести' (PersonnelEvent e) {
     IF eventStatus(e) AND eventStatus(e) != PersonnelEventStatus.draft THEN
@@ -186,6 +195,7 @@ postPersonnelEvent 'Провести' (PersonnelEvent e) {
             }
         }
 
+        personnelEventLifecycleTransition(e) <- TRUE;
         eventStatus(e) <- PersonnelEventStatus.posted;
         eventPostedAt(e) <- currentDateTime();
         APPLY;
@@ -209,6 +219,7 @@ cancelPersonnelEvent 'Отменить' (PersonnelEvent e) {
         ELSE
             DELETE EmploymentAssignment a WHERE a == eventAssignment(e);
 
+        personnelEventLifecycleTransition(e) <- TRUE;
         eventStatus(e) <- PersonnelEventStatus.cancelled;
         eventCancelledAt(e) <- currentDateTime();
         APPLY;
@@ -230,9 +241,9 @@ FORM employmentAssignments 'Назначения'
 
 FORM personnelEvents 'Кадровые события'
     OBJECTS e = PersonnelEvent
-    PROPERTIES(e) eventKind, eventEmployment, eventAssignment, eventStaffPosition,
+    PROPERTIES(e) eventKind, eventEmployment, eventStaffPosition,
                   eventFte, eventSalary, effectiveDate, orderNumber, orderDate, basis,
-                  eventStatus, eventPostedAt, eventCancelledAt, esutdStatus,
-                  esutdSubmittedAt, esutdExternalId
+                  esutdStatus, esutdSubmittedAt, esutdExternalId
+    PROPERTIES(e) READONLY eventAssignment, eventStatus, eventPostedAt, eventCancelledAt
     PROPERTIES(e) postPersonnelEvent, cancelPersonnelEvent
 ;

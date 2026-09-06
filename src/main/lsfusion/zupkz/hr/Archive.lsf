@@ -68,6 +68,7 @@ archiveCaseClosedDate 'Закрыто' = DATA DATE (ArchiveCase);
 archiveCaseTransferDate 'Передано в архив' = DATA DATE (ArchiveCase);
 archiveCaseTransferAct 'Акт передачи' = DATA STRING[100] (ArchiveCase);
 archiveCaseStatus 'Статус' = DATA ArchiveCaseStatus (ArchiveCase);
+archiveLifecycleTransition = DATA LOCAL BOOLEAN ();
 
 archiveCaseKeyCount(Organization org, INTEGER year, STRING[50] index) = GROUP SUM 1 IF
     archiveCaseOrganization(ArchiveCase c) == org AND archiveCaseYear(c) == year AND
@@ -89,6 +90,9 @@ CONSTRAINT (CHANGED(archiveCaseTransferDate(ArchiveCase c)) OR
             CHANGED(archiveCaseTransferAct(c))) AND
            PREV(archiveCaseStatus(c)) == ArchiveCaseStatus.stored
     MESSAGE 'Нельзя изменить реквизиты переданного архивного дела';
+CONSTRAINT CHANGED(archiveCaseStatus(ArchiveCase c)) AND PREV(archiveCaseStatus(c)) AND
+           NOT archiveLifecycleTransition()
+    MESSAGE 'Статус архивного дела изменяется только штатными действиями';
 
 CLASS ArchiveCarrier 'Носитель документа' {
     paper 'Бумажный',
@@ -138,6 +142,18 @@ archiveSourceLeave 'Отпуск' = DATA LeaveDocument (ArchiveDocument);
 archiveSourceVacationSchedule 'График отпусков' = DATA VacationSchedule (ArchiveDocument);
 archiveSourceBusinessTrip 'Командировка' = DATA BusinessTripDocument (ArchiveDocument);
 archiveSourcePersonnelNotice 'Уведомление работника' = DATA PersonnelNotice (ArchiveDocument);
+
+CONSTRAINT CHANGED(archiveDocumentStatus(ArchiveDocument d)) AND
+           PREV(archiveDocumentStatus(d)) AND NOT archiveLifecycleTransition()
+    MESSAGE 'Статус архивного документа изменяется только штатными действиями';
+CONSTRAINT (CHANGED(archiveDocumentRegisteredAt(ArchiveDocument d)) OR
+            CHANGED(archiveDocumentStoredAt(d)) OR CHANGED(archiveDocumentDestroyedAt(d)) OR
+            CHANGED(archiveDocumentRetentionRule(d)) OR
+            CHANGED(archiveDocumentRetentionYears(d)) OR
+            CHANGED(archiveDocumentPermanent(d)) OR
+            CHANGED(archiveDocumentRetentionUntil(d))) AND
+           PREV(archiveDocumentStatus(d)) AND NOT archiveLifecycleTransition()
+    MESSAGE 'Служебные реквизиты архива изменяются только штатными действиями';
 
 archiveSourceCount(ArchiveDocument d) =
     (IF archiveSourceEmployment(d) THEN 1 ELSE 0) +
@@ -273,6 +289,7 @@ registerArchiveDocument 'Зарегистрировать' (ArchiveDocument d) {
     ELSE IF NOT retentionRuleOn(archiveDocumentKind(d), archiveDocumentDate(d)) THEN
         MESSAGE 'Для вида и даты документа не найдено правило хранения';
     ELSE {
+        archiveLifecycleTransition() <- TRUE;
         archiveDocumentRetentionRule(d) <-
             retentionRuleOn(archiveDocumentKind(d), archiveDocumentDate(d));
         archiveDocumentRetentionYears(d) <-
@@ -299,6 +316,7 @@ closeArchiveCase 'Закрыть дело' (ArchiveCase c) {
     ELSE IF archiveDraftDocumentCount(c) THEN
         MESSAGE 'Зарегистрируйте все документы дела';
     ELSE {
+        archiveLifecycleTransition() <- TRUE;
         IF NOT archiveCaseClosedDate(c) THEN archiveCaseClosedDate(c) <- currentDate();
         archiveCaseStatus(c) <- ArchiveCaseStatus.closed;
         APPLY;
@@ -311,6 +329,7 @@ transferArchiveCase 'Передать в архив' (ArchiveCase c) {
     ELSE IF NOT archiveCaseTransferDate(c) OR NOT archiveCaseTransferAct(c) THEN
         MESSAGE 'Укажите дату и акт передачи';
     ELSE {
+        archiveLifecycleTransition() <- TRUE;
         FOR archiveDocumentCase(ArchiveDocument d) == c AND
             archiveDocumentStatus(d) == ArchiveDocumentStatus.registered DO {
             archiveDocumentStatus(d) <- ArchiveDocumentStatus.stored;
@@ -329,6 +348,7 @@ prepareArchiveDestruction 'Подготовить к уничтожению' (Ar
     ELSE IF NOT archiveDocumentRetentionDue(d) THEN
         MESSAGE 'Срок хранения документа ещё не истёк';
     ELSE {
+        archiveLifecycleTransition() <- TRUE;
         archiveDocumentStatus(d) <- ArchiveDocumentStatus.destructionReady;
         APPLY;
     }
@@ -341,6 +361,7 @@ destroyArchiveDocument 'Зарегистрировать уничтожение'
             NOT archiveDocumentDestructionReason(d) THEN
         MESSAGE 'Заполните акт, дату и основание уничтожения';
     ELSE {
+        archiveLifecycleTransition() <- TRUE;
         archiveDocumentFile(d) <- NULL;
         archiveDocumentStatus(d) <- ArchiveDocumentStatus.destroyed;
         archiveDocumentDestroyedAt(d) <- currentDateTime();
@@ -364,8 +385,9 @@ FORM archiveCases 'Архивные дела'
     OBJECTS c = ArchiveCase
     PROPERTIES(c) archiveCaseOrganization, archiveCaseIndex, archiveCaseYear,
                   archiveCaseTitle, archiveCaseResponsible, archiveCaseOpenedDate,
-                  archiveCaseClosedDate, archiveCaseTransferDate, archiveCaseTransferAct,
-                  archiveCaseStatus, archiveDocumentCount, archiveDestroyedDocumentCount
+                  archiveCaseClosedDate, archiveCaseTransferDate, archiveCaseTransferAct
+    PROPERTIES(c) READONLY archiveCaseStatus, archiveDocumentCount,
+                           archiveDestroyedDocumentCount
     PROPERTIES(c) closeArchiveCase, transferArchiveCase
 ;
 
@@ -376,16 +398,17 @@ FORM archiveDocuments 'Архивные документы'
                   archiveDocumentPages, archiveDocumentCarrier, archiveDocumentFile,
                   archiveDocumentPhysicalLocation, archiveDocumentSignatureInfo,
                   archiveDocumentChecksum, archiveDocumentRetentionStart,
-                  archiveDocumentRetentionRule, archiveDocumentRetentionYears,
-                  archiveDocumentPermanent, archiveDocumentRetentionUntil,
-                  archiveDocumentRetentionDue, archiveDocumentStatus,
-                  archiveDocumentRegisteredAt, archiveDocumentStoredAt,
                   archiveDocumentDestructionAct, archiveDocumentDestructionDate,
-                  archiveDocumentDestructionReason, archiveDocumentDestroyedAt,
+                  archiveDocumentDestructionReason,
                   archiveSourceEmployment, archiveSourcePersonnelEvent,
                   archiveSourceEmployeeCard, archiveSourceLeave,
                   archiveSourceVacationSchedule, archiveSourceBusinessTrip,
                   archiveSourcePersonnelNotice
+    PROPERTIES(d) READONLY archiveDocumentRetentionRule, archiveDocumentRetentionYears,
+                           archiveDocumentPermanent, archiveDocumentRetentionUntil,
+                           archiveDocumentRetentionDue, archiveDocumentStatus,
+                           archiveDocumentRegisteredAt, archiveDocumentStoredAt,
+                           archiveDocumentDestroyedAt
     PROPERTIES(d) registerArchiveDocument, prepareArchiveDestruction, destroyArchiveDocument
 ;
 

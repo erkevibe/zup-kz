@@ -45,12 +45,14 @@ settlementClosedAt 'Закрыт' = DATA DATETIME (PayrollSettlementLine);
 settlementLegalSource 'Нормативное основание' (PayrollSettlementLine l) =
     payrollPaymentLegalSource(settlementPayrollRun(l));
 
-CONSTRAINT (CHANGED(settlementAccrued(PayrollSettlementLine l)) OR
+CONSTRAINT (CHANGED(settlementPayrollRun(PayrollSettlementLine l)) OR
+            CHANGED(settlementEmployee(l)) OR CHANGED(settlementAccrued(l)) OR
             CHANGED(settlementPayrollDeducted(l)) OR CHANGED(settlementOpv(l)) OR
             CHANGED(settlementOpvr(l)) OR CHANGED(settlementSo(l)) OR
             CHANGED(settlementVosms(l)) OR CHANGED(settlementOosms(l)) OR
             CHANGED(settlementIpn(l)) OR CHANGED(settlementSocialTax(l)) OR
-            CHANGED(settlementEnforcement(l)) OR CHANGED(settlementPayable(l))) AND
+            CHANGED(settlementEnforcement(l)) OR CHANGED(settlementPayable(l)) OR
+            CHANGED(settlementClosedAt(l))) AND
            (PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.approved OR
             PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.paid)
     MESSAGE 'Нельзя изменить закрытый расчётный листок';
@@ -147,6 +149,7 @@ paymentStatementStatus 'Статус' = DATA PaymentStatementStatus (PaymentStat
 paymentStatementCalculatedAt 'Заполнена' = DATA DATETIME (PaymentStatement);
 paymentStatementApprovedAt 'Утверждена' = DATA DATETIME (PaymentStatement);
 paymentStatementPaidAt 'Выплачена' = DATA DATETIME (PaymentStatement);
+paymentStatementLifecycleTransition = DATA LOCAL BOOLEAN (PaymentStatement);
 paymentStatementOverdue 'Просрочена' (PaymentStatement d) =
     paymentStatementDate(d) > payrollPaymentDueDate(paymentStatementPayrollRun(d));
 
@@ -156,6 +159,31 @@ paymentLineStatement 'Ведомость' = DATA PaymentStatement (PaymentStatem
 paymentLineSettlement 'Расчётный листок' = DATA PayrollSettlementLine (PaymentStatementLine);
 paymentLineAmountDue 'Остаток до выплаты' = DATA NUMERIC[18,2] (PaymentStatementLine);
 paymentLineAmount 'Сумма выплаты' = DATA NUMERIC[18,2] (PaymentStatementLine);
+
+CONSTRAINT CHANGED(paymentStatementStatus(PaymentStatement d)) AND
+           PREV(paymentStatementStatus(d)) AND NOT paymentStatementLifecycleTransition(d)
+    MESSAGE 'Статус платёжной ведомости изменяется только штатными действиями';
+CONSTRAINT (CHANGED(paymentStatementCalculatedAt(PaymentStatement d)) OR
+            CHANGED(paymentStatementApprovedAt(d)) OR CHANGED(paymentStatementPaidAt(d))) AND
+           PREV(paymentStatementStatus(d)) AND NOT paymentStatementLifecycleTransition(d)
+    MESSAGE 'Служебные даты платёжной ведомости изменяются только штатными действиями';
+CONSTRAINT (CHANGED(paymentStatementPayrollRun(PaymentStatement d)) OR
+            CHANGED(paymentStatementNumber(d)) OR CHANGED(paymentStatementDate(d)) OR
+            CHANGED(paymentStatementMethod(d)) OR CHANGED(paymentStatementBankAccount(d))) AND
+           PREV(paymentStatementStatus(d)) != PaymentStatementStatus.draft
+    MESSAGE 'Нельзя изменить реквизиты заполненной платёжной ведомости';
+CONSTRAINT (CHANGED(paymentLineStatement(PaymentStatementLine l)) OR
+            CHANGED(paymentLineSettlement(l)) OR CHANGED(paymentLineAmountDue(l))) AND
+           PREV(paymentLineStatement(l))
+    MESSAGE 'Нельзя изменить источник строки платёжной ведомости';
+CONSTRAINT CHANGED(paymentLineAmount(PaymentStatementLine l)) AND
+           (PREV(paymentStatementStatus(paymentLineStatement(l))) == PaymentStatementStatus.approved OR
+            PREV(paymentStatementStatus(paymentLineStatement(l))) == PaymentStatementStatus.paid)
+    MESSAGE 'Нельзя изменить сумму утверждённой платёжной ведомости';
+CONSTRAINT DROPPED(PaymentStatementLine l IS PaymentStatementLine) AND
+           (PREV(paymentStatementStatus(paymentLineStatement(l))) == PaymentStatementStatus.approved OR
+            PREV(paymentStatementStatus(paymentLineStatement(l))) == PaymentStatementStatus.paid)
+    MESSAGE 'Нельзя удалить строку утверждённой платёжной ведомости';
 
 paymentLineEmployee 'Сотрудник' (PaymentStatementLine l) =
     settlementEmployee(paymentLineSettlement(l));
@@ -196,6 +224,7 @@ calculatePaymentStatement 'Заполнить ведомость' (PaymentStatem
                 paymentLineAmount(l) <- remainingSettlementAmount(s);
             }
         }
+        paymentStatementLifecycleTransition(d) <- TRUE;
         paymentStatementStatus(d) <- PaymentStatementStatus.calculated;
         paymentStatementCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -217,6 +246,7 @@ approvePaymentStatement 'Утвердить ведомость' (PaymentStatemen
     ELSE IF invalidPaymentLineCount(d) THEN
         MESSAGE 'Сумма выплаты должна быть положительной и не превышать остаток';
     ELSE {
+        paymentStatementLifecycleTransition(d) <- TRUE;
         paymentStatementStatus(d) <- PaymentStatementStatus.approved;
         paymentStatementApprovedAt(d) <- currentDateTime();
         APPLY;
@@ -232,10 +262,12 @@ markPaymentStatementPaid 'Отметить выплаченной' (PaymentState
     IF paymentStatementStatus(d) != PaymentStatementStatus.approved THEN
         MESSAGE 'Сначала утвердите ведомость';
     ELSE {
+        paymentStatementLifecycleTransition(d) <- TRUE;
         paymentStatementStatus(d) <- PaymentStatementStatus.paid;
         paymentStatementPaidAt(d) <- currentDateTime();
         APPLY;
         IF NOT unpaidPayrollAmount(paymentStatementPayrollRun(d)) THEN {
+            payrollLifecycleTransition(paymentStatementPayrollRun(d)) <- TRUE;
             payrollRunStatus(paymentStatementPayrollRun(d)) <- PayrollRunStatus.paid;
             APPLY;
         }
@@ -247,28 +279,29 @@ totalPaymentStatementAmount 'Сумма ведомости' (PaymentStatement d)
 
 FORM payrollSettlements 'Расчётные листки'
     OBJECTS l = PayrollSettlementLine
-    PROPERTIES(l) settlementPayrollRun, settlementEmployee, settlementAccrued,
-                  settlementPayrollDeducted, settlementOpv, settlementVosms,
-                  settlementIpn, settlementEnforcement, settlementPayable,
-                  settlementOpvr, settlementSo, settlementOosms, settlementSocialTax,
-                  settlementClosedAt, settlementLegalSource, remainingSettlementAmount,
-                  unpaidSettlementAmount
+    PROPERTIES(l) READONLY settlementPayrollRun, settlementEmployee, settlementAccrued,
+                           settlementPayrollDeducted, settlementOpv, settlementVosms,
+                           settlementIpn, settlementEnforcement, settlementPayable,
+                           settlementOpvr, settlementSo, settlementOosms, settlementSocialTax,
+                           settlementClosedAt, settlementLegalSource, remainingSettlementAmount,
+                           unpaidSettlementAmount
 ;
 
 FORM paymentStatements 'Ведомости выплаты зарплаты'
     OBJECTS d = PaymentStatement
     PROPERTIES(d) paymentStatementPayrollRun, paymentStatementNumber,
-                  paymentStatementDate, paymentStatementMethod, paymentStatementBankAccount,
-                  paymentStatementStatus, paymentStatementCalculatedAt,
-                  paymentStatementApprovedAt, paymentStatementPaidAt,
-                  paymentStatementOverdue, totalPaymentStatementAmount
+                  paymentStatementDate, paymentStatementMethod, paymentStatementBankAccount
+    PROPERTIES(d) READONLY paymentStatementStatus, paymentStatementCalculatedAt,
+                           paymentStatementApprovedAt, paymentStatementPaidAt,
+                           paymentStatementOverdue, totalPaymentStatementAmount
     PROPERTIES(d) calculatePaymentStatement, approvePaymentStatement, markPaymentStatementPaid
 ;
 
 FORM paymentStatementLines 'Строки ведомостей выплаты'
     OBJECTS l = PaymentStatementLine
-    PROPERTIES(l) paymentLineStatement, paymentLineSettlement, paymentLineEmployee,
-                  paymentLineAmountDue, paymentLineAmount
+    PROPERTIES(l) paymentLineAmount
+    PROPERTIES(l) READONLY paymentLineStatement, paymentLineSettlement,
+                           paymentLineEmployee, paymentLineAmountDue
 ;
 
 EXTEND FORM payrollRuns

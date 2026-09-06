@@ -96,6 +96,7 @@ personnelNoticeIssuedAt 'Оформлено' = DATA DATETIME (PersonnelNotice);
 personnelNoticeCancelledAt 'Отменено' = DATA DATETIME (PersonnelNotice);
 personnelNoticeEvent 'Кадровое событие' = DATA PersonnelEvent (PersonnelNotice);
 personnelNoticeVacationLine 'Строка графика отпусков' = DATA VacationScheduleLine (PersonnelNotice);
+approvalLifecycleTransition = DATA LOCAL BOOLEAN ();
 
 CONSTRAINT personnelNoticeEffectiveDate(PersonnelNotice n) < personnelNoticeDate(n)
     MESSAGE 'Дата события не может быть раньше даты уведомления';
@@ -118,6 +119,13 @@ CONSTRAINT (CHANGED(personnelNoticeOrganization(PersonnelNotice n)) OR
             CHANGED(personnelNoticeEvent(n)) OR CHANGED(personnelNoticeVacationLine(n))) AND
            PREV(personnelNoticeStatus(n)) != PersonnelNoticeStatus.draft
     MESSAGE 'Нельзя изменить оформленное или отменённое уведомление';
+CONSTRAINT CHANGED(personnelNoticeStatus(PersonnelNotice n)) AND
+           PREV(personnelNoticeStatus(n)) AND NOT approvalLifecycleTransition()
+    MESSAGE 'Статус уведомления изменяется только штатными действиями';
+CONSTRAINT (CHANGED(personnelNoticeIssuedAt(PersonnelNotice n)) OR
+            CHANGED(personnelNoticeCancelledAt(n))) AND PREV(personnelNoticeStatus(n)) AND
+           NOT approvalLifecycleTransition()
+    MESSAGE 'Служебные даты уведомления изменяются только штатными действиями';
 
 personnelNoticeCalendarDaysProvided 'Предоставлено календарных дней' (PersonnelNotice n) =
     daysBetweenDates(personnelNoticeEffectiveDate(n), personnelNoticeDeliveredDate(n));
@@ -145,6 +153,7 @@ issuePersonnelNotice 'Оформить' (PersonnelNotice n) {
             (NOT personnelNoticeCalendar(n) OR NOT personnelNoticeWorkWeek(n)) THEN
         MESSAGE 'Для срока в рабочих днях выберите календарь и рабочую неделю';
     ELSE {
+        approvalLifecycleTransition() <- TRUE;
         personnelNoticeStatus(n) <- PersonnelNoticeStatus.issued;
         personnelNoticeIssuedAt(n) <- currentDateTime();
         APPLY;
@@ -157,6 +166,7 @@ deliverPersonnelNotice 'Зарегистрировать вручение' (Pers
     ELSE IF NOT personnelNoticeDelivery(n) THEN
         MESSAGE 'Укажите способ вручения';
     ELSE {
+        approvalLifecycleTransition() <- TRUE;
         IF NOT personnelNoticeDeliveredDate(n) THEN
             personnelNoticeDeliveredDate(n) <- currentDate();
         personnelNoticeStatus(n) <- PersonnelNoticeStatus.delivered;
@@ -168,6 +178,7 @@ cancelPersonnelNotice 'Отменить' (PersonnelNotice n) {
     IF personnelNoticeStatus(n) == PersonnelNoticeStatus.cancelled THEN
         MESSAGE 'Уведомление уже отменено';
     ELSE {
+        approvalLifecycleTransition() <- TRUE;
         personnelNoticeStatus(n) <- PersonnelNoticeStatus.cancelled;
         personnelNoticeCancelledAt(n) <- currentDateTime();
         APPLY;
@@ -189,8 +200,9 @@ FORM personnelNotices 'Уведомления работников'
                   personnelNoticeVacationLine, personnelNoticeDelivery,
                   personnelNoticeDeliveredDate, personnelNoticeResponse,
                   personnelNoticeResponseDate, personnelNoticeDaysProvided,
-                  personnelNoticeCompliant, personnelNoticeStatus,
-                  personnelNoticeIssuedAt, personnelNoticeCancelledAt
+                  personnelNoticeCompliant
+    PROPERTIES(n) READONLY personnelNoticeStatus, personnelNoticeIssuedAt,
+                           personnelNoticeCancelledAt
     PROPERTIES(n) issuePersonnelNotice, deliverPersonnelNotice, cancelPersonnelNotice
 ;
 
@@ -223,6 +235,14 @@ approvalSubmittedBy 'Автор' = DATA CustomUser (ApprovalRequest);
 approvalSubmittedAt 'Отправлено' = DATA DATETIME (ApprovalRequest);
 approvalCompletedAt 'Завершено' = DATA DATETIME (ApprovalRequest);
 approvalComment 'Комментарий' = DATA STRING[500] (ApprovalRequest);
+
+CONSTRAINT CHANGED(approvalStatus(ApprovalRequest r)) AND PREV(approvalStatus(r)) AND
+           NOT approvalLifecycleTransition()
+    MESSAGE 'Статус согласования изменяется только штатными действиями';
+CONSTRAINT (CHANGED(approvalSubmittedBy(ApprovalRequest r)) OR
+            CHANGED(approvalSubmittedAt(r)) OR CHANGED(approvalCompletedAt(r))) AND
+           PREV(approvalStatus(r)) AND NOT approvalLifecycleTransition()
+    MESSAGE 'Служебные реквизиты согласования изменяются только штатными действиями';
 
 approvalTargetCount(ApprovalRequest r) =
     (IF approvalPersonnelEvent(r) THEN 1 ELSE 0) +
@@ -272,6 +292,14 @@ approvalStepDecidedBy 'Решение принял' = DATA CustomUser (ApprovalS
 approvalStepDecidedAt 'Дата решения' = DATA DATETIME (ApprovalStep);
 approvalStepComment 'Комментарий' = DATA STRING[500] (ApprovalStep);
 
+CONSTRAINT CHANGED(approvalStepStatus(ApprovalStep s)) AND
+           PREV(approvalStepRequest(s)) AND NOT approvalLifecycleTransition()
+    MESSAGE 'Статус этапа согласования изменяется только штатными действиями';
+CONSTRAINT (CHANGED(approvalStepDecidedBy(ApprovalStep s)) OR
+            CHANGED(approvalStepDecidedAt(s))) AND PREV(approvalStepRequest(s)) AND
+           NOT approvalLifecycleTransition()
+    MESSAGE 'Служебные реквизиты этапа изменяются только штатными действиями';
+
 CONSTRAINT approvalStepSequence(ApprovalStep s) <= 0
     MESSAGE 'Порядок этапа должен быть положительным';
 duplicateApprovalStepSequence(ApprovalStep s) = GROUP SUM 1 IF
@@ -311,6 +339,14 @@ notificationCreatedAt 'Создано' = DATA DATETIME (PersonnelNotification);
 notificationReadAt 'Прочитано' = DATA DATETIME (PersonnelNotification);
 notificationUnread 'Не прочитано' (PersonnelNotification n) = NOT notificationReadAt(n);
 
+CONSTRAINT (CHANGED(notificationUser(PersonnelNotification n)) OR
+            CHANGED(notificationOrganization(n)) OR CHANGED(notificationApproval(n)) OR
+            CHANGED(notificationStep(n)) OR CHANGED(notificationSubject(n)) OR
+            CHANGED(notificationText(n)) OR CHANGED(notificationCreatedAt(n)) OR
+            CHANGED(notificationReadAt(n))) AND PREV(notificationCreatedAt(n)) AND
+           NOT approvalLifecycleTransition()
+    MESSAGE 'Кадровое уведомление изменяется только штатными действиями';
+
 approvalNotificationCount(ApprovalRequest r) = GROUP SUM 1 IF
     notificationApproval(PersonnelNotification n) == r;
 approvalStepNotification(ApprovalStep s) = GROUP LAST PersonnelNotification n IF
@@ -327,6 +363,7 @@ submitApprovalRequest 'Отправить на согласование' (Approv
     ELSE IF NOT approvalStepCount(r) OR invalidApprovalStepCount(r) THEN
         MESSAGE 'Добавьте этапы и заполните порядок и согласующих';
     ELSE {
+        approvalLifecycleTransition() <- TRUE;
         FOR approvalStepRequest(ApprovalStep s) == r DO
             approvalStepStatus(s) <- ApprovalStepStatus.waiting;
         firstStep() <- nextWaitingApprovalStep(r);
@@ -356,6 +393,7 @@ approveApprovalStep 'Согласовать' (ApprovalStep s) {
             NOT has(currentUser() AS CustomUser, userRoleSID('admin')) THEN
         MESSAGE 'Решение может принять только назначенный согласующий';
     ELSE {
+        approvalLifecycleTransition() <- TRUE;
         approvalStepStatus(s) <- ApprovalStepStatus.approved;
         approvalStepDecidedBy(s) <- currentUser() AS CustomUser;
         approvalStepDecidedAt(s) <- currentDateTime();
@@ -395,6 +433,7 @@ rejectApprovalStep 'Отклонить' (ApprovalStep s) {
             NOT has(currentUser() AS CustomUser, userRoleSID('admin')) THEN
         MESSAGE 'Решение может принять только назначенный согласующий';
     ELSE {
+        approvalLifecycleTransition() <- TRUE;
         approvalStepStatus(s) <- ApprovalStepStatus.rejected;
         approvalStepDecidedBy(s) <- currentUser() AS CustomUser;
         approvalStepDecidedAt(s) <- currentDateTime();
@@ -424,6 +463,7 @@ cancelApprovalRequest 'Отменить согласование' (ApprovalReque
             NOT has(currentUser() AS CustomUser, userRoleSID('admin')) THEN
         MESSAGE 'Отменить согласование может только автор или администратор';
     ELSE {
+        approvalLifecycleTransition() <- TRUE;
         FOR approvalStepRequest(ApprovalStep s) == r AND
             (approvalStepStatus(s) == ApprovalStepStatus.waiting OR
              approvalStepStatus(s) == ApprovalStepStatus.pending) DO
@@ -436,6 +476,7 @@ cancelApprovalRequest 'Отменить согласование' (ApprovalReque
 
 readPersonnelNotification 'Прочитать' (PersonnelNotification n) {
     IF notificationUser(n) == currentUser() AS CustomUser AND NOT notificationReadAt(n) THEN {
+        approvalLifecycleTransition() <- TRUE;
         notificationReadAt(n) <- currentDateTime();
         APPLY;
     }
@@ -495,22 +536,23 @@ FORM approvalRequests 'Согласования кадровых докумен�
     OBJECTS r = ApprovalRequest
     PROPERTIES(r) approvalOrganization, approvalTitle, approvalPersonnelEvent,
                   approvalLeave, approvalVacationSchedule, approvalBusinessTrip,
-                  approvalStatus, approvalRequestOverdue, approvalSubmittedBy,
-                  approvalSubmittedAt, approvalCompletedAt, approvalComment
+                  approvalComment
+    PROPERTIES(r) READONLY approvalStatus, approvalRequestOverdue, approvalSubmittedBy,
+                           approvalSubmittedAt, approvalCompletedAt
     PROPERTIES(r) submitApprovalRequest, cancelApprovalRequest
     OBJECTS s = ApprovalStep
     PROPERTIES(s) approvalStepSequence, approvalStepApprover, approvalStepDueDate,
-                  approvalStepStatus, approvalStepDecidedBy, approvalStepDecidedAt,
                   approvalStepComment
+    PROPERTIES(s) READONLY approvalStepStatus, approvalStepDecidedBy, approvalStepDecidedAt
     PROPERTIES(s) approveApprovalStep, rejectApprovalStep
     FILTERS approvalStepRequest(s) == r
 ;
 
 FORM myPersonnelNotifications 'Мои кадровые уведомления'
     OBJECTS n = PersonnelNotification
-    PROPERTIES(n) notificationOrganization, notificationSubject, notificationText,
-                  notificationApproval, notificationStep, notificationCreatedAt,
-                  notificationReadAt, notificationUnread
+    PROPERTIES(n) READONLY notificationOrganization, notificationSubject, notificationText,
+                           notificationApproval, notificationStep, notificationCreatedAt,
+                           notificationReadAt, notificationUnread
     PROPERTIES(n) readPersonnelNotification
     FILTERS notificationUser(n) == currentUser() AS CustomUser
 ;

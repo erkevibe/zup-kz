@@ -15,6 +15,30 @@ lifecycleGuardTaxDocument() = GROUP LAST TaxCalculationDocument d
     IF taxCalculationPayrollRun(d) == lifecycleGuardRun() ORDER d;
 lifecycleGuardTaxLine() = GROUP LAST TaxCalculationLine l
     IF taxCalculationDocument(l) == lifecycleGuardTaxDocument() ORDER l;
+lifecycleGuardPersonnelEvent() = GROUP LAST PersonnelEvent e
+    IF orderNumber(e) == 'LIFECYCLE-GUARD' ORDER e;
+lifecycleGuardPaymentStatement() = GROUP LAST PaymentStatement d
+    IF paymentStatementNumber(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardPaymentLine() = GROUP LAST PaymentStatementLine l
+    IF paymentLineStatement(l) == lifecycleGuardPaymentStatement() ORDER l;
+lifecycleGuardForm200() = GROUP LAST Form200Declaration d
+    IF form200Version(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardForm200Line() = GROUP LAST Form200MonthLine line
+    IF form200LineDeclaration(line) == lifecycleGuardForm200() ORDER line;
+lifecycleGuardApproval() = GROUP LAST ApprovalRequest r
+    IF approvalTitle(r) == 'LIFECYCLE-GUARD' ORDER r;
+lifecycleGuardApprovalStep() = GROUP LAST ApprovalStep s
+    IF approvalStepRequest(s) == lifecycleGuardApproval() ORDER s;
+lifecycleGuardArchiveCase() = GROUP LAST ArchiveCase c
+    IF archiveCaseIndex(c) == 'LIFECYCLE-GUARD' ORDER c;
+lifecycleGuardArchiveDocument() = GROUP LAST ArchiveDocument d
+    IF archiveDocumentNumber(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardInsurancePolicy() = GROUP LAST AccidentInsurancePolicy p
+    IF insurancePolicyNumber(p) == 'LIFECYCLE-GUARD' ORDER p;
+lifecycleGuardWorkAccident() = GROUP LAST WorkAccident a
+    IF workAccidentNumber(a) == 'LIFECYCLE-GUARD' ORDER a;
+lifecycleGuardInsuranceClaim() = GROUP LAST AccidentInsuranceClaim c
+    IF insuranceClaimNumber(c) == 'LIFECYCLE-GUARD' ORDER c;
 
 lifecycleGuardSetupTest() {
     NEW timesheet = Timesheet {
@@ -39,6 +63,58 @@ lifecycleGuardSetupTest() {
                 }
             }
         }
+    }
+    NEW personnelEvent = PersonnelEvent {
+        orderNumber(personnelEvent) <- 'LIFECYCLE-GUARD';
+        eventStatus(personnelEvent) <- PersonnelEventStatus.posted;
+    }
+    NEW payment = PaymentStatement {
+        paymentStatementNumber(payment) <- 'LIFECYCLE-GUARD';
+        paymentStatementStatus(payment) <- PaymentStatementStatus.approved;
+        NEW paymentLine = PaymentStatementLine {
+            paymentLineStatement(paymentLine) <- payment;
+            paymentLineAmountDue(paymentLine) <- 100.00;
+            paymentLineAmount(paymentLine) <- 100.00;
+        }
+    }
+    NEW declaration = Form200Declaration {
+        form200Version(declaration) <- 'LIFECYCLE-GUARD';
+        form200Status(declaration) <- Form200Status.calculated;
+        NEW monthLine = Form200MonthLine {
+            form200LineDeclaration(monthLine) <- declaration;
+            form200LineAccruedIncome(monthLine) <- 100.00;
+        }
+    }
+    NEW approval = ApprovalRequest {
+        approvalTitle(approval) <- 'LIFECYCLE-GUARD';
+        approvalStatus(approval) <- ApprovalRequestStatus.pending;
+        NEW step = ApprovalStep {
+            approvalStepRequest(step) <- approval;
+            approvalStepSequence(step) <- 1;
+            approvalStepStatus(step) <- ApprovalStepStatus.pending;
+        }
+    }
+    NEW archiveCase = ArchiveCase {
+        archiveCaseIndex(archiveCase) <- 'LIFECYCLE-GUARD';
+        archiveCaseStatus(archiveCase) <- ArchiveCaseStatus.closed;
+        NEW archiveDocument = ArchiveDocument {
+            archiveDocumentCase(archiveDocument) <- archiveCase;
+            archiveDocumentNumber(archiveDocument) <- 'LIFECYCLE-GUARD';
+            archiveDocumentStatus(archiveDocument) <- ArchiveDocumentStatus.registered;
+        }
+    }
+    NEW policy = AccidentInsurancePolicy {
+        insurancePolicyNumber(policy) <- 'LIFECYCLE-GUARD';
+        insurancePolicyPremium(policy) <- 100.00;
+        insurancePolicyStatus(policy) <- AccidentInsurancePolicyStatus.active;
+    }
+    NEW accident = WorkAccident {
+        workAccidentNumber(accident) <- 'LIFECYCLE-GUARD';
+        workAccidentStatus(accident) <- WorkAccidentStatus.investigating;
+    }
+    NEW claim = AccidentInsuranceClaim {
+        insuranceClaimNumber(claim) <- 'LIFECYCLE-GUARD';
+        insuranceClaimStatus(claim) <- AccidentInsuranceClaimStatus.submitted;
     }
     APPLY;
     EXPORT JSON FROM setupSucceeded = NOT canceled();
@@ -80,6 +156,84 @@ taxSnapshotGuardTest() {
     EXPORT JSON FROM taxSnapshotBlocked = canceled();
 }
 
+personnelEventStatusGuardTest() {
+    eventStatus(lifecycleGuardPersonnelEvent()) <- PersonnelEventStatus.draft;
+    APPLY;
+    EXPORT JSON FROM personnelEventStatusBlocked = canceled();
+}
+
+paymentStatementStatusGuardTest() {
+    paymentStatementStatus(lifecycleGuardPaymentStatement()) <- PaymentStatementStatus.draft;
+    APPLY;
+    EXPORT JSON FROM paymentStatementStatusBlocked = canceled();
+}
+
+paymentStatementSnapshotGuardTest() {
+    paymentLineAmount(lifecycleGuardPaymentLine()) <- 99.00;
+    APPLY;
+    EXPORT JSON FROM paymentStatementSnapshotBlocked = canceled();
+}
+
+form200StatusGuardTest() {
+    form200Status(lifecycleGuardForm200()) <- Form200Status.draft;
+    APPLY;
+    EXPORT JSON FROM form200StatusBlocked = canceled();
+}
+
+form200SnapshotGuardTest() {
+    form200LineAccruedIncome(lifecycleGuardForm200Line()) <- 99.00;
+    APPLY;
+    EXPORT JSON FROM form200SnapshotBlocked = canceled();
+}
+
+approvalStatusGuardTest() {
+    approvalStatus(lifecycleGuardApproval()) <- ApprovalRequestStatus.draft;
+    APPLY;
+    EXPORT JSON FROM approvalStatusBlocked = canceled();
+}
+
+approvalStepStatusGuardTest() {
+    approvalStepStatus(lifecycleGuardApprovalStep()) <- ApprovalStepStatus.approved;
+    APPLY;
+    EXPORT JSON FROM approvalStepStatusBlocked = canceled();
+}
+
+archiveStatusGuardTest() {
+    archiveCaseStatus(lifecycleGuardArchiveCase()) <- ArchiveCaseStatus.open;
+    APPLY;
+    EXPORT JSON FROM archiveStatusBlocked = canceled();
+}
+
+archiveDocumentStatusGuardTest() {
+    archiveDocumentStatus(lifecycleGuardArchiveDocument()) <- ArchiveDocumentStatus.draft;
+    APPLY;
+    EXPORT JSON FROM archiveDocumentStatusBlocked = canceled();
+}
+
+insurancePolicyStatusGuardTest() {
+    insurancePolicyStatus(lifecycleGuardInsurancePolicy()) <- AccidentInsurancePolicyStatus.draft;
+    APPLY;
+    EXPORT JSON FROM insurancePolicyStatusBlocked = canceled();
+}
+
+insurancePolicySnapshotGuardTest() {
+    insurancePolicyPremium(lifecycleGuardInsurancePolicy()) <- 99.00;
+    APPLY;
+    EXPORT JSON FROM insurancePolicySnapshotBlocked = canceled();
+}
+
+workAccidentStatusGuardTest() {
+    workAccidentStatus(lifecycleGuardWorkAccident()) <- WorkAccidentStatus.draft;
+    APPLY;
+    EXPORT JSON FROM workAccidentStatusBlocked = canceled();
+}
+
+insuranceClaimStatusGuardTest() {
+    insuranceClaimStatus(lifecycleGuardInsuranceClaim()) <- AccidentInsuranceClaimStatus.draft;
+    APPLY;
+    EXPORT JSON FROM insuranceClaimStatusBlocked = canceled();
+}
+
 lifecycleGuardVerificationTest() {
     EXPORT JSON FROM
         timesheetStatusPreserved = timesheetStatus(lifecycleGuardTimesheet()) ==
@@ -89,5 +243,27 @@ lifecycleGuardVerificationTest() {
         socialStatusPreserved = socialPaymentStatus(lifecycleGuardSocialDocument()) ==
             SocialPaymentStatus.calculated,
         payrollSnapshotPreserved = summaryWorkedHours(lifecycleGuardSummary()) == 160.00,
-        taxSnapshotPreserved = NOT taxCalculationResident(lifecycleGuardTaxLine());
+        taxSnapshotPreserved = NOT taxCalculationResident(lifecycleGuardTaxLine()),
+        personnelEventStatusPreserved = eventStatus(lifecycleGuardPersonnelEvent()) ==
+            PersonnelEventStatus.posted,
+        paymentStatementStatusPreserved = paymentStatementStatus(lifecycleGuardPaymentStatement()) ==
+            PaymentStatementStatus.approved,
+        paymentStatementSnapshotPreserved = paymentLineAmount(lifecycleGuardPaymentLine()) == 100.00,
+        form200StatusPreserved = form200Status(lifecycleGuardForm200()) == Form200Status.calculated,
+        form200SnapshotPreserved = form200LineAccruedIncome(lifecycleGuardForm200Line()) == 100.00,
+        approvalStatusPreserved = approvalStatus(lifecycleGuardApproval()) ==
+            ApprovalRequestStatus.pending,
+        approvalStepStatusPreserved = approvalStepStatus(lifecycleGuardApprovalStep()) ==
+            ApprovalStepStatus.pending,
+        archiveStatusPreserved = archiveCaseStatus(lifecycleGuardArchiveCase()) ==
+            ArchiveCaseStatus.closed,
+        archiveDocumentStatusPreserved = archiveDocumentStatus(lifecycleGuardArchiveDocument()) ==
+            ArchiveDocumentStatus.registered,
+        insurancePolicyStatusPreserved = insurancePolicyStatus(lifecycleGuardInsurancePolicy()) ==
+            AccidentInsurancePolicyStatus.active,
+        insurancePolicySnapshotPreserved = insurancePolicyPremium(lifecycleGuardInsurancePolicy()) == 100.00,
+        workAccidentStatusPreserved = workAccidentStatus(lifecycleGuardWorkAccident()) ==
+            WorkAccidentStatus.investigating,
+        insuranceClaimStatusPreserved = insuranceClaimStatus(lifecycleGuardInsuranceClaim()) ==
+            AccidentInsuranceClaimStatus.submitted;
 }
