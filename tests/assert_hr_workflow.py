@@ -22,3 +22,6 @@ assert Decimal(str(actual["assignmentCountResult"])) == Decimal("2")
 assert actual["firstAssignmentTo"] == "2026-01-31"
 assert actual["currentStaffIsTransferred"] is True
 assert actual["currentAssignmentRestored"] is True
+assert actual["employeeDisplayName"] == "Кадров Тест"
+assert actual["contractEmployeeDisplayName"] == "Кадров Тест"
+assert actual["assignmentEmployeeDisplayName"] == "Кадров Тест"

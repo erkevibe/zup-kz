@@ -32,6 +32,11 @@ workPlace 'Место работы' = DATA STRING[250] (Employment);
 workConditions 'Условия труда' = DATA STRING[500] (Employment);
 salary 'Оклад' = DATA NUMERIC[16,2] (Employment);
 
+employmentEmployeeName 'Ф.И.О.' (Employment e) = employeeFullName(employee(e));
+employmentOrganizationName 'Организация (название)' (Employment e) = name(organization(e));
+employmentDepartmentName 'Подразделение (название)' (Employment e) = name(department(e));
+employmentPositionName 'Должность (название)' (Employment e) = name(position(e));
+
 CONSTRAINT contractEndDate(Employment e) < hireDate(e)
     MESSAGE 'Дата окончания договора не может быть раньше даты приёма';
 
@@ -43,6 +48,13 @@ assignmentFrom 'Действует с' = DATA DATE (EmploymentAssignment);
 assignmentTo 'Действует по' = DATA DATE (EmploymentAssignment);
 fte 'Доля ставки' = DATA NUMERIC[8,4] (EmploymentAssignment);
 assignmentSalary 'Оклад' = DATA NUMERIC[16,2] (EmploymentAssignment);
+
+assignmentEmployeeName 'Ф.И.О.' (EmploymentAssignment a) =
+    employmentEmployeeName(employment(a));
+assignmentStaffCode 'Штатная единица (код)' (EmploymentAssignment a) =
+    staffCode(staffPosition(a));
+assignmentPositionName 'Должность (название)' (EmploymentAssignment a) =
+    name(position(staffPosition(a)));
 
 CONSTRAINT assignmentTo(EmploymentAssignment a) < assignmentFrom(a)
     MESSAGE 'Дата окончания назначения не может быть раньше даты начала';
@@ -295,6 +307,8 @@ rejectPersonnelEventEsutd 'Зафиксировать отказ ЕСУТД' (Pe
 
 FORM employments 'Трудовые договоры'
     OBJECTS e = Employment
+    PROPERTIES(e) READONLY employmentEmployeeName, employmentOrganizationName,
+                           employmentDepartmentName, employmentPositionName
     PROPERTIES(e) employee, organization, department, position,
                   hireDate, contractNumber, contractDate, employmentKind,
                   contractTermKind, contractEndDate, workPlace, workConditions, salary
@@ -302,6 +316,8 @@ FORM employments 'Трудовые договоры'
 
 FORM employmentAssignments 'Назначения'
     OBJECTS a = EmploymentAssignment
+    PROPERTIES(a) READONLY assignmentEmployeeName, assignmentStaffCode,
+                           assignmentPositionName
     PROPERTIES(a) employment, staffPosition, assignmentFrom, assignmentTo,
                   fte, assignmentSalary
 ;

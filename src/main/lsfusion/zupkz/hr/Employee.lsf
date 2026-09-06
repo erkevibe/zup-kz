@@ -20,6 +20,10 @@ citizenshipCode 'Код страны гражданства' = DATA STRING[3] (E
 personalDataConsentDate 'Дата согласия на обработку ПД' = DATA DATE (Employee);
 personalDataPurpose 'Цель обработки ПД' = DATA STRING[250] (Employee);
 
+employeeFullName 'Ф.И.О.' (Employee e) =
+    lastName(e) + ' ' + firstName(e) +
+    (IF middleName(e) THEN ' ' + middleName(e) ELSE '');
+
 employeeIinCount(STRING[12] value) = GROUP SUM 1 IF iin(Employee e) == value;
 CONSTRAINT iin(Employee e) AND length(iin(e)) != 12
     MESSAGE 'ИИН должен содержать 12 символов';
@@ -28,6 +32,7 @@ CONSTRAINT employeeIinCount(STRING[12] value) > 1
 
 FORM employees 'Сотрудники'
     OBJECTS e = Employee
+    PROPERTIES(e) READONLY employeeFullName
     PROPERTIES(e) iin, lastName, firstName, middleName, birthDate, gender,
                   citizenshipCode, personalDataConsentDate, personalDataPurpose
 ;

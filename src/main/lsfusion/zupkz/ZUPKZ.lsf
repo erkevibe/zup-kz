@@ -36,24 +36,34 @@ NAVIGATOR {
     }
 
     NEW FOLDER personnel 'Кадровый учёт' WINDOW toolbar {
-        NEW employeeCards;
-        NEW employments;
-        NEW employmentAssignments;
-        NEW personnelEvents;
-        NEW leaveEntitlements;
-        NEW leaveDocuments;
-        NEW vacationSchedules;
-        NEW vacationScheduleLines;
-        NEW businessTrips;
-        NEW personnelNotices;
-        NEW approvalRequests;
-        NEW myPersonnelNotifications;
-        NEW archiveCases;
-        NEW archiveDocuments;
-        NEW accidentInsurancePolicies;
-        NEW workAccidents;
-        NEW accidentInsuranceClaims;
-        NEW sickLeaveDocuments;
+        NEW FOLDER personnelEmployees 'Сотрудники и трудовые отношения' {
+            NEW employeeCards;
+            NEW employments;
+            NEW employmentAssignments;
+            NEW personnelEvents;
+        }
+        NEW FOLDER personnelAbsences 'Отпуска и отсутствия' {
+            NEW leaveEntitlements;
+            NEW leaveDocuments;
+            NEW vacationSchedules;
+            NEW vacationScheduleLines;
+            NEW businessTrips;
+            NEW sickLeaveDocuments;
+        }
+        NEW FOLDER personnelWorkflow 'Согласования и уведомления' {
+            NEW personnelNotices;
+            NEW approvalRequests;
+            NEW myPersonnelNotifications;
+        }
+        NEW FOLDER personnelArchive 'Кадровый архив' {
+            NEW archiveCases;
+            NEW archiveDocuments;
+        }
+        NEW FOLDER personnelSafety 'Охрана труда и страхование' {
+            NEW accidentInsurancePolicies;
+            NEW workAccidents;
+            NEW accidentInsuranceClaims;
+        }
     }
 
     NEW FOLDER workingTime 'Рабочее время' WINDOW toolbar {

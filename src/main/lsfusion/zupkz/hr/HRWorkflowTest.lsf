@@ -105,7 +105,11 @@ hrWorkflowTest() {
                                             firstAssignmentTo = assignmentTo(eventAssignment(hire)),
                                             currentStaffIsTransferred = staffPosition(eventAssignment(transfer)) ==
                                                 secondStaff,
-                                            currentAssignmentRestored = NOT assignmentTo(eventAssignment(transfer));
+                                            currentAssignmentRestored = NOT assignmentTo(eventAssignment(transfer)),
+                                            employeeDisplayName = employeeFullName(worker),
+                                            contractEmployeeDisplayName = employmentEmployeeName(contract),
+                                            assignmentEmployeeDisplayName =
+                                                assignmentEmployeeName(eventAssignment(transfer));
                                     }
                                 }
                             }
