@@ -435,6 +435,107 @@ pilotUiEnforcementGuardTest(STRING[20] mode) {
     }
 }
 
+pilotUiEnforcementCycleRun() = GROUP LAST PayrollRun r IF payrollOrganization(r) == pilotUiOrganization() AND
+    payrollNumber(r) == 'UI-ENFORCE-2026-11' ORDER r;
+pilotUiEnforcementCycleTimesheet() = GROUP LAST Timesheet t IF timesheetOrganization(t) == pilotUiOrganization() AND
+    timesheetNumber(t) == 'UI-ENFORCE-TS-2026-11' ORDER t;
+pilotUiEnforcementCycleOrder() = GROUP LAST EnforcementOrder o IF enforcementOrganization(o) == pilotUiOrganization() AND
+    enforcementNumber(o) == 'UI-ENFORCE-ORDER-001' ORDER o;
+pilotUiCancelledEnforcement() = GROUP LAST EnforcementCalculationDocument d IF
+    enforcementPayrollRun(d) == pilotUiEnforcementCycleRun() AND
+    enforcementCalculationStatus(d) == EnforcementCalculationStatus.cancelled ORDER d;
+
+// Постоянный ноябрьский набор. Только подготовка источников через API;
+// расчёт взысканий, отмена и повторная подготовка выполняются настоящими кнопками UI.
+pilotUiEnforcementCycleSetupTest() {
+    IF login(currentUser() AS CustomUser) != 'ui-chief' OR NOT organizationAllowed(pilotUiOrganization()) THEN
+        EXPORT JSON FROM denied = TRUE;
+    ELSE IF pilotUiEnforcementCycleRun() THEN EXPORT JSON FROM alreadyExists = TRUE;
+    ELSE IF pilotUiEnforcementCycleTimesheet() OR pilotUiEnforcementCycleOrder() THEN
+        MESSAGE 'Частичный ноябрьский набор: автоматического сброса нет';
+    ELSE IF NOT pilotUiSecondAssignment() OR payrollRunStatus(pilotUiDeductionsRun()) != PayrollRunStatus.approved THEN
+        MESSAGE 'Сначала завершите октябрьский UI-набор';
+    ELSE {
+        NEW order = EnforcementOrder {
+            enforcementOrganization(order) <- pilotUiOrganization();
+            enforcementEmployee(order) <- pilotUiEmployee();
+            enforcementNumber(order) <- 'UI-ENFORCE-ORDER-001';
+            enforcementDate(order) <- 2026_10_31;
+            enforcementValidFrom(order) <- 2026_11_01;
+            enforcementValidTo(order) <- 2026_11_30;
+            enforcementKind(order) <- EnforcementOrderKind.other;
+            enforcementCalculationKind(order) <- EnforcementCalculationKind.fixedAmount;
+            enforcementStatus(order) <- EnforcementOrderStatus.active;
+            enforcementPriority(order) <- 5;
+            enforcementFixedAmount(order) <- 25000.00;
+            enforcementRecipient(order) <- 'Синтетический получатель UI — не перечислять';
+            enforcementBasis(order) <- 'UI: первый расчёт, отмена и повторная подготовка после установки защит';
+        }
+        NEW sheet = Timesheet {
+            timesheetOrganization(sheet) <- pilotUiOrganization();
+            timesheetNumber(sheet) <- 'UI-ENFORCE-TS-2026-11';
+            timesheetPeriodFrom(sheet) <- 2026_11_01;
+            timesheetPeriodTo(sheet) <- 2026_11_30;
+            timesheetStatus(sheet) <- TimesheetStatus.draft;
+        }
+        NEW run = PayrollRun {
+            payrollOrganization(run) <- pilotUiOrganization();
+            payrollNumber(run) <- 'UI-ENFORCE-2026-11';
+            payrollPeriodFrom(run) <- 2026_11_01;
+            payrollPeriodTo(run) <- 2026_11_30;
+            payrollPaymentDueDate(run) <- 2026_12_10;
+            payrollRunStatus(run) <- PayrollRunStatus.draft;
+        }
+        APPLY;
+        EXPORT JSON FROM created = pilotUiEnforcementCycleRun() IS PayrollRun;
+    }
+}
+pilotUiEnforcementCycleSourcesTest() {
+    IF login(currentUser() AS CustomUser) != 'ui-chief' OR NOT closingDocumentsAllowed(pilotUiEnforcementCycleRun()) THEN
+        EXPORT JSON FROM denied = TRUE;
+    ELSE {
+        IF timesheetStatus(pilotUiEnforcementCycleTimesheet()) == TimesheetStatus.draft THEN {
+            IF NOT timesheetLineCount(pilotUiEnforcementCycleTimesheet()) THEN fillTimesheet(pilotUiEnforcementCycleTimesheet());
+            approveTimesheet(pilotUiEnforcementCycleTimesheet());
+        }
+        IF payrollRunStatus(pilotUiEnforcementCycleRun()) == PayrollRunStatus.draft THEN
+            collectApprovedTime(pilotUiEnforcementCycleRun());
+        IF payrollRunStatus(pilotUiEnforcementCycleRun()) == PayrollRunStatus.timeCollected THEN
+            calculatePayroll(pilotUiEnforcementCycleRun());
+        preparePayrollClosingDocuments(pilotUiEnforcementCycleRun());
+        IF socialPaymentStatus(closingSocial(pilotUiEnforcementCycleRun())) == SocialPaymentStatus.draft THEN
+            calculateSocialPayments(closingSocial(pilotUiEnforcementCycleRun()));
+        IF socialPaymentStatus(closingSocial(pilotUiEnforcementCycleRun())) == SocialPaymentStatus.calculated THEN
+            approveSocialPayments(closingSocial(pilotUiEnforcementCycleRun()));
+        IF taxCalculationStatus(closingTaxes(pilotUiEnforcementCycleRun())) == TaxCalculationStatus.draft THEN
+            calculateTaxes(closingTaxes(pilotUiEnforcementCycleRun()));
+        IF taxCalculationStatus(closingTaxes(pilotUiEnforcementCycleRun())) == TaxCalculationStatus.calculated THEN
+            approveTaxes(closingTaxes(pilotUiEnforcementCycleRun()));
+        EXPORT JSON FROM sourceReady = taxCalculationStatus(closingTaxes(pilotUiEnforcementCycleRun())) == TaxCalculationStatus.approved,
+            days = timesheetLineCount(pilotUiEnforcementCycleTimesheet()),
+            accrued = totalAccrued(pilotUiEnforcementCycleRun()),
+            beforeEnforcement = payableAfterTaxes(closingTaxes(pilotUiEnforcementCycleRun()));
+    }
+}
+pilotUiEnforcementCycleVerificationTest() {
+    EXPORT JSON FROM activeCount = closingEnforcementCount(pilotUiEnforcementCycleRun()),
+        documentCount = (GROUP SUM 1 IF enforcementPayrollRun(EnforcementCalculationDocument d) == pilotUiEnforcementCycleRun()),
+        status = caption(enforcementCalculationStatus(closingEnforcement(pilotUiEnforcementCycleRun()))),
+        amount = totalEnforcementWithheld(closingEnforcement(pilotUiEnforcementCycleRun())),
+        payable = payableAfterEnforcement(closingEnforcement(pilotUiEnforcementCycleRun())),
+        activeLines = (GROUP SUM 1 IF enforcementCalculationDocument(EnforcementCalculationLine l) == closingEnforcement(pilotUiEnforcementCycleRun())),
+        activeStamped = enforcementCalculatedAt(closingEnforcement(pilotUiEnforcementCycleRun())) IS DATETIME,
+        cancelledAmount = totalEnforcementWithheld(pilotUiCancelledEnforcement()),
+        cancelledLines = (GROUP SUM 1 IF enforcementCalculationDocument(EnforcementCalculationLine l) == pilotUiCancelledEnforcement()),
+        cancelledStamped = enforcementCalculatedAt(pilotUiCancelledEnforcement()) IS DATETIME,
+        cancelledSourcePreserved = enforcementTaxCalculation(pilotUiCancelledEnforcement()) == closingTaxes(pilotUiEnforcementCycleRun()),
+        payrollStillCalculated = payrollRunStatus(pilotUiEnforcementCycleRun()) == PayrollRunStatus.calculated,
+        noPayment = NOT closingStatement(pilotUiEnforcementCycleRun()),
+        oldMonthsClosed = payrollRunStatus(pilotUiPayrollRun()) == PayrollRunStatus.approved AND
+            payrollRunStatus(pilotUiPreparationRun()) == PayrollRunStatus.approved AND
+            payrollRunStatus(pilotUiDeductionsRun()) == PayrollRunStatus.approved;
+}
+
 pilotUiDataSetupTest() {
     IF pilotUiPayrollRun() THEN
         EXPORT JSON FROM
