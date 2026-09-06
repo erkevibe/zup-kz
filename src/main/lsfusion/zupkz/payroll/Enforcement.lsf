@@ -306,10 +306,18 @@ FORM enforcementOrders 'Исполнительные документы'
     PROPERTIES(o) activateEnforcementOrder, suspendEnforcementOrder, closeEnforcementOrder
 ;
 
+enforcementRunNumber 'Расчёт зарплаты' (EnforcementCalculationDocument d) = payrollNumber(enforcementPayrollRun(d));
+enforcementStatusName 'Статус' (EnforcementCalculationDocument d) = caption(enforcementCalculationStatus(d));
+changeEnforcementTaxes(EnforcementCalculationDocument d) {
+    DIALOG taxCalculationDocuments OBJECTS d = enforcementTaxCalculation(d) NULL INPUT selected NULL
+    DO enforcementTaxCalculation(d) <- selected;
+}
+
 FORM enforcementCalculationDocuments 'Расчёт исполнительных удержаний'
     OBJECTS d = EnforcementCalculationDocument
-    PROPERTIES(d) enforcementTaxCalculation, totalEnforcementWithheld, payableAfterEnforcement
-    PROPERTIES(d) READONLY enforcementCalculationStatus, enforcementCalculatedAt
+    PROPERTIES(d) enforcementRunNumber ON CHANGE changeEnforcementTaxes(d)
+    PROPERTIES(d) READONLY totalEnforcementWithheld, payableAfterEnforcement,
+                           enforcementStatusName, enforcementCalculatedAt
     PROPERTIES(d) calculateEnforcement, approveEnforcement, cancelEnforcement
 ;
 

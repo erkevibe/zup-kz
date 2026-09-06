@@ -471,11 +471,27 @@ FORM organizationTaxProfiles 'Налоговые профили организа
                   organizationTaxProfileLegalSource
 ;
 
+taxRunNumber 'Расчёт зарплаты' (TaxCalculationDocument d) = payrollNumber(taxCalculationPayrollRun(d));
+taxSocialRunNumber 'Социальные платежи' (TaxCalculationDocument d) = socialPaymentRunNumber(taxCalculationSocialPayments(d));
+taxStatusName 'Статус' (TaxCalculationDocument d) = caption(taxCalculationStatus(d));
+taxPackCode 'Нормативный набор' (TaxCalculationDocument d) = packCode(taxCalculationRegulatoryPack(d));
+taxLineRunNumber 'Расчёт зарплаты' (TaxCalculationLine l) = taxRunNumber(taxCalculationDocument(l));
+taxLineEmployeeName 'Сотрудник' (TaxCalculationLine l) = employeeFullName(taxCalculationEmployee(l));
+changeTaxRun(TaxCalculationDocument d) {
+    DIALOG payrollRuns OBJECTS r = taxCalculationPayrollRun(d) NULL INPUT selected NULL
+    DO taxCalculationPayrollRun(d) <- selected;
+}
+changeTaxSocialPayments(TaxCalculationDocument d) {
+    DIALOG socialPaymentDocuments OBJECTS d = taxCalculationSocialPayments(d) NULL INPUT selected NULL
+    DO taxCalculationSocialPayments(d) <- selected;
+}
+
 FORM taxCalculationDocuments 'Расчёт ИПН и социального налога'
     OBJECTS d = TaxCalculationDocument
-    PROPERTIES(d) taxCalculationPayrollRun, taxCalculationSocialPayments
-    PROPERTIES(d) READONLY taxCalculationStatus, taxCalculationCalculatedAt,
-                           taxCalculationRegulatoryPack,
+    PROPERTIES(d) taxRunNumber ON CHANGE changeTaxRun(d),
+                  taxSocialRunNumber ON CHANGE changeTaxSocialPayments(d)
+    PROPERTIES(d) READONLY taxStatusName, taxCalculationCalculatedAt,
+                           taxPackCode,
                            totalIpnBasicDeduction, totalIpnTaxableIncome,
                            totalIpn, totalSocialTax, payableAfterTaxes
     PROPERTIES(d) calculateTaxes, approveTaxes, cancelTaxes
@@ -483,7 +499,7 @@ FORM taxCalculationDocuments 'Расчёт ИПН и социального на
 
 FORM taxCalculationLines 'Налоги сотрудников'
     OBJECTS l = TaxCalculationLine
-    PROPERTIES(l) READONLY taxCalculationDocument, taxCalculationEmployee,
+    PROPERTIES(l) READONLY taxLineRunNumber, taxLineEmployeeName,
                            taxCalculationResident, taxCalculationIncomeStatus,
                            taxCalculationCategoryCodes, taxCalculationAifc,
                            taxCalculationUnregisteredDivision, taxCalculationDeductionCodes,

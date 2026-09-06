@@ -343,11 +343,21 @@ FORM socialPaymentProfiles 'Профили социальных платежей
                   socialProfileBasis, socialProfileLegalSource
 ;
 
+socialPaymentRunNumber 'Расчёт зарплаты' (SocialPaymentDocument d) = payrollNumber(socialPaymentPayrollRun(d));
+socialPaymentStatusName 'Статус' (SocialPaymentDocument d) = caption(socialPaymentStatus(d));
+socialPaymentPackCode 'Нормативный набор' (SocialPaymentDocument d) = packCode(socialPaymentRegulatoryPack(d));
+socialLineRunNumber 'Расчёт зарплаты' (SocialPaymentLine l) = socialPaymentRunNumber(socialPaymentDocument(l));
+socialLineEmployeeName 'Сотрудник' (SocialPaymentLine l) = employeeFullName(socialPaymentEmployee(l));
+changeSocialPaymentRun(SocialPaymentDocument d) {
+    DIALOG payrollRuns OBJECTS r = socialPaymentPayrollRun(d) NULL INPUT selected NULL
+    DO socialPaymentPayrollRun(d) <- selected;
+}
+
 FORM socialPaymentDocuments 'Расчёт социальных платежей'
     OBJECTS d = SocialPaymentDocument
-    PROPERTIES(d) socialPaymentPayrollRun
-    PROPERTIES(d) READONLY socialPaymentStatus, socialPaymentCalculatedAt,
-                           socialPaymentRegulatoryPack,
+    PROPERTIES(d) socialPaymentRunNumber ON CHANGE changeSocialPaymentRun(d)
+    PROPERTIES(d) READONLY socialPaymentStatusName, socialPaymentCalculatedAt,
+                           socialPaymentPackCode,
                            totalOpv, totalOpvr, totalSo, totalVosms, totalOosms,
                            payableAfterSocialPayments
     PROPERTIES(d) calculateSocialPayments, approveSocialPayments, cancelSocialPayments
@@ -355,7 +365,7 @@ FORM socialPaymentDocuments 'Расчёт социальных платежей'
 
 FORM socialPaymentLines 'Социальные платежи сотрудников'
     OBJECTS l = SocialPaymentLine
-    PROPERTIES(l) READONLY socialPaymentDocument, socialPaymentEmployee,
+    PROPERTIES(l) READONLY socialLineRunNumber, socialLineEmployeeName,
                            socialPaymentMZP,
                            opvGrossBase, opvMaximum, opvRate, opvExempt, opvBase, opvAmount,
                            opvrGrossBase, opvrMinimum, opvrMaximum, opvrRate, opvrExempt,

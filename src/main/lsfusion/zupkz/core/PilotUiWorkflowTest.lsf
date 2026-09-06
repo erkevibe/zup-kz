@@ -158,6 +158,69 @@ pilotUiSettlementVerificationTest() {
 }
 
 // Постоянный набор для ручной ролевой проверки. Повторный запуск ничего не создаёт.
+pilotUiPreparationRun() = GROUP LAST PayrollRun r IF payrollOrganization(r) == pilotUiOrganization() AND
+    payrollNumber(r) == 'UI-PREP-2026-09' ORDER r;
+pilotUiPreparationTimesheet() = GROUP LAST Timesheet t IF timesheetOrganization(t) == pilotUiOrganization() AND
+    timesheetNumber(t) == 'UI-PREP-TS-2026-09' ORDER t;
+
+// Только исходные время и начисление. Связанные документы создаются через UI.
+pilotUiPreparationSetupTest() {
+    IF pilotUiPreparationRun() THEN EXPORT JSON FROM alreadyExists = TRUE;
+    ELSE IF NOT pilotUiAssignment() OR NOT pilotUiSchedule() THEN MESSAGE 'Нет исходного сотрудника и графика';
+    ELSE IF pilotUiPreparationTimesheet() THEN MESSAGE 'Частичная подготовка: проверьте сохранённый сентябрьский табель';
+    ELSE NEW t = Timesheet {
+        timesheetOrganization(t) <- pilotUiOrganization();
+        timesheetNumber(t) <- 'UI-PREP-TS-2026-09';
+        timesheetPeriodFrom(t) <- 2026_09_01;
+        timesheetPeriodTo(t) <- 2026_09_30;
+        timesheetStatus(t) <- TimesheetStatus.draft;
+        APPLY;
+        fillTimesheet(t);
+        approveTimesheet(t);
+        NEW r = PayrollRun {
+            payrollOrganization(r) <- pilotUiOrganization();
+            payrollNumber(r) <- 'UI-PREP-2026-09';
+            payrollPeriodFrom(r) <- 2026_09_01;
+            payrollPeriodTo(r) <- 2026_09_30;
+            payrollPaymentDueDate(r) <- 2026_10_09;
+            payrollRunStatus(r) <- PayrollRunStatus.draft;
+            APPLY;
+            collectApprovedTime(r);
+            calculatePayroll(r);
+        }
+        EXPORT JSON FROM accrued = totalAccrued(pilotUiPreparationRun()),
+            noClosingDocuments = NOT closingSocial(pilotUiPreparationRun()) AND
+                NOT closingTaxes(pilotUiPreparationRun()) AND NOT closingEnforcement(pilotUiPreparationRun()) AND
+                NOT closingStatement(pilotUiPreparationRun());
+    }
+}
+
+pilotUiPreparationDeniedTest() {
+    preparePayrollClosingDocuments(pilotUiPreparationRun());
+    preparePayrollStatement(pilotUiPreparationRun());
+    EXPORT JSON FROM roleDenied = NOT closingDocumentsRoleAllowed(),
+        noClosingDocuments = NOT closingSocial(pilotUiPreparationRun()) AND
+            NOT closingTaxes(pilotUiPreparationRun()) AND NOT closingEnforcement(pilotUiPreparationRun()) AND
+            NOT closingStatement(pilotUiPreparationRun());
+}
+
+pilotUiPreparationVerificationTest() {
+    EXPORT JSON FROM socialCount = closingSocialCount(pilotUiPreparationRun()),
+        taxCount = closingTaxCount(pilotUiPreparationRun()),
+        enforcementCount = closingEnforcementCount(pilotUiPreparationRun()),
+        statementCount = (GROUP SUM 1 IF paymentStatementPayrollRun(PaymentStatement d) == pilotUiPreparationRun()),
+        linkedSocial = taxCalculationSocialPayments(closingTaxes(pilotUiPreparationRun())) == closingSocial(pilotUiPreparationRun()),
+        linkedTaxes = enforcementTaxCalculation(closingEnforcement(pilotUiPreparationRun())) == closingTaxes(pilotUiPreparationRun()),
+        payrollClosed = payrollRunStatus(pilotUiPreparationRun()) == PayrollRunStatus.approved,
+        accrued = totalAccrued(pilotUiPreparationRun()),
+        payable = settlementPayable(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
+        statementFilled = paymentStatementStatus(closingStatement(pilotUiPreparationRun())) == PaymentStatementStatus.calculated,
+        statementAmount = totalPaymentStatementAmount(closingStatement(pilotUiPreparationRun())),
+        notPaid = NOT paymentStatementPaidAt(closingStatement(pilotUiPreparationRun())),
+        socialRunLabel = socialPaymentRunNumber(closingSocial(pilotUiPreparationRun())),
+        employeeLabel = settlementEmployeeName(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee()));
+}
+
 pilotUiDataSetupTest() {
     IF pilotUiPayrollRun() THEN
         EXPORT JSON FROM

@@ -385,13 +385,35 @@ resetPayrollForRecalculation 'Сбросить для пересчёта' (Payro
     }
 }
 
+settlementRunNumber 'Расчёт зарплаты' (PayrollSettlementLine l) = payrollNumber(settlementPayrollRun(l));
+settlementEmployeeName 'Сотрудник' (PayrollSettlementLine l) = employeeFullName(settlementEmployee(l));
+settlementLegalCode 'Нормативное основание' (PayrollSettlementLine l) = code(settlementLegalSource(l));
+statementRunNumber 'Расчёт зарплаты' (PaymentStatement d) = payrollNumber(paymentStatementPayrollRun(d));
+statementStatusName 'Статус' (PaymentStatement d) = caption(paymentStatementStatus(d));
+statementMethodName 'Способ выплаты' (PaymentStatement d) = caption(paymentStatementMethod(d));
+statementLineNumber 'Ведомость' (PaymentStatementLine l) = paymentStatementNumber(paymentLineStatement(l));
+statementLineRunNumber 'Расчёт зарплаты' (PaymentStatementLine l) = settlementRunNumber(paymentLineSettlement(l));
+statementLineEmployeeName 'Сотрудник' (PaymentStatementLine l) = employeeFullName(paymentLineEmployee(l));
+changeStatementRun(PaymentStatement d) {
+    DIALOG payrollRuns OBJECTS r = paymentStatementPayrollRun(d) NULL INPUT selected NULL
+    DO paymentStatementPayrollRun(d) <- selected;
+}
+FORM paymentMethods 'Способы выплаты'
+    OBJECTS m = PaymentMethod
+    PROPERTIES(m) READONLY caption
+;
+changeStatementMethod(PaymentStatement d) {
+    DIALOG paymentMethods OBJECTS m = paymentStatementMethod(d) NULL INPUT selected NULL
+    DO paymentStatementMethod(d) <- selected;
+}
+
 FORM payrollSettlements 'Расчётные листки'
     OBJECTS l = PayrollSettlementLine
-    PROPERTIES(l) READONLY settlementPayrollRun, settlementEmployee, settlementAccrued,
+    PROPERTIES(l) READONLY settlementRunNumber, settlementEmployeeName, settlementAccrued,
                            settlementPayrollDeducted, settlementOpv, settlementVosms,
                            settlementIpn, settlementEnforcement, settlementPayable,
                            settlementOpvr, settlementSo, settlementOosms, settlementSocialTax,
-                           settlementClosedAt, settlementLegalSource, remainingSettlementAmount,
+                           settlementClosedAt, settlementLegalCode, remainingSettlementAmount,
                            unpaidSettlementAmount
 ;
 
@@ -404,9 +426,9 @@ FORM payrollLifecycleEntries 'История закрытия расчётов �
 
 FORM paymentStatements 'Ведомости выплаты зарплаты'
     OBJECTS d = PaymentStatement
-    PROPERTIES(d) paymentStatementPayrollRun, paymentStatementNumber,
-                  paymentStatementDate, paymentStatementMethod, paymentStatementBankAccount
-    PROPERTIES(d) READONLY paymentStatementStatus, paymentStatementCalculatedAt,
+    PROPERTIES(d) statementRunNumber ON CHANGE changeStatementRun(d), paymentStatementNumber,
+                  paymentStatementDate, statementMethodName ON CHANGE changeStatementMethod(d), paymentStatementBankAccount
+    PROPERTIES(d) READONLY statementStatusName, paymentStatementCalculatedAt,
                            paymentStatementApprovedAt, paymentStatementPaidAt,
                            paymentStatementOverdue, totalPaymentStatementAmount
     PROPERTIES(d) calculatePaymentStatement, approvePaymentStatement, markPaymentStatementPaid
@@ -415,13 +437,98 @@ FORM paymentStatements 'Ведомости выплаты зарплаты'
 FORM paymentStatementLines 'Строки ведомостей выплаты'
     OBJECTS l = PaymentStatementLine
     PROPERTIES(l) paymentLineAmount
-    PROPERTIES(l) READONLY paymentLineStatement, paymentLineSettlement,
-                           paymentLineEmployee, paymentLineAmountDue
+    PROPERTIES(l) READONLY statementLineNumber, statementLineRunNumber,
+                           statementLineEmployeeName, paymentLineAmountDue
 ;
+
+// Повторная подготовка не создаёт дубли. Отменённые документы остаются в истории.
+closingSocial(PayrollRun r) = GROUP LAST SocialPaymentDocument d IF
+    socialPaymentPayrollRun(d) == r AND socialPaymentStatus(d) != SocialPaymentStatus.cancelled ORDER d;
+closingTaxes(PayrollRun r) = GROUP LAST TaxCalculationDocument d IF
+    taxCalculationPayrollRun(d) == r AND taxCalculationStatus(d) != TaxCalculationStatus.cancelled ORDER d;
+closingEnforcement(PayrollRun r) = GROUP LAST EnforcementCalculationDocument d IF
+    enforcementPayrollRun(d) == r AND enforcementCalculationStatus(d) != EnforcementCalculationStatus.cancelled ORDER d;
+closingStatement(PayrollRun r) = GROUP LAST PaymentStatement d IF paymentStatementPayrollRun(d) == r ORDER d;
+closingSocialCount(PayrollRun r) = GROUP SUM 1 IF socialPaymentPayrollRun(SocialPaymentDocument d) == r AND
+    socialPaymentStatus(d) != SocialPaymentStatus.cancelled;
+closingTaxCount(PayrollRun r) = GROUP SUM 1 IF taxCalculationPayrollRun(TaxCalculationDocument d) == r AND
+    taxCalculationStatus(d) != TaxCalculationStatus.cancelled;
+closingEnforcementCount(PayrollRun r) = GROUP SUM 1 IF enforcementPayrollRun(EnforcementCalculationDocument d) == r AND
+    enforcementCalculationStatus(d) != EnforcementCalculationStatus.cancelled;
+CONSTRAINT closingSocialCount(PayrollRun r) > 1 MESSAGE 'У расчёта уже есть неотменённый документ социальных платежей';
+CONSTRAINT closingTaxCount(PayrollRun r) > 1 MESSAGE 'У расчёта уже есть неотменённый налоговый документ';
+CONSTRAINT closingEnforcementCount(PayrollRun r) > 1 MESSAGE 'У расчёта уже есть неотменённый документ взысканий';
+
+closingDocumentsRoleAllowed() = has(currentUser() AS CustomUser, userRoleSID('admin')) OR
+    has(currentUser() AS CustomUser, userRoleSID('zup_chief_accountant'));
+closingDocumentsAllowed(PayrollRun r) = closingDocumentsRoleAllowed() AND organizationActionAllowed(payrollOrganization(r));
+closingDocumentsReady(PayrollRun r) = closingSocial(r) AND closingTaxes(r) AND closingEnforcement(r);
+
+preparePayrollClosingDocuments 'Подготовить документы закрытия' (PayrollRun r) {
+    IF NOT closingDocumentsAllowed(r) THEN MESSAGE 'Нет прав на подготовку документов этой организации';
+    ELSE IF closingTaxes(r) AND NOT (taxCalculationSocialPayments(closingTaxes(r)) == closingSocial(r)) THEN
+        MESSAGE 'Налоговый документ связан с другими социальными платежами; проверьте документы';
+    ELSE IF closingEnforcement(r) AND NOT (enforcementTaxCalculation(closingEnforcement(r)) == closingTaxes(r)) THEN
+        MESSAGE 'Документ взысканий связан с другим налоговым расчётом; проверьте документы';
+    ELSE IF NOT closingDocumentsReady(r) THEN {
+        IF payrollRunStatus(r) != PayrollRunStatus.calculated THEN MESSAGE 'Сначала рассчитайте зарплату';
+        ELSE {
+            IF NOT closingSocial(r) THEN NEW d = SocialPaymentDocument {
+                socialPaymentPayrollRun(d) <- r;
+                socialPaymentStatus(d) <- SocialPaymentStatus.draft;
+            }
+            IF NOT closingTaxes(r) THEN NEW d = TaxCalculationDocument {
+                taxCalculationPayrollRun(d) <- r;
+                taxCalculationSocialPayments(d) <- closingSocial(r);
+                taxCalculationStatus(d) <- TaxCalculationStatus.draft;
+            }
+            IF NOT closingEnforcement(r) THEN NEW d = EnforcementCalculationDocument {
+                enforcementTaxCalculation(d) <- closingTaxes(r);
+                enforcementCalculationStatus(d) <- EnforcementCalculationStatus.draft;
+            }
+            APPLY;
+        }
+    }
+}
+openPayrollSocial '1. Социальные платежи' (PayrollRun r) {
+    preparePayrollClosingDocuments(r);
+    IF closingDocumentsAllowed(r) AND closingSocial(r) THEN
+        SHOW socialPaymentDocuments OBJECTS d = closingSocial(r) NOWAIT;
+}
+openPayrollTaxes '2. ИПН и социальный налог' (PayrollRun r) {
+    preparePayrollClosingDocuments(r);
+    IF closingDocumentsAllowed(r) AND closingTaxes(r) THEN
+        SHOW taxCalculationDocuments OBJECTS d = closingTaxes(r) NOWAIT;
+}
+openPayrollEnforcement '3. Проверка взысканий' (PayrollRun r) {
+    preparePayrollClosingDocuments(r);
+    IF closingDocumentsAllowed(r) AND closingEnforcement(r) THEN
+        SHOW enforcementCalculationDocuments OBJECTS d = closingEnforcement(r) NOWAIT;
+}
+preparePayrollStatement(PayrollRun r) {
+    IF NOT closingDocumentsAllowed(r) THEN MESSAGE 'Нет прав на подготовку ведомости этой организации';
+    ELSE IF NOT closingStatement(r) THEN {
+        IF payrollRunStatus(r) != PayrollRunStatus.approved THEN MESSAGE 'Сначала закройте расчёт зарплаты';
+        ELSE NEW d = PaymentStatement {
+            paymentStatementPayrollRun(d) <- r;
+            paymentStatementDate(d) <- payrollPaymentDueDate(r);
+            paymentStatementMethod(d) <- PaymentMethod.bankTransfer;
+            paymentStatementStatus(d) <- PaymentStatementStatus.draft;
+            APPLY;
+        }
+    }
+}
+openPayrollStatement '4. Ведомость выплаты' (PayrollRun r) {
+    preparePayrollStatement(r);
+    IF closingDocumentsAllowed(r) AND closingStatement(r) THEN
+        SHOW paymentStatements OBJECTS d = closingStatement(r) NOWAIT;
+}
 
 EXTEND FORM payrollRuns
     PROPERTIES(r) payrollPaymentDueDate, latestPayrollPaymentDate, payrollPaymentLegalSource,
                   remainingPayrollAmount, unpaidPayrollAmount, payrollReopenReason,
                   payrollResetReason
     PROPERTIES(r) closePayroll, reopenPayroll, resetPayrollForRecalculation
+    PROPERTIES(r) SHOWIF closingDocumentsRoleAllowed() openPayrollSocial, openPayrollTaxes,
+                  openPayrollEnforcement, openPayrollStatement
 ;
