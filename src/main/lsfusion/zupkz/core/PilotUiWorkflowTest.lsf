@@ -67,10 +67,94 @@ pilotUiVerificationTest() {
         originalPreserved = timesheetStatus(pilotUiTimesheet()) == TimesheetStatus.cancelled,
         plannedHours = summaryPlannedHours(payrollTimeSummaryByKey(pilotUiPayrollRun(), pilotUiAssignment())),
         workedHours = summaryWorkedHours(payrollTimeSummaryByKey(pilotUiPayrollRun(), pilotUiAssignment())),
-        calculated = payrollRunStatus(pilotUiPayrollRun()) == PayrollRunStatus.calculated,
+        calculated = payrollRunStatus(pilotUiPayrollRun()) == PayrollRunStatus.calculated OR
+            payrollRunStatus(pilotUiPayrollRun()) == PayrollRunStatus.approved OR
+            payrollRunStatus(pilotUiPayrollRun()) == PayrollRunStatus.paid,
         lineCount = payrollLineCount(pilotUiPayrollRun()),
         accrued = totalAccrued(pilotUiPayrollRun()),
         expectedAccrued = totalAccrued(pilotUiPayrollRun()) == 400000.00;
+}
+
+pilotUiSocial() = GROUP LAST SocialPaymentDocument d IF
+    socialPaymentPayrollRun(d) == pilotUiPayrollRun() ORDER d;
+pilotUiTaxes() = GROUP LAST TaxCalculationDocument d IF
+    taxCalculationPayrollRun(d) == pilotUiPayrollRun() ORDER d;
+pilotUiEnforcement() = GROUP LAST EnforcementCalculationDocument d IF
+    enforcementPayrollRun(d) == pilotUiPayrollRun() ORDER d;
+pilotUiStatement() = GROUP LAST PaymentStatement d IF
+    paymentStatementPayrollRun(d) == pilotUiPayrollRun() AND
+    paymentStatementNumber(d) == 'UI-BANK-2026-08' ORDER d;
+pilotUiSettlement() = settlementLineByEmployee(pilotUiPayrollRun(), pilotUiEmployee());
+
+// Только черновики: расчёт, утверждение и закрытие выполняет проверяющий через UI.
+pilotUiSettlementSetupTest() {
+    IF pilotUiSocial() AND pilotUiTaxes() AND pilotUiEnforcement() AND pilotUiStatement() THEN
+        EXPORT JSON FROM alreadyExists = TRUE;
+    ELSE IF pilotUiSocial() OR pilotUiTaxes() OR pilotUiEnforcement() OR pilotUiStatement() THEN
+        MESSAGE 'Неполный набор: проверьте существующие документы, автоматического сброса нет';
+    ELSE IF payrollRunStatus(pilotUiPayrollRun()) != PayrollRunStatus.calculated THEN
+        MESSAGE 'Сначала рассчитайте зарплату пилотного сотрудника';
+    ELSE IF employeeTaxProfileOn(pilotUiOrganization(), pilotUiEmployee(), 2026_08_31) THEN
+        MESSAGE 'Налоговый профиль уже существует: проверьте его вручную';
+    ELSE {
+        NEW p = EmployeeTaxProfile {
+            taxProfileOrganization(p) <- pilotUiOrganization();
+            taxProfileEmployee(p) <- pilotUiEmployee();
+            taxProfileValidFrom(p) <- 2026_08_01;
+            taxProfileResident(p) <- TRUE;
+            taxProfileIncomeStatus(p) <- TaxIncomeStatus.employee;
+            taxProfileBasicDeduction(p) <- TRUE;
+            taxProfileSocialDeduction(p) <- IpnSocialDeductionKind.none;
+            taxProfileBasis(p) <- 'Синтетическое заявление UI: базовый вычет у одного агента';
+        }
+        NEW s = SocialPaymentDocument {
+            socialPaymentPayrollRun(s) <- pilotUiPayrollRun();
+            socialPaymentStatus(s) <- SocialPaymentStatus.draft;
+            NEW t = TaxCalculationDocument {
+                taxCalculationPayrollRun(t) <- pilotUiPayrollRun();
+                taxCalculationSocialPayments(t) <- s;
+                taxCalculationStatus(t) <- TaxCalculationStatus.draft;
+                NEW e = EnforcementCalculationDocument {
+                    enforcementTaxCalculation(e) <- t;
+                    enforcementCalculationStatus(e) <- EnforcementCalculationStatus.draft;
+                }
+            }
+        }
+        NEW p = PaymentStatement {
+            paymentStatementPayrollRun(p) <- pilotUiPayrollRun();
+            paymentStatementNumber(p) <- 'UI-BANK-2026-08';
+            paymentStatementDate(p) <- 2026_09_10;
+            paymentStatementMethod(p) <- PaymentMethod.bankTransfer;
+            paymentStatementBankAccount(p) <- payrollIban(pilotUiOrganization());
+            paymentStatementStatus(p) <- PaymentStatementStatus.draft;
+        }
+        APPLY;
+        EXPORT JSON FROM draftsReady = pilotUiSocial() AND pilotUiTaxes() AND
+            pilotUiEnforcement() AND pilotUiStatement();
+    }
+}
+
+pilotUiSettlementVerificationTest() {
+    EXPORT JSON FROM
+        socialApproved = socialPaymentStatus(pilotUiSocial()) == SocialPaymentStatus.approved,
+        taxesApproved = taxCalculationStatus(pilotUiTaxes()) == TaxCalculationStatus.approved,
+        enforcementApproved = enforcementCalculationStatus(pilotUiEnforcement()) == EnforcementCalculationStatus.approved,
+        payrollClosed = payrollRunStatus(pilotUiPayrollRun()) == PayrollRunStatus.approved,
+        settlementCount = payrollSettlementLineCountForRun(pilotUiPayrollRun()),
+        accrued = settlementAccrued(pilotUiSettlement()),
+        opv = settlementOpv(pilotUiSettlement()), opvr = settlementOpvr(pilotUiSettlement()),
+        so = settlementSo(pilotUiSettlement()), vosms = settlementVosms(pilotUiSettlement()),
+        oosms = settlementOosms(pilotUiSettlement()), ipn = settlementIpn(pilotUiSettlement()),
+        socialTax = settlementSocialTax(pilotUiSettlement()),
+        basicDeduction = totalIpnBasicDeduction(pilotUiTaxes()),
+        payable = settlementPayable(pilotUiSettlement()),
+        statementFilled = paymentStatementStatus(pilotUiStatement()) == PaymentStatementStatus.calculated,
+        statementLines = paymentStatementLineCount(pilotUiStatement()),
+        statementAmount = totalPaymentStatementAmount(pilotUiStatement()),
+        unpaid = unpaidPayrollAmount(pilotUiPayrollRun()),
+        notPaid = NOT paymentStatementPaidAt(pilotUiStatement()),
+        socialPack = packCode(socialPaymentRegulatoryPack(pilotUiSocial())),
+        taxPack = packCode(taxCalculationRegulatoryPack(pilotUiTaxes()));
 }
 
 // Постоянный набор для ручной ролевой проверки. Повторный запуск ничего не создаёт.
