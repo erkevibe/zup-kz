@@ -42,7 +42,8 @@ payrollFormulaTest() {
                         civilContractTo(civilContract) <- 2026_01_31;
                         civilContractSubject(civilContract) <- 'Тестовые консультационные услуги';
                         civilContractAmount(civilContract) <- 1000000.00;
-                        civilContractStatus(civilContract) <- CivilContractStatus.active;
+                        civilContractStatus(civilContract) <- CivilContractStatus.draft;
+                        activateCivilContract(civilContract);
                         NEW civilAct = CivilContractAct {
                             civilActContract(civilAct) <- civilContract;
                             civilActNumber(civilAct) <- 'ACT-2026-01';
@@ -135,30 +136,36 @@ payrollFormulaTest() {
                                                             enforcementEmployee(alimonyOrder) <- worker;
                                                             enforcementKind(alimonyOrder) <- EnforcementOrderKind.alimony;
                                                             enforcementCalculationKind(alimonyOrder) <- EnforcementCalculationKind.incomeShare;
-                                                            enforcementStatus(alimonyOrder) <- EnforcementOrderStatus.active;
+                                                            enforcementNumber(alimonyOrder) <- 'ENF-ALIMONY-1';
+                                                            enforcementDate(alimonyOrder) <- 2026_01_01;
                                                             enforcementValidFrom(alimonyOrder) <- 2026_01_01;
                                                             enforcementPriority(alimonyOrder) <- 1;
                                                             enforcementChildCount(alimonyOrder) <- 1;
+                                                            activateEnforcementOrder(alimonyOrder);
 
                                                             NEW damageOrder = EnforcementOrder {
                                                                 enforcementOrganization(damageOrder) <- org;
                                                                 enforcementEmployee(damageOrder) <- worker;
                                                                 enforcementKind(damageOrder) <- EnforcementOrderKind.healthOrSurvivorDamage;
                                                                 enforcementCalculationKind(damageOrder) <- EnforcementCalculationKind.fixedAmount;
-                                                                enforcementStatus(damageOrder) <- EnforcementOrderStatus.active;
+                                                                enforcementNumber(damageOrder) <- 'ENF-DAMAGE-1';
+                                                                enforcementDate(damageOrder) <- 2026_01_01;
                                                                 enforcementValidFrom(damageOrder) <- 2026_01_01;
                                                                 enforcementPriority(damageOrder) <- 1;
                                                                 enforcementFixedAmount(damageOrder) <- 50000.00;
+                                                                activateEnforcementOrder(damageOrder);
 
                                                                 NEW otherOrder = EnforcementOrder {
                                                                     enforcementOrganization(otherOrder) <- org;
                                                                     enforcementEmployee(otherOrder) <- worker;
                                                                     enforcementKind(otherOrder) <- EnforcementOrderKind.other;
                                                                     enforcementCalculationKind(otherOrder) <- EnforcementCalculationKind.fixedAmount;
-                                                                    enforcementStatus(otherOrder) <- EnforcementOrderStatus.active;
+                                                                    enforcementNumber(otherOrder) <- 'ENF-OTHER-1';
+                                                                    enforcementDate(otherOrder) <- 2026_01_01;
                                                                     enforcementValidFrom(otherOrder) <- 2026_01_01;
                                                                     enforcementPriority(otherOrder) <- 5;
                                                                     enforcementFixedAmount(otherOrder) <- 10000.00;
+                                                                    activateEnforcementOrder(otherOrder);
 
                                                                     NEW enforcement = EnforcementCalculationDocument {
                                                                         enforcementTaxCalculation(enforcement) <- taxes;

@@ -92,6 +92,7 @@ planningWorkflowTest() {
                                                         baseWorkedDays(baseLine) <- 20.00;
                                                         baseIncreaseCoefficient(baseLine) <- 1.000000;
                                                         baseIncluded(baseLine) <- TRUE;
+                                                        averageLifecycleTransition(average) <- TRUE;
                                                         averageStatus(average) <- AverageEarningsStatus.baseCollected;
                                                         calculateAverageEarnings(average);
                                                         approveBusinessTrip(trip);

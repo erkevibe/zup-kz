@@ -12,6 +12,11 @@ civilLiabilityGeneratedAt 'Сформирован' = DATA DATETIME (CivilLiabili
 civilLiabilityPaymentDate 'Дата перечисления' = DATA DATE (CivilLiabilityDocument);
 civilLiabilityBankReference 'Банковская ссылка' = DATA STRING[100] (CivilLiabilityDocument);
 civilLiabilityPaidAt 'Перечислен' = DATA DATETIME (CivilLiabilityDocument);
+civilLiabilityLifecycleTransition = DATA LOCAL BOOLEAN (CivilLiabilityDocument);
+
+CONSTRAINT CHANGED(civilLiabilityStatus(CivilLiabilityDocument d)) AND
+           PREV(civilLiabilityStatus(d)) AND NOT civilLiabilityLifecycleTransition(d)
+    MESSAGE 'Статус обязательных платежей ГПХ изменяется только штатными действиями';
 
 activeCivilLiabilityCount(CivilContractAct act) = GROUP SUM 1 IF
     civilLiabilityAct(CivilLiabilityDocument d) == act AND
@@ -78,6 +83,7 @@ generateCivilLiabilities 'Сформировать платежи' (CivilLiabili
                 civilLiabilityLineLegalSource(line) <- liabilityLegalSource(kind);
             }
         }
+        civilLiabilityLifecycleTransition(d) <- TRUE;
         civilLiabilityStatus(d) <- PayrollLiabilityStatus.calculated;
         civilLiabilityGeneratedAt(d) <- currentDateTime();
         APPLY;
@@ -99,6 +105,7 @@ approveCivilLiabilities 'Утвердить' (CivilLiabilityDocument d) {
        NOT civilLiabilityLineCount(d) THEN
         MESSAGE 'Сначала сформируйте обязательные платежи ГПХ';
     ELSE {
+        civilLiabilityLifecycleTransition(d) <- TRUE;
         civilLiabilityStatus(d) <- PayrollLiabilityStatus.approved;
         APPLY;
     }
@@ -110,6 +117,7 @@ markCivilLiabilitiesPaid 'Отметить перечисленными' (CivilL
     ELSE IF NOT civilLiabilityPaymentDate(d) OR NOT civilLiabilityBankReference(d) THEN
         MESSAGE 'Укажите дату перечисления и банковскую ссылку';
     ELSE {
+        civilLiabilityLifecycleTransition(d) <- TRUE;
         civilLiabilityStatus(d) <- PayrollLiabilityStatus.paid;
         civilLiabilityPaidAt(d) <- currentDateTime();
         APPLY;
@@ -118,10 +126,11 @@ markCivilLiabilitiesPaid 'Отметить перечисленными' (CivilL
 
 FORM civilLiabilityDocuments 'Перечисление обязательных платежей ГПХ'
     OBJECTS d = CivilLiabilityDocument
-    PROPERTIES(d) civilLiabilityAct, civilLiabilityNumber, civilLiabilityStatus,
-                  civilLiabilityGeneratedAt, civilLiabilityPaymentDate,
-                  civilLiabilityBankReference, civilLiabilityPaidAt,
+    PROPERTIES(d) civilLiabilityAct, civilLiabilityNumber, civilLiabilityPaymentDate,
+                  civilLiabilityBankReference,
                   totalCivilLiability, overdueCivilLiabilityCount
+    PROPERTIES(d) READONLY civilLiabilityStatus, civilLiabilityGeneratedAt,
+                           civilLiabilityPaidAt
     PROPERTIES(d) generateCivilLiabilities, approveCivilLiabilities,
                   markCivilLiabilitiesPaid
 ;

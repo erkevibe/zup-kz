@@ -40,6 +40,7 @@ tripApprovedAt 'Утверждена' = DATA DATETIME (BusinessTripDocument);
 tripApprovedBy 'Кем утверждена' = DATA CustomUser (BusinessTripDocument);
 tripCancelledAt 'Отменена' = DATA DATETIME (BusinessTripDocument);
 tripCancelledBy 'Кем отменена' = DATA CustomUser (BusinessTripDocument);
+tripLifecycleTransition = DATA LOCAL BOOLEAN (BusinessTripDocument);
 
 CONSTRAINT tripDateTo(BusinessTripDocument d) < tripDateFrom(d)
     MESSAGE 'Окончание командировки не может быть раньше начала';
@@ -65,6 +66,9 @@ CONSTRAINT (CHANGED(tripNumber(BusinessTripDocument d)) OR
             CHANGED(tripCalendar(d)) OR CHANGED(tripWorkWeek(d))) AND
            PREV(tripStatus(d)) != BusinessTripStatus.draft
     MESSAGE 'Нельзя изменить утверждённую или отменённую командировку';
+CONSTRAINT CHANGED(tripStatus(BusinessTripDocument d)) AND PREV(tripStatus(d)) AND
+           NOT tripLifecycleTransition(d)
+    MESSAGE 'Статус командировки изменяется только штатными действиями';
 
 tripOrganization(BusinessTripDocument d) = organization(employment(tripAssignment(d)));
 tripEmployee(BusinessTripDocument d) = employee(employment(tripAssignment(d)));
@@ -130,6 +134,7 @@ approveBusinessTrip 'Утвердить командировку' (BusinessTripD
             approvedSickTripOverlapCount(d) THEN
         MESSAGE 'Период пересекается с другой командировкой, отпуском или больничным';
     ELSE {
+        tripLifecycleTransition(d) <- TRUE;
         tripStatus(d) <- BusinessTripStatus.approved;
         tripApprovedAt(d) <- currentDateTime();
         tripApprovedBy(d) <- currentUser() AS CustomUser;
@@ -220,6 +225,7 @@ cancelBusinessTrip 'Отменить командировку' (BusinessTripDocu
             employerAct(l) <- NULL;
         }
         DELETE TimesheetLine l WHERE lineBusinessTrip(l) == d AND businessTripCreatedLine(l);
+        tripLifecycleTransition(d) <- TRUE;
         tripStatus(d) <- BusinessTripStatus.cancelled;
         tripCancelledAt(d) <- currentDateTime();
         tripCancelledBy(d) <- currentUser() AS CustomUser;
@@ -235,8 +241,9 @@ FORM businessTrips 'Командировки'
                   tripPurpose, tripBasis, tripCalendar, tripWorkWeek,
                   tripAverageEarnings, tripPreservedPay, tripTimesheet,
                   tripDailyAllowanceRate, tripDailyAllowance, tripTravelAdvance,
-                  tripAccommodationAdvance, tripOtherAdvance, tripAdvanceTotal, tripStatus
-    PROPERTIES(d) READONLY tripApprovedAt, tripApprovedBy, tripCancelledAt, tripCancelledBy
+                  tripAccommodationAdvance, tripOtherAdvance, tripAdvanceTotal
+    PROPERTIES(d) READONLY tripStatus, tripApprovedAt, tripApprovedBy,
+                           tripCancelledAt, tripCancelledBy
     PROPERTIES(d) prepareAverageForTrip, approveBusinessTrip,
                   fillTripTimesheet, cancelBusinessTrip
 ;

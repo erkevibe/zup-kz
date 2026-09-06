@@ -50,6 +50,7 @@ leaveWorkflowTest() {
                                     leaveBasis(annualLeave) <- 'График отпусков';
                                     leaveStatus(annualLeave) <- LeaveStatus.draft;
                                     prepareAverageForLeave(annualLeave);
+                                    averageLifecycleTransition(average) <- TRUE;
                                     averageStatus(average) <- AverageEarningsStatus.baseCollected;
                                     calculateAverageEarnings(average);
                                     approveLeave(annualLeave);

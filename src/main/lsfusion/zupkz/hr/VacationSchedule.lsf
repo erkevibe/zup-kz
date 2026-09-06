@@ -26,12 +26,16 @@ vacationScheduleApprovedAt 'Утверждён' = DATA DATETIME (VacationSchedul
 vacationScheduleApprovedBy 'Кем утверждён' = DATA CustomUser (VacationSchedule);
 vacationScheduleCancelledAt 'Отменён' = DATA DATETIME (VacationSchedule);
 vacationScheduleCancelledBy 'Кем отменён' = DATA CustomUser (VacationSchedule);
+vacationScheduleLifecycleTransition = DATA LOCAL BOOLEAN (VacationSchedule);
 
 CONSTRAINT (CHANGED(vacationScheduleOrganization(VacationSchedule s)) OR
             CHANGED(vacationScheduleNumber(s)) OR CHANGED(vacationScheduleDate(s)) OR
             CHANGED(vacationScheduleYear(s)) OR CHANGED(vacationScheduleCalendar(s))) AND
            PREV(vacationScheduleStatus(s)) != VacationScheduleStatus.draft
     MESSAGE 'Нельзя изменить утверждённый или отменённый график отпусков';
+CONSTRAINT CHANGED(vacationScheduleStatus(VacationSchedule s)) AND
+           PREV(vacationScheduleStatus(s)) AND NOT vacationScheduleLifecycleTransition(s)
+    MESSAGE 'Статус графика отпусков изменяется только штатными действиями';
 
 CLASS VacationScheduleLine 'Строка графика отпусков';
 
@@ -117,6 +121,7 @@ approveVacationSchedule 'Утвердить график' (VacationSchedule s) {
     ELSE IF invalidVacationScheduleLineCount(s) THEN
         MESSAGE 'Заполните обязательные реквизиты всех строк графика';
     ELSE {
+        vacationScheduleLifecycleTransition(s) <- TRUE;
         vacationScheduleStatus(s) <- VacationScheduleStatus.approved;
         vacationScheduleApprovedAt(s) <- currentDateTime();
         vacationScheduleApprovedBy(s) <- currentUser() AS CustomUser;
@@ -130,6 +135,7 @@ cancelVacationSchedule 'Отменить график' (VacationSchedule s) {
     ELSE IF activeScheduledLeaveCount(s) THEN
         MESSAGE 'Нельзя отменить график, по которому созданы действующие отпуска';
     ELSE {
+        vacationScheduleLifecycleTransition(s) <- TRUE;
         vacationScheduleStatus(s) <- VacationScheduleStatus.cancelled;
         vacationScheduleCancelledAt(s) <- currentDateTime();
         vacationScheduleCancelledBy(s) <- currentUser() AS CustomUser;
@@ -162,9 +168,9 @@ createLeaveFromSchedule 'Создать отпуск' (VacationScheduleLine l) {
 FORM vacationSchedules 'Графики отпусков'
     OBJECTS s = VacationSchedule
     PROPERTIES(s) vacationScheduleOrganization, vacationScheduleNumber,
-                  vacationScheduleDate, vacationScheduleYear, vacationScheduleCalendar,
-                  vacationScheduleStatus
-    PROPERTIES(s) READONLY vacationScheduleApprovedAt, vacationScheduleApprovedBy,
+                  vacationScheduleDate, vacationScheduleYear, vacationScheduleCalendar
+    PROPERTIES(s) READONLY vacationScheduleStatus, vacationScheduleApprovedAt,
+                           vacationScheduleApprovedBy,
                            vacationScheduleCancelledAt, vacationScheduleCancelledBy
     PROPERTIES(s) approveVacationSchedule, cancelVacationSchedule
 ;

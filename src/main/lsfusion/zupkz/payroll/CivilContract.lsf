@@ -23,9 +23,13 @@ civilContractTo 'Окончание работ' = DATA DATE (CivilContract);
 civilContractSubject 'Предмет договора' = DATA STRING[500] (CivilContract);
 civilContractAmount 'Сумма договора' = DATA NUMERIC[18,2] (CivilContract);
 civilContractStatus 'Статус' = DATA CivilContractStatus (CivilContract);
+civilContractLifecycleTransition = DATA LOCAL BOOLEAN (CivilContract);
 
 CONSTRAINT civilContractTo(CivilContract c) < civilContractFrom(c)
     MESSAGE 'Окончание договора ГПХ не может быть раньше начала';
+CONSTRAINT CHANGED(civilContractStatus(CivilContract c)) AND PREV(civilContractStatus(c)) AND
+           NOT civilContractLifecycleTransition(c)
+    MESSAGE 'Статус договора ГПХ изменяется только штатными действиями';
 
 CLASS CivilContractActStatus 'Статус акта ГПХ' {
     draft 'Черновик',
@@ -47,6 +51,11 @@ civilActApprovedAt 'Утверждён' = DATA DATETIME (CivilContractAct);
 civilActPaymentDate 'Дата выплаты' = DATA DATE (CivilContractAct);
 civilActPaymentReference 'Платёжный документ' = DATA STRING[100] (CivilContractAct);
 civilActPaidAt 'Выплачен' = DATA DATETIME (CivilContractAct);
+civilActLifecycleTransition = DATA LOCAL BOOLEAN (CivilContractAct);
+
+CONSTRAINT CHANGED(civilActStatus(CivilContractAct a)) AND PREV(civilActStatus(a)) AND
+           NOT civilActLifecycleTransition(a)
+    MESSAGE 'Статус акта ГПХ изменяется только штатными действиями';
 
 // Снимок законодательства и результата защищает уже утверждённый расчёт от
 // последующего изменения ставок в справочнике.
@@ -190,6 +199,41 @@ duplicateCivilActCount(CivilContractAct a) = GROUP SUM 1 IF
     civilActContract(CivilContractAct other) == civilActContract(a) AND
     civilActNumber(other) == civilActNumber(a);
 
+activateCivilContract 'Активировать договор' (CivilContract c) {
+    IF civilContractStatus(c) AND civilContractStatus(c) != CivilContractStatus.draft THEN
+        MESSAGE 'Активировать можно только черновик договора';
+    ELSE IF NOT civilContractOrganization(c) OR NOT civilContractContractor(c) OR
+            NOT civilContractNumber(c) OR NOT civilContractDate(c) OR
+            NOT civilContractFrom(c) OR NOT civilContractTo(c) OR
+            NOT civilContractSubject(c) OR civilContractAmount(c) <= 0.00 THEN
+        MESSAGE 'Заполните реквизиты договора и положительную сумму';
+    ELSE {
+        civilContractLifecycleTransition(c) <- TRUE;
+        civilContractStatus(c) <- CivilContractStatus.active;
+        APPLY;
+    }
+}
+
+closeCivilContract 'Закрыть договор' (CivilContract c) {
+    IF civilContractStatus(c) != CivilContractStatus.active THEN
+        MESSAGE 'Закрыть можно только действующий договор';
+    ELSE {
+        civilContractLifecycleTransition(c) <- TRUE;
+        civilContractStatus(c) <- CivilContractStatus.closed;
+        APPLY;
+    }
+}
+
+cancelCivilContract 'Отменить договор' (CivilContract c) {
+    IF civilContractStatus(c) AND civilContractStatus(c) != CivilContractStatus.draft THEN
+        MESSAGE 'Отменить можно только черновик договора';
+    ELSE {
+        civilContractLifecycleTransition(c) <- TRUE;
+        civilContractStatus(c) <- CivilContractStatus.cancelled;
+        APPLY;
+    }
+}
+
 calculateCivilAct 'Рассчитать акт' (CivilContractAct a) {
     IF civilActStatus(a) AND civilActStatus(a) != CivilContractActStatus.draft THEN
         MESSAGE 'Акт уже рассчитан';
@@ -252,6 +296,7 @@ calculateCivilAct 'Рассчитать акт' (CivilContractAct a) {
             taxLedgerIpn(e) <- civilActIpn(a);
             civilActTaxLedgerEntry(a) <- e;
         }
+        civilActLifecycleTransition(a) <- TRUE;
         civilActStatus(a) <- CivilContractActStatus.calculated;
         civilActCalculatedAt(a) <- currentDateTime();
         APPLY;
@@ -260,6 +305,7 @@ calculateCivilAct 'Рассчитать акт' (CivilContractAct a) {
 
 approveCivilAct 'Утвердить акт' (CivilContractAct a) {
     IF civilActStatus(a) == CivilContractActStatus.calculated THEN {
+        civilActLifecycleTransition(a) <- TRUE;
         civilActStatus(a) <- CivilContractActStatus.approved;
         civilActApprovedAt(a) <- currentDateTime();
         APPLY;
@@ -284,6 +330,7 @@ cancelCivilAct 'Отменить и сторнировать' (CivilContractAct 
             taxLedgerReversalOf(reversal) <- civilActTaxLedgerEntry(a);
             civilActTaxReversalLedgerEntry(a) <- reversal;
         }
+        civilActLifecycleTransition(a) <- TRUE;
         civilActStatus(a) <- CivilContractActStatus.cancelled;
         APPLY;
     }
@@ -297,6 +344,7 @@ markCivilActPaid 'Отметить выплаченным' (CivilContractAct a) 
     ELSE IF civilActPaymentDate(a) < civilActDate(a) THEN
         MESSAGE 'Дата выплаты не может быть раньше даты акта';
     ELSE {
+        civilActLifecycleTransition(a) <- TRUE;
         civilActStatus(a) <- CivilContractActStatus.paid;
         civilActPaidAt(a) <- currentDateTime();
         APPLY;
@@ -307,20 +355,22 @@ FORM civilContracts 'Договоры ГПХ'
     OBJECTS c = CivilContract
     PROPERTIES(c) civilContractOrganization, civilContractContractor,
                   civilContractNumber, civilContractDate, civilContractFrom,
-                  civilContractTo, civilContractSubject, civilContractAmount,
-                  civilContractStatus
+                  civilContractTo, civilContractSubject, civilContractAmount
+    PROPERTIES(c) READONLY civilContractStatus
+    PROPERTIES(c) activateCivilContract, closeCivilContract, cancelCivilContract
 ;
 
 FORM civilContractActs 'Акты ГПХ'
     OBJECTS a = CivilContractAct
     PROPERTIES(a) civilActContract, civilActNumber, civilActDate,
-                  civilActGrossIncome, civilActStatus, civilActCalculatedAt,
-                  civilActApprovedAt, civilActPaymentDate, civilActPaymentReference,
-                  civilActPaidAt, civilActResident, civilActCategoryCodes,
+                  civilActGrossIncome, civilActPaymentDate, civilActPaymentReference,
+                  civilActResident, civilActCategoryCodes,
                   civilActOpvBase, civilActOpv, civilActVosmsBase, civilActVosms,
                   civilActSoBase, civilActSo, civilActBasicDeduction,
                   civilActSocialDeduction, civilActDeductionCodes,
                   civilActTaxableIncome, civilActIpnThreshold, civilActIpnBaseRate,
                   civilActIpnHighRate, civilActIpn, civilActPayable
+    PROPERTIES(a) READONLY civilActStatus, civilActCalculatedAt,
+                           civilActApprovedAt, civilActPaidAt
     PROPERTIES(a) calculateCivilAct, approveCivilAct, cancelCivilAct, markCivilActPaid
 ;

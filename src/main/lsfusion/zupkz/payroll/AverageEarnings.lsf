@@ -40,6 +40,7 @@ averageEventCalendarDays 'Календарных дней события' = DATA
 averageDailyHours 'Среднедневных рабочих часов' = DATA NUMERIC[10,6] (AverageEarningsDocument);
 averageStatus 'Статус' = DATA AverageEarningsStatus (AverageEarningsDocument);
 averageCalculatedAt 'Рассчитан' = DATA DATETIME (AverageEarningsDocument);
+averageLifecycleTransition = DATA LOCAL BOOLEAN (AverageEarningsDocument);
 averageLegalSource 'Нормативное основание' (AverageEarningsDocument d) =
     legalSourceByCode('AVERAGE_WAGE_RULES_908');
 
@@ -47,6 +48,9 @@ CONSTRAINT averageEventTo(AverageEarningsDocument d) < averageEventFrom(d)
     MESSAGE 'Окончание события не может быть раньше начала';
 CONSTRAINT averagePeriodTo(AverageEarningsDocument d) < averagePeriodFrom(d)
     MESSAGE 'Окончание расчётного периода не может быть раньше начала';
+CONSTRAINT CHANGED(averageStatus(AverageEarningsDocument d)) AND PREV(averageStatus(d)) AND
+           NOT averageLifecycleTransition(d)
+    MESSAGE 'Статус среднего заработка изменяется только штатными действиями';
 
 CLASS AverageEarningsBaseLine 'Строка базы среднего заработка';
 
@@ -130,6 +134,7 @@ collectAverageBase 'Собрать базу' (AverageEarningsDocument d) {
                 baseIncluded(l) <- TRUE;
             }
         }
+        averageLifecycleTransition(d) <- TRUE;
         averageStatus(d) <- AverageEarningsStatus.baseCollected;
         APPLY;
     }
@@ -143,6 +148,7 @@ calculateAverageEarnings 'Рассчитать' (AverageEarningsDocument d) {
     ELSE IF NOT averagePayable(d) THEN
         MESSAGE 'Нет отработанных дней/часов или единиц события';
     ELSE {
+        averageLifecycleTransition(d) <- TRUE;
         averageStatus(d) <- AverageEarningsStatus.calculated;
         averageCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -154,9 +160,10 @@ FORM averageEarningsDocuments 'Средний заработок'
     PROPERTIES(d) averageNumber, averageAssignment, averageEventKind, averageMode,
                   averageEventFrom, averageEventTo, averagePeriodFrom, averagePeriodTo,
                   averageEventWorkDays, averageEventWorkHours, averageEventCalendarDays,
-                  averageDailyHours, averageStatus, averageCalculatedAt, averageLegalSource,
+                  averageDailyHours, averageLegalSource,
                   totalAverageEarnings, totalAverageWorkedDays, totalAverageWorkedHours,
                   averageDaily, averageHourly, averagePayable
+    PROPERTIES(d) READONLY averageStatus, averageCalculatedAt
     PROPERTIES(d) collectAverageBase, calculateAverageEarnings
 ;
 

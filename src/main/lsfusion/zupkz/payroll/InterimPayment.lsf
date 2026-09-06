@@ -31,6 +31,11 @@ interimPaymentManualDueDate 'Срок оплаты вручную' = DATA DATE (
 interimPaymentPaidDate 'Дата оплаты' = DATA DATE (InterimPayment);
 interimPaymentReason 'Основание' = DATA STRING[500] (InterimPayment);
 interimPaymentStatus 'Статус' = DATA InterimPaymentStatus (InterimPayment);
+interimPaymentLifecycleTransition = DATA LOCAL BOOLEAN (InterimPayment);
+
+CONSTRAINT CHANGED(interimPaymentStatus(InterimPayment p)) AND
+           PREV(interimPaymentStatus(p)) AND NOT interimPaymentLifecycleTransition(p)
+    MESSAGE 'Статус межрасчётной выплаты изменяется только штатными действиями';
 
 CONSTRAINT interimPaymentLeave(InterimPayment p) AND
            leaveAssignment(interimPaymentLeave(p)) != interimPaymentAssignment(p)
@@ -73,6 +78,7 @@ cancelLeave 'Отменить отпуск' (LeaveDocument l) {
     ELSE IF activeInterimPaymentForLeaveCount(l) THEN
         MESSAGE 'Нельзя отменить отпуск, уже включённый в межрасчётную выплату';
     ELSE {
+        leaveLifecycleTransition(l) <- TRUE;
         leaveStatus(l) <- LeaveStatus.cancelled;
         leaveCancelledAt(l) <- currentDateTime();
         leaveCancelledBy(l) <- currentUser() AS CustomUser;
@@ -101,6 +107,7 @@ cancelSickLeave 'Отменить больничный' (SickLeaveDocument d) {
     ELSE IF activeInterimPaymentForSickLeaveCount(d) THEN
         MESSAGE 'Нельзя отменить больничный, уже включённый в межрасчётную выплату';
     ELSE {
+        sickLeaveLifecycleTransition(d) <- TRUE;
         sickLeaveStatus(d) <- SickLeaveStatus.cancelled;
         sickLeaveCancelledAt(d) <- currentDateTime();
         sickLeaveCancelledBy(d) <- currentUser() AS CustomUser;
@@ -130,6 +137,7 @@ calculateInterimPayment 'Рассчитать' (InterimPayment p) {
             NOT interimPaymentDueDate(p) THEN
         MESSAGE 'Не заданы положительная сумма или срок оплаты';
     ELSE {
+        interimPaymentLifecycleTransition(p) <- TRUE;
         interimPaymentStatus(p) <- InterimPaymentStatus.calculated;
         APPLY;
     }
@@ -137,6 +145,7 @@ calculateInterimPayment 'Рассчитать' (InterimPayment p) {
 
 approveInterimPayment 'Утвердить' (InterimPayment p) {
     IF interimPaymentStatus(p) == InterimPaymentStatus.calculated THEN {
+        interimPaymentLifecycleTransition(p) <- TRUE;
         interimPaymentStatus(p) <- InterimPaymentStatus.approved;
         APPLY;
     } ELSE
@@ -149,6 +158,7 @@ markInterimPaymentPaid 'Отметить оплаченной' (InterimPayment p
     ELSE IF NOT interimPaymentPaidDate(p) THEN
         MESSAGE 'Заполните дату оплаты';
     ELSE {
+        interimPaymentLifecycleTransition(p) <- TRUE;
         interimPaymentStatus(p) <- InterimPaymentStatus.paid;
         APPLY;
     }
@@ -160,7 +170,7 @@ FORM interimPayments 'Межрасчётные выплаты'
                   interimPaymentKind, interimPaymentLeave, interimPaymentSickLeave,
                   interimPaymentManualAmount,
                   interimPaymentGross, interimPaymentManualDueDate, interimPaymentDueDate,
-                  interimPaymentPaidDate, interimPaymentOnTime, interimPaymentReason,
-                  interimPaymentStatus
+                  interimPaymentPaidDate, interimPaymentOnTime, interimPaymentReason
+    PROPERTIES(p) READONLY interimPaymentStatus
     PROPERTIES(p) calculateInterimPayment, approveInterimPayment, markInterimPaymentPaid
 ;

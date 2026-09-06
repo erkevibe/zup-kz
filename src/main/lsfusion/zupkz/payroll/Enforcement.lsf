@@ -31,6 +31,7 @@ enforcementEmployee 'Сотрудник' = DATA Employee (EnforcementOrder);
 enforcementKind 'Вид требования' = DATA EnforcementOrderKind (EnforcementOrder);
 enforcementCalculationKind 'Способ расчёта' = DATA EnforcementCalculationKind (EnforcementOrder);
 enforcementStatus 'Статус' = DATA EnforcementOrderStatus (EnforcementOrder);
+enforcementLifecycleTransition = DATA LOCAL BOOLEAN (EnforcementOrder);
 enforcementNumber 'Номер документа' = DATA STRING[80] (EnforcementOrder);
 enforcementDate 'Дата документа' = DATA DATE (EnforcementOrder);
 enforcementValidFrom 'Удерживать с' = DATA DATE (EnforcementOrder);
@@ -56,6 +57,9 @@ CONSTRAINT enforcementPercent(EnforcementOrder o) < 0.000000 OR enforcementPerce
     MESSAGE 'Доля удержания должна быть от 0 до 100 процентов';
 CONSTRAINT enforcementFixedAmount(EnforcementOrder o) < 0.00 OR enforcementRemainingDebt(o) < 0.00
     MESSAGE 'Сумма взыскания и остаток задолженности не могут быть отрицательными';
+CONSTRAINT CHANGED(enforcementStatus(EnforcementOrder o)) AND PREV(enforcementStatus(o)) AND
+           NOT enforcementLifecycleTransition(o)
+    MESSAGE 'Статус исполнительного документа изменяется только штатными действиями';
 
 protectedMinimumException(EnforcementOrder o) =
     enforcementKind(o) == EnforcementOrderKind.alimony OR
@@ -72,6 +76,13 @@ CLASS EnforcementCalculationDocument 'Расчёт исполнительных 
 enforcementTaxCalculation 'Расчёт налогов' = DATA TaxCalculationDocument (EnforcementCalculationDocument);
 enforcementCalculationStatus 'Статус' = DATA EnforcementCalculationStatus (EnforcementCalculationDocument);
 enforcementCalculatedAt 'Рассчитан' = DATA DATETIME (EnforcementCalculationDocument);
+enforcementCalculationLifecycleTransition =
+    DATA LOCAL BOOLEAN (EnforcementCalculationDocument);
+
+CONSTRAINT CHANGED(enforcementCalculationStatus(EnforcementCalculationDocument d)) AND
+           PREV(enforcementCalculationStatus(d)) AND
+           NOT enforcementCalculationLifecycleTransition(d)
+    MESSAGE 'Статус расчёта взысканий изменяется только штатными действиями';
 
 enforcementPayrollRun(EnforcementCalculationDocument d) =
     taxCalculationPayrollRun(enforcementTaxCalculation(d));
@@ -180,6 +191,42 @@ activeEnforcementOrder(EnforcementCalculationDocument d, EnforcementOrder o) =
     enforcementValidFrom(o) <= enforcementCalculationDate(d) AND
     (NOT enforcementValidTo(o) OR enforcementValidTo(o) >= enforcementCalculationDate(d));
 
+activateEnforcementOrder 'Активировать' (EnforcementOrder o) {
+    IF enforcementStatus(o) == EnforcementOrderStatus.closed THEN
+        MESSAGE 'Завершённый исполнительный документ нельзя активировать';
+    ELSE IF NOT enforcementOrganization(o) OR NOT enforcementEmployee(o) OR
+            NOT enforcementKind(o) OR NOT enforcementCalculationKind(o) OR
+            NOT enforcementNumber(o) OR NOT enforcementDate(o) OR
+            NOT enforcementValidFrom(o) OR NOT enforcementPriority(o) THEN
+        MESSAGE 'Заполните обязательные реквизиты исполнительного документа';
+    ELSE {
+        enforcementLifecycleTransition(o) <- TRUE;
+        enforcementStatus(o) <- EnforcementOrderStatus.active;
+        APPLY;
+    }
+}
+
+suspendEnforcementOrder 'Приостановить' (EnforcementOrder o) {
+    IF enforcementStatus(o) != EnforcementOrderStatus.active THEN
+        MESSAGE 'Приостановить можно только действующий документ';
+    ELSE {
+        enforcementLifecycleTransition(o) <- TRUE;
+        enforcementStatus(o) <- EnforcementOrderStatus.suspended;
+        APPLY;
+    }
+}
+
+closeEnforcementOrder 'Завершить' (EnforcementOrder o) {
+    IF enforcementStatus(o) != EnforcementOrderStatus.active AND
+       enforcementStatus(o) != EnforcementOrderStatus.suspended THEN
+        MESSAGE 'Завершить можно только действующий или приостановленный документ';
+    ELSE {
+        enforcementLifecycleTransition(o) <- TRUE;
+        enforcementStatus(o) <- EnforcementOrderStatus.closed;
+        APPLY;
+    }
+}
+
 calculateEnforcement 'Рассчитать' (EnforcementCalculationDocument d) {
     IF enforcementCalculationStatus(d) AND
        enforcementCalculationStatus(d) != EnforcementCalculationStatus.draft THEN
@@ -201,6 +248,7 @@ calculateEnforcement 'Рассчитать' (EnforcementCalculationDocument d) {
             enforcementRequestedAmount(l) <- debtLimitedEnforcementRequest(l);
         FOR enforcementCalculationDocument(EnforcementCalculationLine l) == d DO
             enforcementWithheldAmount(l) <- calculatedEnforcementWithholding(l);
+        enforcementCalculationLifecycleTransition(d) <- TRUE;
         enforcementCalculationStatus(d) <- EnforcementCalculationStatus.calculated;
         enforcementCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -209,6 +257,7 @@ calculateEnforcement 'Рассчитать' (EnforcementCalculationDocument d) {
 
 approveEnforcement 'Утвердить' (EnforcementCalculationDocument d) {
     IF enforcementCalculationStatus(d) == EnforcementCalculationStatus.calculated THEN {
+        enforcementCalculationLifecycleTransition(d) <- TRUE;
         enforcementCalculationStatus(d) <- EnforcementCalculationStatus.approved;
         APPLY;
     } ELSE
@@ -228,19 +277,21 @@ payableAfterEnforcement 'К выплате после взысканий' (Enfor
 FORM enforcementOrders 'Исполнительные документы'
     OBJECTS o = EnforcementOrder
     PROPERTIES(o) enforcementOrganization, enforcementEmployee, enforcementKind,
-                  enforcementCalculationKind, enforcementStatus, enforcementNumber,
+                  enforcementCalculationKind, enforcementNumber,
                   enforcementDate, enforcementValidFrom, enforcementValidTo,
                   enforcementPriority, enforcementPercent, enforcementFixedAmount,
                   enforcementChildCount, enforcementRemainingDebt,
                   enforcementRecipient, enforcementRecipientIin, enforcementRecipientIban,
                   enforcementOfficer, enforcementProceedingNumber,
                   enforcementBasis, enforcementLegalSource
+    PROPERTIES(o) READONLY enforcementStatus
+    PROPERTIES(o) activateEnforcementOrder, suspendEnforcementOrder, closeEnforcementOrder
 ;
 
 FORM enforcementCalculationDocuments 'Расчёт исполнительных удержаний'
     OBJECTS d = EnforcementCalculationDocument
-    PROPERTIES(d) enforcementTaxCalculation, enforcementCalculationStatus,
-                  enforcementCalculatedAt, totalEnforcementWithheld, payableAfterEnforcement
+    PROPERTIES(d) enforcementTaxCalculation, totalEnforcementWithheld, payableAfterEnforcement
+    PROPERTIES(d) READONLY enforcementCalculationStatus, enforcementCalculatedAt
     PROPERTIES(d) calculateEnforcement, approveEnforcement
 ;
 

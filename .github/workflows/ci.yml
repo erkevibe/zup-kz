@@ -173,6 +173,21 @@ jobs:
                 insurancePolicySnapshotGuardTest \
                 workAccidentStatusGuardTest \
                 insuranceClaimStatusGuardTest \
+                leaveStatusGuardTest \
+                vacationScheduleStatusGuardTest \
+                tripStatusGuardTest \
+                averageStatusGuardTest \
+                civilContractStatusGuardTest \
+                civilActStatusGuardTest \
+                civilLiabilityStatusGuardTest \
+                enforcementOrderStatusGuardTest \
+                enforcementCalculationStatusGuardTest \
+                interimPaymentStatusGuardTest \
+                bankRegisterStatusGuardTest \
+                liabilityStatusGuardTest \
+                recalculationStatusGuardTest \
+                sickLeaveStatusGuardTest \
+                socialTransferStatusGuardTest \
                 lifecycleGuardVerificationTest; do
                 curl --fail --silent --show-error \
                   "http://localhost:7651/exec?action=ZUPKZ.${action}" \
@@ -202,6 +217,21 @@ jobs:
                 insurancePolicySnapshotGuardTest.json \
                 workAccidentStatusGuardTest.json \
                 insuranceClaimStatusGuardTest.json \
+                leaveStatusGuardTest.json \
+                vacationScheduleStatusGuardTest.json \
+                tripStatusGuardTest.json \
+                averageStatusGuardTest.json \
+                civilContractStatusGuardTest.json \
+                civilActStatusGuardTest.json \
+                civilLiabilityStatusGuardTest.json \
+                enforcementOrderStatusGuardTest.json \
+                enforcementCalculationStatusGuardTest.json \
+                interimPaymentStatusGuardTest.json \
+                bankRegisterStatusGuardTest.json \
+                liabilityStatusGuardTest.json \
+                recalculationStatusGuardTest.json \
+                sickLeaveStatusGuardTest.json \
+                socialTransferStatusGuardTest.json \
                 lifecycleGuardVerificationTest.json
 
               kill -TERM "$server_pid"

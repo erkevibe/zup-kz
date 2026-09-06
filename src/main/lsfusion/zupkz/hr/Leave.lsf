@@ -60,6 +60,7 @@ leaveApprovedAt 'Утверждён' = DATA DATETIME (LeaveDocument);
 leaveApprovedBy 'Кем утверждён' = DATA CustomUser (LeaveDocument);
 leaveCancelledAt 'Отменён' = DATA DATETIME (LeaveDocument);
 leaveCancelledBy 'Кем отменён' = DATA CustomUser (LeaveDocument);
+leaveLifecycleTransition = DATA LOCAL BOOLEAN (LeaveDocument);
 
 CONSTRAINT leaveDateTo(LeaveDocument l) < leaveDateFrom(l)
     MESSAGE 'Окончание отпуска не может быть раньше начала';
@@ -83,6 +84,9 @@ CONSTRAINT (CHANGED(leaveNumber(LeaveDocument l)) OR CHANGED(leaveOrderDate(l)) 
            (PREV(leaveStatus(l)) == LeaveStatus.approved OR
             PREV(leaveStatus(l)) == LeaveStatus.cancelled)
     MESSAGE 'Нельзя изменить утверждённый или отменённый отпуск';
+CONSTRAINT CHANGED(leaveStatus(LeaveDocument l)) AND PREV(leaveStatus(l)) AND
+           NOT leaveLifecycleTransition(l)
+    MESSAGE 'Статус отпуска изменяется только штатными действиями';
 
 annualPaidLeave(LeaveDocument l) = leaveKind(l) == LeaveKind.annualPaid OR
     leaveKind(l) == LeaveKind.annualAdditional;
@@ -181,6 +185,7 @@ approveLeave 'Утвердить отпуск' (LeaveDocument l) {
             averageStatus(leaveAverageEarnings(l)) != AverageEarningsStatus.calculated) THEN
         MESSAGE 'Рассчитайте средний заработок';
     ELSE {
+        leaveLifecycleTransition(l) <- TRUE;
         leaveStatus(l) <- LeaveStatus.approved;
         leaveApprovedAt(l) <- currentDateTime();
         leaveApprovedBy(l) <- currentUser() AS CustomUser;
@@ -201,7 +206,8 @@ FORM leaveDocuments 'Отпуска'
                   leaveDateFrom, leaveDateTo, leaveEntitlement, leaveCalendar,
                   leaveWorkWeek, leaveOutsideSchedule, leaveCalendarDays,
                   leaveChargedDays, leaveEventWorkDays, leavePaymentDueDate,
-                  leaveAverageEarnings, leaveGrossAmount, leaveBasis, leaveStatus
-    PROPERTIES(l) READONLY leaveApprovedAt, leaveApprovedBy, leaveCancelledAt, leaveCancelledBy
+                  leaveAverageEarnings, leaveGrossAmount, leaveBasis
+    PROPERTIES(l) READONLY leaveStatus, leaveApprovedAt, leaveApprovedBy,
+                           leaveCancelledAt, leaveCancelledBy
     PROPERTIES(l) prepareAverageForLeave, approveLeave
 ;

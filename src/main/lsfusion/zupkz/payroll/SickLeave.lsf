@@ -54,6 +54,7 @@ sickLeaveApprovedAt 'Утверждён' = DATA DATETIME (SickLeaveDocument);
 sickLeaveApprovedBy 'Кем утверждён' = DATA CustomUser (SickLeaveDocument);
 sickLeaveCancelledAt 'Отменён' = DATA DATETIME (SickLeaveDocument);
 sickLeaveCancelledBy 'Кем отменён' = DATA CustomUser (SickLeaveDocument);
+sickLeaveLifecycleTransition = DATA LOCAL BOOLEAN (SickLeaveDocument);
 sickLeaveLegalSource 'Нормативное основание' (SickLeaveDocument d) =
     legalSourceByCode('SICK_LEAVE_RULES_907');
 
@@ -89,6 +90,9 @@ CONSTRAINT (CHANGED(sickLeaveNumber(SickLeaveDocument d)) OR
             PREV(sickLeaveStatus(d)) == SickLeaveStatus.approved OR
             PREV(sickLeaveStatus(d)) == SickLeaveStatus.cancelled)
     MESSAGE 'Нельзя изменить рассчитанный, утверждённый или отменённый больничный';
+CONSTRAINT CHANGED(sickLeaveStatus(SickLeaveDocument d)) AND PREV(sickLeaveStatus(d)) AND
+           NOT sickLeaveLifecycleTransition(d)
+    MESSAGE 'Статус больничного изменяется только штатными действиями';
 
 CLASS SickLeaveBenefitLine 'Помесячный расчёт больничного';
 
@@ -177,6 +181,7 @@ calculateSickLeave 'Рассчитать' (SickLeaveDocument d) {
     ELSE IF invalidSickBenefitLineCount(d) AND NOT sickLeaveExcluded(d) THEN
         MESSAGE 'Для каждой строки задайте рабочие дни или часы и действующий лимит';
     ELSE {
+        sickLeaveLifecycleTransition(d) <- TRUE;
         sickLeaveStatus(d) <- SickLeaveStatus.calculated;
         sickLeaveCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -189,6 +194,7 @@ approveSickLeave 'Утвердить' (SickLeaveDocument d) {
     ELSE IF approvedSickLeaveOverlapCount(d) THEN
         MESSAGE 'Период больничного пересекается с другим утверждённым больничным';
     ELSE {
+        sickLeaveLifecycleTransition(d) <- TRUE;
         sickLeaveStatus(d) <- SickLeaveStatus.approved;
         sickLeaveApprovedAt(d) <- currentDateTime();
         sickLeaveApprovedBy(d) <- currentUser() AS CustomUser;
@@ -203,9 +209,9 @@ FORM sickLeaveDocuments 'Больничные листы'
                   sickLeaveAverage, sickLeaveDuplicate, sickLeaveProductionActNumber,
                   sickLeaveVeteranExemption, sickLeaveDiplomaticAbroad,
                   sickLeaveExclusionReason, sickLeaveExcluded, sickLeaveCapExempt,
-                  sickLeaveStatus, sickLeaveCalculatedAt, sickLeaveLegalSource,
-                  sickLeaveGrossAmount
-    PROPERTIES(d) READONLY sickLeaveApprovedAt, sickLeaveApprovedBy,
+                  sickLeaveLegalSource, sickLeaveGrossAmount
+    PROPERTIES(d) READONLY sickLeaveStatus, sickLeaveCalculatedAt,
+                           sickLeaveApprovedAt, sickLeaveApprovedBy,
                            sickLeaveCancelledAt, sickLeaveCancelledBy
     PROPERTIES(d) calculateSickLeave, approveSickLeave
 ;

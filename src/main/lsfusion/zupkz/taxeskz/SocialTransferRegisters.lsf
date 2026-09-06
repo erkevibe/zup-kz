@@ -29,6 +29,11 @@ socialTransferSentAt 'Отправлен' = DATA DATETIME (SocialTransferRegiste
 socialTransferAcceptedAt 'Принят' = DATA DATETIME (SocialTransferRegister);
 socialTransferExternalId 'Идентификатор отправки' = DATA STRING[100] (SocialTransferRegister);
 socialTransferRejectionReason 'Причина отклонения' = DATA STRING[500] (SocialTransferRegister);
+socialTransferLifecycleTransition = DATA LOCAL BOOLEAN (SocialTransferRegister);
+
+CONSTRAINT CHANGED(socialTransferStatus(SocialTransferRegister r)) AND
+           PREV(socialTransferStatus(r)) AND NOT socialTransferLifecycleTransition(r)
+    MESSAGE 'Статус списка социальных платежей изменяется только штатными действиями';
 
 socialTransferPayrollRun(SocialTransferRegister r) =
     liabilityPayrollRun(socialTransferLiabilityDocument(r));
@@ -110,6 +115,7 @@ generateSocialTransferRegister 'Сформировать список' (SocialTr
                 socialTransferLineAmount(line) <- socialTransferAmount(settlement, socialTransferKind(r));
             }
         }
+        socialTransferLifecycleTransition(r) <- TRUE;
         socialTransferStatus(r) <- SocialTransferRegisterStatus.generated;
         socialTransferGeneratedAt(r) <- currentDateTime();
         APPLY;
@@ -135,6 +141,7 @@ approveSocialTransferRegister 'Утвердить список' (SocialTransferR
     ELSE IF socialTransferDifference(r) != 0.00 THEN
         MESSAGE 'Сумма списка не совпадает с обязательством';
     ELSE {
+        socialTransferLifecycleTransition(r) <- TRUE;
         socialTransferStatus(r) <- SocialTransferRegisterStatus.approved;
         socialTransferApprovedAt(r) <- currentDateTime();
         APPLY;
@@ -147,6 +154,7 @@ sendSocialTransferRegister 'Отметить отправленным' (SocialTr
     ELSE IF NOT socialTransferExternalId(r) THEN
         MESSAGE 'Укажите идентификатор отправки';
     ELSE {
+        socialTransferLifecycleTransition(r) <- TRUE;
         socialTransferStatus(r) <- SocialTransferRegisterStatus.sent;
         socialTransferSentAt(r) <- currentDateTime();
         APPLY;
@@ -157,6 +165,7 @@ acceptSocialTransferRegister 'Подтвердить принятие' (SocialTr
     IF socialTransferStatus(r) != SocialTransferRegisterStatus.sent THEN
         MESSAGE 'Принять можно только отправленный список';
     ELSE {
+        socialTransferLifecycleTransition(r) <- TRUE;
         socialTransferStatus(r) <- SocialTransferRegisterStatus.accepted;
         socialTransferAcceptedAt(r) <- currentDateTime();
         APPLY;
@@ -169,6 +178,7 @@ rejectSocialTransferRegister 'Отметить отклонённым' (SocialTr
     ELSE IF NOT socialTransferRejectionReason(r) THEN
         MESSAGE 'Укажите причину отклонения';
     ELSE {
+        socialTransferLifecycleTransition(r) <- TRUE;
         socialTransferStatus(r) <- SocialTransferRegisterStatus.rejected;
         APPLY;
     }
@@ -178,10 +188,12 @@ FORM socialTransferRegisters 'Персонифицированные списк�
     OBJECTS r = SocialTransferRegister
     PROPERTIES(r) socialTransferLiabilityDocument, socialTransferKind,
                   socialTransferRecipient, socialTransferNumber, socialTransferPeriod,
-                  socialTransferStatus, socialTransferGeneratedAt, socialTransferApprovedAt,
-                  socialTransferSentAt, socialTransferAcceptedAt, socialTransferExternalId,
+                  socialTransferExternalId,
                   socialTransferRejectionReason, expectedSocialTransferAmount,
                   totalSocialTransferAmount, socialTransferDifference
+    PROPERTIES(r) READONLY socialTransferStatus, socialTransferGeneratedAt,
+                           socialTransferApprovedAt, socialTransferSentAt,
+                           socialTransferAcceptedAt
     PROPERTIES(r) generateSocialTransferRegister, approveSocialTransferRegister,
                   sendSocialTransferRegister, acceptSocialTransferRegister,
                   rejectSocialTransferRegister

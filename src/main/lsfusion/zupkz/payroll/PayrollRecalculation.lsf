@@ -18,6 +18,11 @@ recalculationTargetRun 'Расчёт регистрации' = DATA PayrollRun (
 recalculationReason 'Причина' = DATA STRING[500] (PayrollRecalculation);
 recalculationStatus 'Статус' = DATA PayrollRecalculationStatus (PayrollRecalculation);
 recalculationCalculatedAt 'Рассчитан' = DATA DATETIME (PayrollRecalculation);
+recalculationLifecycleTransition = DATA LOCAL BOOLEAN (PayrollRecalculation);
+
+CONSTRAINT CHANGED(recalculationStatus(PayrollRecalculation d)) AND
+           PREV(recalculationStatus(d)) AND NOT recalculationLifecycleTransition(d)
+    MESSAGE 'Статус перерасчёта изменяется только штатными действиями';
 
 CLASS PayrollRecalculationLine 'Строка перерасчёта';
 
@@ -71,6 +76,7 @@ calculateRecalculation 'Рассчитать перерасчёт' (PayrollRecal
     ELSE IF NOT recalculationLineCount(d) OR invalidRecalculationLineCount(d) THEN
         MESSAGE 'Заполните исходные и исправленные суммы';
     ELSE {
+        recalculationLifecycleTransition(d) <- TRUE;
         recalculationStatus(d) <- PayrollRecalculationStatus.calculated;
         recalculationCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -98,6 +104,7 @@ postRecalculation 'Зарегистрировать в зарплате' (Payrol
                 lineRecalculationInput(l) <- i;
             }
         }
+        recalculationLifecycleTransition(d) <- TRUE;
         recalculationStatus(d) <- PayrollRecalculationStatus.approved;
         APPLY;
     }
@@ -107,8 +114,8 @@ FORM payrollRecalculations 'Перерасчёты зарплаты'
     OBJECTS d = PayrollRecalculation
     PROPERTIES(d) recalculationNumber, recalculationDate, recalculationOriginalRun,
                   recalculationTargetRun,
-                  recalculationReason, recalculationStatus, recalculationCalculatedAt,
-                  totalRecalculationDelta
+                  recalculationReason, totalRecalculationDelta
+    PROPERTIES(d) READONLY recalculationStatus, recalculationCalculatedAt
     PROPERTIES(d) calculateRecalculation, postRecalculation
 ;
 

@@ -31,6 +31,11 @@ bankRegisterSentAt 'Отправлен' = DATA DATETIME (SalaryBankRegister);
 bankRegisterAcceptedAt 'Принят банком' = DATA DATETIME (SalaryBankRegister);
 bankRegisterExternalId 'Идентификатор банка' = DATA STRING[100] (SalaryBankRegister);
 bankRegisterRejectionReason 'Причина отклонения' = DATA STRING[500] (SalaryBankRegister);
+bankRegisterLifecycleTransition = DATA LOCAL BOOLEAN (SalaryBankRegister);
+
+CONSTRAINT CHANGED(bankRegisterStatus(SalaryBankRegister r)) AND
+           PREV(bankRegisterStatus(r)) AND NOT bankRegisterLifecycleTransition(r)
+    MESSAGE 'Статус банковского реестра изменяется только штатными действиями';
 
 bankRegisterPayrollRun(SalaryBankRegister r) =
     paymentStatementPayrollRun(bankRegisterStatement(r));
@@ -87,6 +92,7 @@ generateBankRegister 'Сформировать реестр' (SalaryBankRegister
                 bankRegisterLinePurpose(l) <- 'Заработная плата за расчётный период';
             }
         }
+        bankRegisterLifecycleTransition(r) <- TRUE;
         bankRegisterStatus(r) <- BankRegisterStatus.generated;
         bankRegisterGeneratedAt(r) <- currentDateTime();
         APPLY;
@@ -99,6 +105,7 @@ sendBankRegister 'Отметить отправленным' (SalaryBankRegister
     ELSE IF NOT bankRegisterExternalId(r) THEN
         MESSAGE 'Укажите идентификатор отправки в банк';
     ELSE {
+        bankRegisterLifecycleTransition(r) <- TRUE;
         bankRegisterStatus(r) <- BankRegisterStatus.sent;
         bankRegisterSentAt(r) <- currentDateTime();
         APPLY;
@@ -111,6 +118,7 @@ acceptBankRegister 'Подтвердить исполнение банком' (S
     ELSE IF paymentStatementStatus(bankRegisterStatement(r)) != PaymentStatementStatus.approved THEN
         MESSAGE 'Связанная ведомость уже не ожидает исполнения';
     ELSE {
+        bankRegisterLifecycleTransition(r) <- TRUE;
         bankRegisterStatus(r) <- BankRegisterStatus.accepted;
         bankRegisterAcceptedAt(r) <- currentDateTime();
         APPLY;
@@ -124,6 +132,7 @@ rejectBankRegister 'Отметить отклонённым' (SalaryBankRegister
     ELSE IF NOT bankRegisterRejectionReason(r) THEN
         MESSAGE 'Укажите причину отклонения банка';
     ELSE {
+        bankRegisterLifecycleTransition(r) <- TRUE;
         bankRegisterStatus(r) <- BankRegisterStatus.rejected;
         APPLY;
     }
@@ -160,6 +169,11 @@ liabilityCalculatedAt 'Сформирован' = DATA DATETIME (PayrollLiability
 liabilityPaymentDate 'Дата перечисления' = DATA DATE (PayrollLiabilityDocument);
 liabilityBankReference 'Банковская ссылка' = DATA STRING[100] (PayrollLiabilityDocument);
 liabilityPaidAt 'Перечислен' = DATA DATETIME (PayrollLiabilityDocument);
+liabilityLifecycleTransition = DATA LOCAL BOOLEAN (PayrollLiabilityDocument);
+
+CONSTRAINT CHANGED(liabilityStatus(PayrollLiabilityDocument d)) AND
+           PREV(liabilityStatus(d)) AND NOT liabilityLifecycleTransition(d)
+    MESSAGE 'Статус обязательных платежей изменяется только штатными действиями';
 
 activeLiabilityDocumentCount(PayrollRun run) = GROUP SUM 1 IF
     liabilityPayrollRun(PayrollLiabilityDocument d) == run AND
@@ -224,6 +238,7 @@ generatePayrollLiabilities 'Сформировать обязательные п
                 liabilityLineLegalSource(l) <- liabilityLegalSource(kind);
             }
         }
+        liabilityLifecycleTransition(d) <- TRUE;
         liabilityStatus(d) <- PayrollLiabilityStatus.calculated;
         liabilityCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -244,6 +259,7 @@ approvePayrollLiabilities 'Утвердить' (PayrollLiabilityDocument d) {
     IF liabilityStatus(d) != PayrollLiabilityStatus.calculated OR NOT liabilityLineCount(d) THEN
         MESSAGE 'Сначала сформируйте обязательные платежи';
     ELSE {
+        liabilityLifecycleTransition(d) <- TRUE;
         liabilityStatus(d) <- PayrollLiabilityStatus.approved;
         APPLY;
     }
@@ -255,6 +271,7 @@ markPayrollLiabilitiesPaid 'Отметить перечисленными' (Payr
     ELSE IF NOT liabilityPaymentDate(d) OR NOT liabilityBankReference(d) THEN
         MESSAGE 'Укажите дату и банковскую ссылку платежа';
     ELSE {
+        liabilityLifecycleTransition(d) <- TRUE;
         liabilityStatus(d) <- PayrollLiabilityStatus.paid;
         liabilityPaidAt(d) <- currentDateTime();
         APPLY;
@@ -263,10 +280,11 @@ markPayrollLiabilitiesPaid 'Отметить перечисленными' (Payr
 
 FORM salaryBankRegisters 'Банковские реестры зарплаты'
     OBJECTS r = SalaryBankRegister
-    PROPERTIES(r) bankRegisterStatement, bankRegisterNumber, bankRegisterStatus,
-                  bankRegisterOrganization, bankRegisterGeneratedAt, bankRegisterSentAt,
-                  bankRegisterAcceptedAt, bankRegisterExternalId,
+    PROPERTIES(r) bankRegisterStatement, bankRegisterNumber,
+                  bankRegisterOrganization, bankRegisterExternalId,
                   bankRegisterRejectionReason, totalBankRegisterAmount
+    PROPERTIES(r) READONLY bankRegisterStatus, bankRegisterGeneratedAt,
+                           bankRegisterSentAt, bankRegisterAcceptedAt
     PROPERTIES(r) generateBankRegister, sendBankRegister, acceptBankRegister,
                   rejectBankRegister
 ;
@@ -282,10 +300,10 @@ FORM salaryBankRegisterLines 'Строки банковских реестров
 
 FORM payrollLiabilityDocuments 'Перечисление налогов и социальных платежей'
     OBJECTS d = PayrollLiabilityDocument
-    PROPERTIES(d) liabilityPayrollRun, liabilityNumber, liabilityStatus,
-                  liabilityCalculatedAt, liabilityPaymentDate,
-                  liabilityBankReference, liabilityPaidAt,
+    PROPERTIES(d) liabilityPayrollRun, liabilityNumber, liabilityPaymentDate,
+                  liabilityBankReference,
                   totalPayrollLiability, overdueLiabilityCount
+    PROPERTIES(d) READONLY liabilityStatus, liabilityCalculatedAt, liabilityPaidAt
     PROPERTIES(d) generatePayrollLiabilities, approvePayrollLiabilities,
                   markPayrollLiabilitiesPaid
 ;

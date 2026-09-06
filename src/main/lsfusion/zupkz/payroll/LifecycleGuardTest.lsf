@@ -1,6 +1,8 @@
 MODULE LifecycleGuardTest;
 
-REQUIRE InsuranceWorkflowTest, PayrollSettlement;
+REQUIRE InsuranceWorkflowTest, PayrollSettlement, PayrollCivilContractPayments,
+        TaxesKZSocialTransferRegisters, HRBusinessTrip, PayrollEnforcement,
+        PayrollRecalculation, PayrollInterimPayment, AverageEarnings;
 NAMESPACE ZUPKZ;
 
 lifecycleGuardTimesheet() = GROUP LAST Timesheet t
@@ -39,6 +41,36 @@ lifecycleGuardWorkAccident() = GROUP LAST WorkAccident a
     IF workAccidentNumber(a) == 'LIFECYCLE-GUARD' ORDER a;
 lifecycleGuardInsuranceClaim() = GROUP LAST AccidentInsuranceClaim c
     IF insuranceClaimNumber(c) == 'LIFECYCLE-GUARD' ORDER c;
+lifecycleGuardLeave() = GROUP LAST LeaveDocument l
+    IF leaveNumber(l) == 'LIFECYCLE-GUARD' ORDER l;
+lifecycleGuardVacationSchedule() = GROUP LAST VacationSchedule s
+    IF vacationScheduleNumber(s) == 'LIFECYCLE-GUARD' ORDER s;
+lifecycleGuardTrip() = GROUP LAST BusinessTripDocument d
+    IF tripNumber(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardAverage() = GROUP LAST AverageEarningsDocument d
+    IF averageNumber(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardCivilContract() = GROUP LAST CivilContract c
+    IF civilContractNumber(c) == 'LIFECYCLE-GUARD' ORDER c;
+lifecycleGuardCivilAct() = GROUP LAST CivilContractAct a
+    IF civilActNumber(a) == 'LIFECYCLE-GUARD' ORDER a;
+lifecycleGuardCivilLiability() = GROUP LAST CivilLiabilityDocument d
+    IF civilLiabilityNumber(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardEnforcementOrder() = GROUP LAST EnforcementOrder o
+    IF enforcementNumber(o) == 'LIFECYCLE-GUARD' ORDER o;
+lifecycleGuardEnforcementCalculation() = GROUP LAST EnforcementCalculationDocument d
+    IF enforcementTaxCalculation(d) == lifecycleGuardTaxDocument() ORDER d;
+lifecycleGuardInterimPayment() = GROUP LAST InterimPayment p
+    IF interimPaymentNumber(p) == 'LIFECYCLE-GUARD' ORDER p;
+lifecycleGuardBankRegister() = GROUP LAST SalaryBankRegister r
+    IF bankRegisterNumber(r) == 'LIFECYCLE-GUARD' ORDER r;
+lifecycleGuardLiability() = GROUP LAST PayrollLiabilityDocument d
+    IF liabilityNumber(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardRecalculation() = GROUP LAST PayrollRecalculation d
+    IF recalculationNumber(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardSickLeave() = GROUP LAST SickLeaveDocument d
+    IF sickLeaveNumber(d) == 'LIFECYCLE-GUARD' ORDER d;
+lifecycleGuardSocialTransfer() = GROUP LAST SocialTransferRegister r
+    IF socialTransferNumber(r) == 'LIFECYCLE-GUARD' ORDER r;
 
 lifecycleGuardSetupTest() {
     NEW timesheet = Timesheet {
@@ -117,6 +149,69 @@ lifecycleGuardSetupTest() {
     NEW claim = AccidentInsuranceClaim {
         insuranceClaimNumber(claim) <- 'LIFECYCLE-GUARD';
         insuranceClaimStatus(claim) <- AccidentInsuranceClaimStatus.submitted;
+    }
+    NEW leave = LeaveDocument {
+        leaveNumber(leave) <- 'LIFECYCLE-GUARD';
+        leaveStatus(leave) <- LeaveStatus.approved;
+    }
+    NEW schedule = VacationSchedule {
+        vacationScheduleNumber(schedule) <- 'LIFECYCLE-GUARD';
+        vacationScheduleStatus(schedule) <- VacationScheduleStatus.approved;
+    }
+    NEW trip = BusinessTripDocument {
+        tripNumber(trip) <- 'LIFECYCLE-GUARD';
+        tripStatus(trip) <- BusinessTripStatus.approved;
+    }
+    NEW average = AverageEarningsDocument {
+        averageNumber(average) <- 'LIFECYCLE-GUARD';
+        averageStatus(average) <- AverageEarningsStatus.calculated;
+    }
+    NEW civilContract = CivilContract {
+        civilContractNumber(civilContract) <- 'LIFECYCLE-GUARD';
+        civilContractStatus(civilContract) <- CivilContractStatus.active;
+        NEW civilAct = CivilContractAct {
+            civilActContract(civilAct) <- civilContract;
+            civilActNumber(civilAct) <- 'LIFECYCLE-GUARD';
+            civilActStatus(civilAct) <- CivilContractActStatus.approved;
+            NEW civilLiability = CivilLiabilityDocument {
+                civilLiabilityAct(civilLiability) <- civilAct;
+                civilLiabilityNumber(civilLiability) <- 'LIFECYCLE-GUARD';
+                civilLiabilityStatus(civilLiability) <- PayrollLiabilityStatus.approved;
+            }
+        }
+    }
+    NEW enforcementOrder = EnforcementOrder {
+        enforcementNumber(enforcementOrder) <- 'LIFECYCLE-GUARD';
+        enforcementStatus(enforcementOrder) <- EnforcementOrderStatus.active;
+    }
+    NEW enforcementCalculation = EnforcementCalculationDocument {
+        enforcementTaxCalculation(enforcementCalculation) <- lifecycleGuardTaxDocument();
+        enforcementCalculationStatus(enforcementCalculation) <-
+            EnforcementCalculationStatus.calculated;
+    }
+    NEW interim = InterimPayment {
+        interimPaymentNumber(interim) <- 'LIFECYCLE-GUARD';
+        interimPaymentStatus(interim) <- InterimPaymentStatus.approved;
+    }
+    NEW bankRegister = SalaryBankRegister {
+        bankRegisterNumber(bankRegister) <- 'LIFECYCLE-GUARD';
+        bankRegisterStatus(bankRegister) <- BankRegisterStatus.sent;
+    }
+    NEW liability = PayrollLiabilityDocument {
+        liabilityNumber(liability) <- 'LIFECYCLE-GUARD';
+        liabilityStatus(liability) <- PayrollLiabilityStatus.approved;
+    }
+    NEW recalculation = PayrollRecalculation {
+        recalculationNumber(recalculation) <- 'LIFECYCLE-GUARD';
+        recalculationStatus(recalculation) <- PayrollRecalculationStatus.calculated;
+    }
+    NEW sickLeave = SickLeaveDocument {
+        sickLeaveNumber(sickLeave) <- 'LIFECYCLE-GUARD';
+        sickLeaveStatus(sickLeave) <- SickLeaveStatus.approved;
+    }
+    NEW socialTransfer = SocialTransferRegister {
+        socialTransferNumber(socialTransfer) <- 'LIFECYCLE-GUARD';
+        socialTransferStatus(socialTransfer) <- SocialTransferRegisterStatus.sent;
     }
     APPLY;
     EXPORT JSON FROM setupSucceeded = NOT canceled();
@@ -248,6 +343,97 @@ insuranceClaimStatusGuardTest() {
     EXPORT JSON FROM insuranceClaimStatusBlocked = canceled();
 }
 
+leaveStatusGuardTest() {
+    leaveStatus(lifecycleGuardLeave()) <- LeaveStatus.cancelled;
+    APPLY;
+    EXPORT JSON FROM leaveStatusBlocked = canceled();
+}
+
+vacationScheduleStatusGuardTest() {
+    vacationScheduleStatus(lifecycleGuardVacationSchedule()) <- VacationScheduleStatus.cancelled;
+    APPLY;
+    EXPORT JSON FROM vacationScheduleStatusBlocked = canceled();
+}
+
+tripStatusGuardTest() {
+    tripStatus(lifecycleGuardTrip()) <- BusinessTripStatus.cancelled;
+    APPLY;
+    EXPORT JSON FROM tripStatusBlocked = canceled();
+}
+
+averageStatusGuardTest() {
+    averageStatus(lifecycleGuardAverage()) <- AverageEarningsStatus.draft;
+    APPLY;
+    EXPORT JSON FROM averageStatusBlocked = canceled();
+}
+
+civilContractStatusGuardTest() {
+    civilContractStatus(lifecycleGuardCivilContract()) <- CivilContractStatus.closed;
+    APPLY;
+    EXPORT JSON FROM civilContractStatusBlocked = canceled();
+}
+
+civilActStatusGuardTest() {
+    civilActStatus(lifecycleGuardCivilAct()) <- CivilContractActStatus.paid;
+    APPLY;
+    EXPORT JSON FROM civilActStatusBlocked = canceled();
+}
+
+civilLiabilityStatusGuardTest() {
+    civilLiabilityStatus(lifecycleGuardCivilLiability()) <- PayrollLiabilityStatus.paid;
+    APPLY;
+    EXPORT JSON FROM civilLiabilityStatusBlocked = canceled();
+}
+
+enforcementOrderStatusGuardTest() {
+    enforcementStatus(lifecycleGuardEnforcementOrder()) <- EnforcementOrderStatus.suspended;
+    APPLY;
+    EXPORT JSON FROM enforcementOrderStatusBlocked = canceled();
+}
+
+enforcementCalculationStatusGuardTest() {
+    enforcementCalculationStatus(lifecycleGuardEnforcementCalculation()) <-
+        EnforcementCalculationStatus.approved;
+    APPLY;
+    EXPORT JSON FROM enforcementCalculationStatusBlocked = canceled();
+}
+
+interimPaymentStatusGuardTest() {
+    interimPaymentStatus(lifecycleGuardInterimPayment()) <- InterimPaymentStatus.paid;
+    APPLY;
+    EXPORT JSON FROM interimPaymentStatusBlocked = canceled();
+}
+
+bankRegisterStatusGuardTest() {
+    bankRegisterStatus(lifecycleGuardBankRegister()) <- BankRegisterStatus.accepted;
+    APPLY;
+    EXPORT JSON FROM bankRegisterStatusBlocked = canceled();
+}
+
+liabilityStatusGuardTest() {
+    liabilityStatus(lifecycleGuardLiability()) <- PayrollLiabilityStatus.paid;
+    APPLY;
+    EXPORT JSON FROM liabilityStatusBlocked = canceled();
+}
+
+recalculationStatusGuardTest() {
+    recalculationStatus(lifecycleGuardRecalculation()) <- PayrollRecalculationStatus.approved;
+    APPLY;
+    EXPORT JSON FROM recalculationStatusBlocked = canceled();
+}
+
+sickLeaveStatusGuardTest() {
+    sickLeaveStatus(lifecycleGuardSickLeave()) <- SickLeaveStatus.cancelled;
+    APPLY;
+    EXPORT JSON FROM sickLeaveStatusBlocked = canceled();
+}
+
+socialTransferStatusGuardTest() {
+    socialTransferStatus(lifecycleGuardSocialTransfer()) <- SocialTransferRegisterStatus.accepted;
+    APPLY;
+    EXPORT JSON FROM socialTransferStatusBlocked = canceled();
+}
+
 lifecycleGuardVerificationTest() {
     EXPORT JSON FROM
         timesheetStatusPreserved = timesheetStatus(lifecycleGuardTimesheet()) ==
@@ -283,5 +469,34 @@ lifecycleGuardVerificationTest() {
         workAccidentStatusPreserved = workAccidentStatus(lifecycleGuardWorkAccident()) ==
             WorkAccidentStatus.investigating,
         insuranceClaimStatusPreserved = insuranceClaimStatus(lifecycleGuardInsuranceClaim()) ==
-            AccidentInsuranceClaimStatus.submitted;
+            AccidentInsuranceClaimStatus.submitted,
+        leaveStatusPreserved = leaveStatus(lifecycleGuardLeave()) == LeaveStatus.approved,
+        vacationScheduleStatusPreserved = vacationScheduleStatus(lifecycleGuardVacationSchedule()) ==
+            VacationScheduleStatus.approved,
+        tripStatusPreserved = tripStatus(lifecycleGuardTrip()) == BusinessTripStatus.approved,
+        averageStatusPreserved = averageStatus(lifecycleGuardAverage()) ==
+            AverageEarningsStatus.calculated,
+        civilContractStatusPreserved = civilContractStatus(lifecycleGuardCivilContract()) ==
+            CivilContractStatus.active,
+        civilActStatusPreserved = civilActStatus(lifecycleGuardCivilAct()) ==
+            CivilContractActStatus.approved,
+        civilLiabilityStatusPreserved = civilLiabilityStatus(lifecycleGuardCivilLiability()) ==
+            PayrollLiabilityStatus.approved,
+        enforcementOrderStatusPreserved = enforcementStatus(lifecycleGuardEnforcementOrder()) ==
+            EnforcementOrderStatus.active,
+        enforcementCalculationStatusPreserved =
+            enforcementCalculationStatus(lifecycleGuardEnforcementCalculation()) ==
+                EnforcementCalculationStatus.calculated,
+        interimPaymentStatusPreserved = interimPaymentStatus(lifecycleGuardInterimPayment()) ==
+            InterimPaymentStatus.approved,
+        bankRegisterStatusPreserved = bankRegisterStatus(lifecycleGuardBankRegister()) ==
+            BankRegisterStatus.sent,
+        liabilityStatusPreserved = liabilityStatus(lifecycleGuardLiability()) ==
+            PayrollLiabilityStatus.approved,
+        recalculationStatusPreserved = recalculationStatus(lifecycleGuardRecalculation()) ==
+            PayrollRecalculationStatus.calculated,
+        sickLeaveStatusPreserved = sickLeaveStatus(lifecycleGuardSickLeave()) ==
+            SickLeaveStatus.approved,
+        socialTransferStatusPreserved = socialTransferStatus(lifecycleGuardSocialTransfer()) ==
+            SocialTransferRegisterStatus.sent;
 }
