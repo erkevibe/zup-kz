@@ -450,7 +450,7 @@ totalIpnTaxableIncome 'Облагаемый доход ИПН' (TaxCalculationDo
     GROUP SUM ipnTaxableIncome(TaxCalculationLine l) IF taxCalculationDocument(l) == d;
 totalSocialTax 'Социальный налог' (TaxCalculationDocument d) = GROUP SUM socialTaxAmount(TaxCalculationLine l)
     IF taxCalculationDocument(l) == d;
-payableAfterTaxes 'К выплате' (TaxCalculationDocument d) =
+payableAfterTaxes 'К выплате до взысканий' (TaxCalculationDocument d) =
     payableAfterSocialPayments(taxCalculationSocialPayments(d)) -
     (IF totalIpn(d) THEN totalIpn(d) ELSE 0.00);
 

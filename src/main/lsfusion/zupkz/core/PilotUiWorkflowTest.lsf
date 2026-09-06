@@ -222,6 +222,7 @@ pilotUiPreparationVerificationTest() {
 }
 
 // Проверка представления на сохранённом сентябрьском снимке, без записи в БД.
+pilotUiEmptySettlement = DATA LOCAL PayrollSettlementLine ();
 pilotUiPayslipVerificationTest() {
     EXPORT JSON FROM
         allowed = settlementViewAllowed(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
@@ -230,7 +231,7 @@ pilotUiPayslipVerificationTest() {
         payable = settlementPayable(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
         organization = settlementOrganizationName(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
         employee = settlementEmployeeName(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
-        nullDenied = NOT settlementViewAllowed(NULL);
+        nullDenied = NOT settlementViewAllowed(pilotUiEmptySettlement());
 }
 pilotUiPayslipPdfTest() {
     IF NOT settlementViewAllowed(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())) THEN
@@ -255,6 +256,183 @@ pilotUiPayslipDetailVerificationTest() {
         crossPeriodLeaks = (GROUP SUM 1 IF settlementContainsLine(pilotUiSettlement(), PayrollLine d) AND
             linePayrollRun(d) == pilotUiPreparationRun()),
         allowed = settlementViewAllowed(pilotUiSettlement());
+}
+
+pilotUiDeductionsRun() = GROUP LAST PayrollRun r IF payrollOrganization(r) == pilotUiOrganization() AND
+    payrollNumber(r) == 'UI-DEDUCT-2026-10' ORDER r;
+pilotUiDeductionsTimesheet() = GROUP LAST Timesheet t IF timesheetOrganization(t) == pilotUiOrganization() AND
+    timesheetNumber(t) == 'UI-DEDUCT-TS-2026-10' ORDER t;
+pilotUiSecondEmployee() = GROUP LAST Employee e IF iin(e) == '910202350002' ORDER e;
+pilotUiSecondAssignment() = GROUP LAST EmploymentAssignment a IF
+    employee(employment(a)) == pilotUiSecondEmployee() AND organization(employment(a)) == pilotUiOrganization() ORDER a;
+pilotUiDeductionsSettlement(Employee e) = settlementLineByEmployee(pilotUiDeductionsRun(), e);
+
+// Добавляет один постоянный набор; не переоткрывает старые расчёты и не сбрасывает данные.
+// Это подготовка источников для UI-теста зарплаты, не приёмка кадрового оформления.
+pilotUiDeductionsSetupTest() {
+    IF login(currentUser() AS CustomUser) != 'ui-chief' OR NOT organizationAllowed(pilotUiOrganization()) THEN
+        EXPORT JSON FROM denied = TRUE;
+    ELSE IF pilotUiDeductionsRun() THEN EXPORT JSON FROM alreadyExists = TRUE;
+    ELSE IF pilotUiSecondEmployee() OR pilotUiDeductionsTimesheet() OR
+            uiRoleTestUser('ui-auditor-isolated') OR organizationByBin('666666666666') THEN
+        MESSAGE 'Частичный набор UI-DEDUCT: проверьте существующие данные, автоматического сброса нет';
+    ELSE IF NOT pilotUiAssignment() OR NOT pilotUiSchedule() OR NOT calculationTypeByCode('OTHER_DEDUCTION') THEN
+        MESSAGE 'Нет исходного сотрудника, графика или вида удержания';
+    ELSE {
+        NEW isolated = Organization {
+            name(isolated) <- 'UI Isolated Organization';
+            bin(isolated) <- '666666666666';
+            createUiRoleTestUser('ui-auditor-isolated', 'zup_auditor', isolated);
+        }
+        NEW worker = Employee {
+            iin(worker) <- '910202350002';
+            lastName(worker) <- 'Тестов';
+            firstName(worker) <- 'Данияр';
+            middleName(worker) <- 'Контрольный';
+            birthDate(worker) <- 1991_02_02;
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- pilotUiOrganization();
+                department(contract) <- department(pilotUiEmployment());
+                position(contract) <- position(pilotUiEmployment());
+                hireDate(contract) <- 2026_10_01;
+                contractNumber(contract) <- 'UI-DEDUCT-TD-002';
+                contractDate(contract) <- 2026_09_30;
+                employmentKind(contract) <- EmploymentKind.primary;
+                contractTermKind(contract) <- ContractTermKind.indefinite;
+                salary(contract) <- 200000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_10_01;
+                    fte(assignment) <- 1.0000;
+                    assignmentSalary(assignment) <- 200000.00;
+                    NEW schedule = EmployeeScheduleAssignment {
+                        scheduleEmploymentAssignment(schedule) <- assignment;
+                        employeeWorkSchedule(schedule) <- pilotUiSchedule();
+                        employeeScheduleFrom(schedule) <- 2026_10_01;
+                    }
+                }
+            }
+            NEW profile = EmployeeTaxProfile {
+                taxProfileOrganization(profile) <- pilotUiOrganization();
+                taxProfileEmployee(profile) <- worker;
+                taxProfileValidFrom(profile) <- 2026_10_01;
+                taxProfileResident(profile) <- TRUE;
+                taxProfileIncomeStatus(profile) <- TaxIncomeStatus.employee;
+                taxProfileBasicDeduction(profile) <- TRUE;
+                taxProfileSocialDeduction(profile) <- IpnSocialDeductionKind.none;
+                taxProfileBasis(profile) <- 'Синтетический UI-набор: базовый вычет';
+            }
+        }
+        NEW order = EnforcementOrder {
+            enforcementOrganization(order) <- pilotUiOrganization();
+            enforcementEmployee(order) <- pilotUiEmployee();
+            enforcementNumber(order) <- 'UI-DEDUCT-ORDER-001';
+            enforcementDate(order) <- 2026_09_30;
+            enforcementValidFrom(order) <- 2026_10_01;
+            enforcementValidTo(order) <- 2026_10_31;
+            enforcementKind(order) <- EnforcementOrderKind.other;
+            enforcementCalculationKind(order) <- EnforcementCalculationKind.fixedAmount;
+            enforcementStatus(order) <- EnforcementOrderStatus.active;
+            enforcementPriority(order) <- 5;
+            enforcementFixedAmount(order) <- 20000.00;
+            enforcementRecipient(order) <- 'Синтетический получатель UI — не перечислять';
+            enforcementBasis(order) <- 'Тест отображения фиксированного взыскания, не реальный исполнительный документ';
+        }
+        NEW sheet = Timesheet {
+            timesheetOrganization(sheet) <- pilotUiOrganization();
+            timesheetNumber(sheet) <- 'UI-DEDUCT-TS-2026-10';
+            timesheetPeriodFrom(sheet) <- 2026_10_01;
+            timesheetPeriodTo(sheet) <- 2026_10_31;
+            timesheetStatus(sheet) <- TimesheetStatus.draft;
+        }
+        NEW run = PayrollRun {
+            payrollOrganization(run) <- pilotUiOrganization();
+            payrollNumber(run) <- 'UI-DEDUCT-2026-10';
+            payrollPeriodFrom(run) <- 2026_10_01;
+            payrollPeriodTo(run) <- 2026_10_31;
+            payrollPaymentDueDate(run) <- 2026_11_10;
+            payrollRunStatus(run) <- PayrollRunStatus.draft;
+            NEW first = PayrollInput {
+                inputPayrollRun(first) <- run;
+                inputAssignment(first) <- pilotUiAssignment();
+                inputCalculationType(first) <- calculationTypeByCode('OTHER_DEDUCTION');
+                inputManualAmount(first) <- 15000.00;
+                inputBasis(first) <- 'UI: прочее удержание 15 000 по синтетическому заявлению';
+            }
+            NEW second = PayrollInput {
+                inputPayrollRun(second) <- run;
+                inputAssignment(second) <- pilotUiSecondAssignment();
+                inputCalculationType(second) <- calculationTypeByCode('OTHER_DEDUCTION');
+                inputManualAmount(second) <- 4000.00;
+                inputBasis(second) <- 'UI: контроль изоляции удержания второго сотрудника';
+            }
+        }
+        APPLY;
+        fillTimesheet(pilotUiDeductionsTimesheet());
+        EXPORT JSON FROM ready = TRUE, days = timesheetLineCount(pilotUiDeductionsTimesheet());
+    }
+}
+
+pilotUiDeductionsVerificationTest() {
+    EXPORT JSON FROM closed = payrollRunStatus(pilotUiDeductionsRun()) == PayrollRunStatus.approved,
+        settlementCount = payrollSettlementLineCountForRun(pilotUiDeductionsRun()),
+        firstAccrued = settlementAccrued(pilotUiDeductionsSettlement(pilotUiEmployee())),
+        firstOther = settlementPayrollDeducted(pilotUiDeductionsSettlement(pilotUiEmployee())),
+        firstEnforcement = settlementEnforcement(pilotUiDeductionsSettlement(pilotUiEmployee())),
+        firstWithheld = settlementTotalDeducted(pilotUiDeductionsSettlement(pilotUiEmployee())),
+        firstPayable = settlementPayable(pilotUiDeductionsSettlement(pilotUiEmployee())),
+        firstLines = settlementDetailCount(pilotUiDeductionsSettlement(pilotUiEmployee())),
+        secondAccrued = settlementAccrued(pilotUiDeductionsSettlement(pilotUiSecondEmployee())),
+        secondOther = settlementPayrollDeducted(pilotUiDeductionsSettlement(pilotUiSecondEmployee())),
+        secondEnforcement = settlementEnforcement(pilotUiDeductionsSettlement(pilotUiSecondEmployee())),
+        secondWithheld = settlementTotalDeducted(pilotUiDeductionsSettlement(pilotUiSecondEmployee())),
+        secondPayable = settlementPayable(pilotUiDeductionsSettlement(pilotUiSecondEmployee())),
+        secondLines = settlementDetailCount(pilotUiDeductionsSettlement(pilotUiSecondEmployee())),
+        wrongEmployeeLines = (GROUP SUM 1 IF settlementContainsLine(pilotUiDeductionsSettlement(pilotUiEmployee()), PayrollLine d) AND
+            employee(employment(linePayrollAssignment(d))) == pilotUiSecondEmployee()),
+        noPayment = NOT closingStatement(pilotUiDeductionsRun());
+}
+
+pilotUiPayslipAccessVerificationTest() {
+    EXPORT JSON FROM authenticated = login(currentUser() AS CustomUser),
+        payrollRole = settlementViewRoleAllowed(),
+        organizationAllowed = organizationAllowed(pilotUiOrganization()),
+        isolatedOrganizationAllowed = organizationAllowed(organizationByBin('666666666666')),
+        targetExists = pilotUiSettlement() IS PayrollSettlementLine,
+        targetAllowed = settlementViewAllowed(pilotUiSettlement()),
+        nullDenied = NOT settlementViewAllowed(pilotUiEmptySettlement()),
+        visibleCount = (GROUP SUM 1 IF settlementViewAllowed(PayrollSettlementLine l));
+}
+// Намеренно обращаются к настоящим действиям с существующим, но недоступным объектом.
+// Ни одно из действий не изменяет расчёты; PDF при отказе не формируется.
+pilotUiHiddenPayslipOpenTest() { openPayrollSettlement(pilotUiSettlement()); }
+pilotUiHiddenPayslipPrintTest() { printPayrollSettlementPdf(pilotUiSettlement()); }
+
+pilotUiEnforcementLine() = GROUP LAST EnforcementCalculationLine l IF
+    enforcementCalculationDocument(l) == closingEnforcement(pilotUiDeductionsRun()) ORDER l;
+// Запускается только после установки защит. Ожидается отказ APPLY; CANCEL
+// очищает отклонённые изменения только этой API-сессии, не данные базы.
+pilotUiEnforcementGuardTest(STRING[20] mode) {
+    IF login(currentUser() AS CustomUser) != 'ui-chief' OR
+        NOT pilotUiEnforcementLine() OR enforcementWithheldAmount(pilotUiEnforcementLine()) != 20000.00 THEN
+        EXPORT JSON FROM fixtureError = TRUE;
+    ELSE {
+        IF mode == 'amount' THEN enforcementWithheldAmount(pilotUiEnforcementLine()) <- 19999.00;
+        ELSE IF mode == 'delete' THEN DELETE EnforcementCalculationLine l WHERE l == pilotUiEnforcementLine();
+        ELSE IF mode == 'relink' THEN enforcementCalculationDocument(pilotUiEnforcementLine()) <- pilotUiEnforcement();
+        ELSE IF mode == 'source' THEN enforcementTaxCalculation(closingEnforcement(pilotUiDeductionsRun())) <- pilotUiTaxes();
+        ELSE IF mode == 'timestamp' THEN enforcementCalculatedAt(closingEnforcement(pilotUiDeductionsRun())) <- NULL;
+        ELSE RETURN;
+        APPLY;
+        IF canceled() THEN {
+            CANCEL;
+            EXPORT JSON FROM blocked = TRUE,
+                amount = enforcementWithheldAmount(pilotUiEnforcementLine()),
+                sourcePreserved = enforcementTaxCalculation(closingEnforcement(pilotUiDeductionsRun())) ==
+                    closingTaxes(pilotUiDeductionsRun());
+        } ELSE EXPORT JSON FROM unexpectedWrite = TRUE;
+    }
 }
 
 pilotUiDataSetupTest() {

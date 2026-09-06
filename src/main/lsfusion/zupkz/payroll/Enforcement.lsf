@@ -92,6 +92,16 @@ enforcementCalculationDate(EnforcementCalculationDocument d) =
 enforcementCalculationOrganization(EnforcementCalculationDocument d) =
     payrollOrganization(enforcementPayrollRun(d));
 
+CONSTRAINT CHANGED(enforcementTaxCalculation(EnforcementCalculationDocument d)) AND
+           PREV(enforcementCalculatedAt(d))
+    MESSAGE 'Нельзя менять источник рассчитанных исполнительных удержаний';
+CONSTRAINT CHANGED(enforcementCalculatedAt(EnforcementCalculationDocument d)) AND
+           PREV(enforcementCalculatedAt(d))
+    MESSAGE 'Нельзя менять дату выполнения расчёта исполнительных удержаний';
+CONSTRAINT DROPPED(EnforcementCalculationDocument d IS EnforcementCalculationDocument) AND
+           PREV(enforcementCalculatedAt(d))
+    MESSAGE 'Рассчитанные исполнительные удержания нельзя удалять; используйте отмену';
+
 calculatedEnforcementDocumentCount(TaxCalculationDocument taxDocument) = GROUP SUM 1 IF
     enforcementTaxCalculation(EnforcementCalculationDocument d) == taxDocument AND
     (enforcementCalculationStatus(d) == EnforcementCalculationStatus.calculated OR
@@ -107,9 +117,24 @@ enforcementRequestedAmount 'Сумма по документу' = DATA NUMERIC[1
 enforcementMaximumAmount 'Максимум удержаний' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
 enforcementWithheldAmount 'Удержано' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
 
+// Снимок записывает только первое штатное выполнение расчёта.
+// Отмена сохраняет строки; исправления выполняются новым расчётом, не правкой снимка.
+enforcementSnapshotWriteAllowed(EnforcementCalculationDocument d) =
+    d IS EnforcementCalculationDocument AND enforcementCalculationLifecycleTransition(d) AND
+    NOT PREV(enforcementCalculatedAt(d)) AND organizationActionAllowed(enforcementCalculationOrganization(d));
+CONSTRAINT (CHANGED(enforcementCalculationDocument(EnforcementCalculationLine l)) OR
+            CHANGED(enforcementCalculationOrder(l)) OR CHANGED(enforcementRequestedAmount(l)) OR
+            CHANGED(enforcementMaximumAmount(l)) OR CHANGED(enforcementWithheldAmount(l))) AND
+           (NOT enforcementSnapshotWriteAllowed(enforcementCalculationDocument(l)) OR
+            PREV(enforcementCalculatedAt(enforcementCalculationDocument(l))))
+    MESSAGE 'Строки исполнительных удержаний записываются только штатным расчётом';
+CONSTRAINT DROPPED(EnforcementCalculationLine l IS EnforcementCalculationLine) AND
+           PREV(enforcementCalculatedAt(enforcementCalculationDocument(l)))
+    MESSAGE 'Нельзя удалять строки рассчитанных исполнительных удержаний';
+
 enforcementLineEmployee(EnforcementCalculationLine l) =
     enforcementEmployee(enforcementCalculationOrder(l));
-enforcementLinePriority(EnforcementCalculationLine l) =
+enforcementLinePriority 'Очередь' (EnforcementCalculationLine l) =
     enforcementPriority(enforcementCalculationOrder(l));
 enforcementLineTaxDocument(EnforcementCalculationLine l) =
     enforcementTaxCalculation(enforcementCalculationDocument(l));
@@ -321,10 +346,17 @@ FORM enforcementCalculationDocuments 'Расчёт исполнительных 
     PROPERTIES(d) calculateEnforcement, approveEnforcement, cancelEnforcement
 ;
 
+enforcementLineRunNumber 'Расчёт зарплаты' (EnforcementCalculationLine l) =
+    enforcementRunNumber(enforcementCalculationDocument(l));
+enforcementLineOrderNumber 'Исполнительный документ' (EnforcementCalculationLine l) =
+    enforcementNumber(enforcementCalculationOrder(l));
+enforcementLineEmployeeName 'Сотрудник' (EnforcementCalculationLine l) =
+    employeeFullName(enforcementLineEmployee(l));
+
 FORM enforcementCalculationLines 'Строки исполнительных удержаний'
     OBJECTS l = EnforcementCalculationLine
-    PROPERTIES(l) enforcementCalculationDocument, enforcementCalculationOrder,
-                  enforcementLineEmployee, enforcementLinePriority,
+    PROPERTIES(l) READONLY enforcementLineRunNumber, enforcementLineOrderNumber,
+                  enforcementLineEmployeeName, enforcementLinePriority,
                   enforcementGrossIncome, enforcementIncomeAfterTaxes,
                   effectiveEnforcementPercent, enforcementRequestedAmount,
                   enforcementMaximumAmount, enforcementWithheldAmount,
