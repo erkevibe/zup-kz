@@ -166,6 +166,9 @@ loadZupRoles() {
         name(role) <- 'ZUP KZ — Auditor';
     }
 
+    // Пользователей ЗУП создаёт администратор; публичная регистрация запрещена.
+    disableRole(userRoleSID('selfRegister')) <- TRUE;
+
     denyBusinessFolders(userRoleSID('zup_hr'));
     denyBusinessFolders(userRoleSID('zup_timekeeper'));
     denyBusinessFolders(userRoleSID('zup_payroll'));

@@ -46,6 +46,7 @@ accessWorkflowTest() {
                                 navigatorElementCanonicalName('ZUPKZ.personnel')) == Permission.permit,
                             hrPayrollForbidden = dataPermission(userRoleSID('zup_hr'),
                                 navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.forbid,
+                            selfRegistrationDisabled = disableRole('selfRegister'),
                             auditorReadOnly = dataPermissionChange(userRoleSID('zup_auditor'),
                                 propertyGroup('System_root')) == Permission.forbid;
                     }

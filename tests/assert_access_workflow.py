@@ -14,6 +14,7 @@ assert actual["assignedOrganizationAllowed"] is True
 assert actual["hiddenOrganizationRejected"] is True
 assert actual["hrPersonnelPermitted"] is True
 assert actual["hrPayrollForbidden"] is True
+assert actual["selfRegistrationDisabled"] is True
 assert actual["auditorReadOnly"] is True
 assert actual["authenticatedAsRestrictedUser"] is True
 assert actual["assignedReadAllowed"] is True

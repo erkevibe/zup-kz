@@ -69,26 +69,36 @@ NAVIGATOR {
     }
 
     NEW FOLDER payroll 'Расчёт зарплаты' WINDOW toolbar {
-        NEW calculationTypes;
-        NEW payrollRules;
-        NEW payrollRuns;
-        NEW payrollTimeSummaries;
-        NEW payrollInputs;
-        NEW payrollLines;
-        NEW civilContracts;
-        NEW civilContractActs;
-        NEW calculationBaseRules;
-        NEW averageEarningsDocuments;
-        NEW averageEarningsBaseLines;
-        NEW payrollRecalculations;
-        NEW payrollRecalculationLines;
-        NEW interimPayments;
-        NEW sickLeaveBenefitLines;
-        NEW payrollSettlements;
-        NEW paymentStatements;
-        NEW paymentStatementLines;
-        NEW salaryBankRegisters;
-        NEW salaryBankRegisterLines;
+        NEW FOLDER payrollSetup 'Настройки расчёта' {
+            NEW calculationTypes;
+            NEW payrollRules;
+            NEW calculationBaseRules;
+        }
+        NEW FOLDER payrollPeriod 'Расчёт за период' {
+            NEW payrollRuns;
+            NEW payrollTimeSummaries;
+            NEW payrollInputs;
+            NEW payrollLines;
+        }
+        NEW FOLDER payrollAverage 'Средний заработок и перерасчёты' {
+            NEW averageEarningsDocuments;
+            NEW averageEarningsBaseLines;
+            NEW payrollRecalculations;
+            NEW payrollRecalculationLines;
+            NEW sickLeaveBenefitLines;
+        }
+        NEW FOLDER payrollContracts 'Договоры ГПХ' {
+            NEW civilContracts;
+            NEW civilContractActs;
+        }
+        NEW FOLDER payrollPayments 'Выплаты' {
+            NEW interimPayments;
+            NEW payrollSettlements;
+            NEW paymentStatements;
+            NEW paymentStatementLines;
+            NEW salaryBankRegisters;
+            NEW salaryBankRegisterLines;
+        }
     }
 
     NEW FOLDER taxesKz 'Налоги и взносы РК' WINDOW toolbar {
