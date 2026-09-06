@@ -204,3 +204,5 @@ assert actual["form20005TaxDeductionCodes2026"] == "1"
 assert actual["civilActPaid2026"] is True
 assert actual["civilLiabilityDueDate2026"] == "2026-03-25"
 assert actual["civilLiabilityPaid2026"] is True
+assert actual["socialRegulatoryPack2026"] == "KZ-2026.1"
+assert actual["taxRegulatoryPack2026"] == "KZ-2026.1"

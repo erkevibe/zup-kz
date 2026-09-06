@@ -304,6 +304,10 @@ payrollFormulaTest() {
                                 opvAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.opv),
                                 osmsAssessmentBase = payrollAssessmentBase(run, AssessmentBaseKind.employeeOsms),
                                 opv2026 = totalOpv(socialPayments),
+                                socialRegulatoryPack2026 = packCode(
+                                    socialPaymentRegulatoryPack(socialPayments)),
+                                taxRegulatoryPack2026 = packCode(
+                                    taxCalculationRegulatoryPack(taxes)),
                                 socialSnapshotMzp2026 = socialPaymentMZP(
                                     socialPaymentLineByEmployee(socialPayments, worker)),
                                 socialSnapshotOpvBase2026 = opvBase(

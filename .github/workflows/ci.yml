@@ -55,7 +55,7 @@ jobs:
         run: |
           cp conf/settings.properties.example conf/settings.properties
           sed -i 's/CHANGE_ME/ci_password/' conf/settings.properties
-          sed -i 's/logics.topModule=ZUPKZ/logics.topModule=PayrollFormulaTest/' conf/settings.properties
+          sed -i 's/logics.topModule=ZUPKZ/logics.topModule=StatutoryGuardTest/' conf/settings.properties
           printf '\nsettings.enableAPI=1\nlogics.initialAdminPassword=ci-admin-only\n' >> conf/settings.properties
 
       - name: Smoke-test lsFusion startup
@@ -73,6 +73,12 @@ jobs:
                 --output payroll-result.json
 
               python3 tests/assert_payroll.py payroll-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.statutoryGuardTest' \
+                --output statutory-guard-result.json
+
+              python3 tests/assert_statutory_guards.py statutory-guard-result.json
 
               curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.payrollStage0Test' \

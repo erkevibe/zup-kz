@@ -24,6 +24,7 @@ NAVIGATOR {
     }
 
     NEW FOLDER legislation 'Законодательство РК' WINDOW toolbar {
+        NEW regulatoryPacks;
         NEW legalSources;
         NEW statutoryParameters;
         NEW statutoryParameterValues;

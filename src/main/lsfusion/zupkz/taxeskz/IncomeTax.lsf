@@ -127,14 +127,16 @@ taxCalculationPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (TaxC
 taxCalculationSocialPayments 'Социальные платежи' = DATA SocialPaymentDocument (TaxCalculationDocument);
 taxCalculationStatus 'Статус' = DATA TaxCalculationStatus (TaxCalculationDocument);
 taxCalculationCalculatedAt 'Рассчитан' = DATA DATETIME (TaxCalculationDocument);
+taxCalculationRegulatoryPack 'Нормативный набор' = DATA RegulatoryPack (TaxCalculationDocument);
 taxCalculationLifecycleTransition = DATA LOCAL BOOLEAN (TaxCalculationDocument);
 
 CONSTRAINT CHANGED(taxCalculationStatus(TaxCalculationDocument d)) AND
            PREV(taxCalculationStatus(d)) AND NOT taxCalculationLifecycleTransition(d)
     MESSAGE 'Статус налогового документа изменяется только штатными действиями';
-CONSTRAINT CHANGED(taxCalculationCalculatedAt(TaxCalculationDocument d)) AND
+CONSTRAINT (CHANGED(taxCalculationCalculatedAt(TaxCalculationDocument d)) OR
+            CHANGED(taxCalculationRegulatoryPack(d))) AND
            PREV(taxCalculationStatus(d)) AND NOT taxCalculationLifecycleTransition(d)
-    MESSAGE 'Дата расчёта налогового документа изменяется только штатным действием';
+    MESSAGE 'Снимок налогового документа изменяется только штатным действием';
 
 calculatedTaxDocumentCount(PayrollRun run) = GROUP SUM 1 IF
     taxCalculationPayrollRun(TaxCalculationDocument d) == run AND
@@ -332,6 +334,17 @@ socialTaxRate 'Ставка социального налога' (TaxCalculation
 calculatedSocialTaxAmount(TaxCalculationLine l) =
     socialPaymentAmount(socialTaxBase(l), socialTaxRate(l));
 
+missingTaxStatutoryParameter(DATE date) =
+    NOT numericStatutoryParameterReady('MRP', date) OR
+    NOT numericStatutoryParameterReady('IPN_BASIC_MONTHLY_MRP', date) OR
+    NOT numericStatutoryParameterReady('IPN_BASIC_ANNUAL_MRP', date) OR
+    NOT numericStatutoryParameterReady('IPN_SOCIAL_STANDARD_MRP', date) OR
+    NOT numericStatutoryParameterReady('IPN_SOCIAL_DISABILITY_MRP', date) OR
+    NOT numericStatutoryParameterReady('IPN_THRESHOLD_MRP', date) OR
+    NOT numericStatutoryParameterReady('IPN_BASE_RATE', date) OR
+    NOT numericStatutoryParameterReady('IPN_HIGH_RATE', date) OR
+    NOT numericStatutoryParameterReady('SOCIAL_TAX_RATE', date);
+
 calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {
     IF taxCalculationStatus(d) AND taxCalculationStatus(d) != TaxCalculationStatus.draft THEN
         MESSAGE 'Налоги уже рассчитаны';
@@ -343,6 +356,9 @@ calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {
             (socialPaymentStatus(taxCalculationSocialPayments(d)) != SocialPaymentStatus.calculated AND
              socialPaymentStatus(taxCalculationSocialPayments(d)) != SocialPaymentStatus.approved) THEN
         MESSAGE 'Выберите рассчитанные социальные платежи этой зарплаты';
+    ELSE IF NOT approvedRegulatoryPackOn(payrollPeriodTo(taxCalculationPayrollRun(d))) OR
+            missingTaxStatutoryParameter(payrollPeriodTo(taxCalculationPayrollRun(d))) THEN
+        MESSAGE 'Нет полного утверждённого набора ставок ИПН и социального налога на дату расчёта';
     ELSE {
         FOR worker IS Employee AND payrollEmployeeLineCount(taxCalculationPayrollRun(d), worker) DO {
             NEW l = TaxCalculationLine {
@@ -377,6 +393,8 @@ calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {
             }
         }
         taxCalculationLifecycleTransition(d) <- TRUE;
+        taxCalculationRegulatoryPack(d) <-
+            approvedRegulatoryPackOn(payrollPeriodTo(taxCalculationPayrollRun(d)));
         taxCalculationStatus(d) <- TaxCalculationStatus.calculated;
         taxCalculationCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -452,6 +470,7 @@ FORM taxCalculationDocuments 'Расчёт ИПН и социального на
     OBJECTS d = TaxCalculationDocument
     PROPERTIES(d) taxCalculationPayrollRun, taxCalculationSocialPayments
     PROPERTIES(d) READONLY taxCalculationStatus, taxCalculationCalculatedAt,
+                           taxCalculationRegulatoryPack,
                            totalIpnBasicDeduction, totalIpnTaxableIncome,
                            totalIpn, totalSocialTax, payableAfterTaxes
     PROPERTIES(d) calculateTaxes, approveTaxes, cancelTaxes

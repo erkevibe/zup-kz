@@ -1,0 +1,52 @@
+MODULE StatutoryGuardTest;
+
+REQUIRE PayrollFormulaTest;
+NAMESPACE ZUPKZ;
+
+// A period without an approved and complete legal pack must stop both
+// calculations instead of silently producing zero statutory payments.
+statutoryGuardTest() {
+    NEW org = Organization {
+        bin(org) <- '770707300007';
+        NEW futureRun = PayrollRun {
+            payrollOrganization(futureRun) <- org;
+            payrollNumber(futureRun) <- 'STATUTORY-GUARD-2027';
+            payrollPeriodFrom(futureRun) <- 2027_01_01;
+            payrollPeriodTo(futureRun) <- 2027_01_31;
+            payrollRunStatus(futureRun) <- PayrollRunStatus.calculated;
+
+            NEW blockedSocial = SocialPaymentDocument {
+                socialPaymentPayrollRun(blockedSocial) <- futureRun;
+                socialPaymentStatus(blockedSocial) <- SocialPaymentStatus.draft;
+                calculateSocialPayments(blockedSocial);
+
+                NEW socialPrerequisite = SocialPaymentDocument {
+                    socialPaymentPayrollRun(socialPrerequisite) <- futureRun;
+                    socialPaymentStatus(socialPrerequisite) <- SocialPaymentStatus.calculated;
+
+                    NEW blockedTax = TaxCalculationDocument {
+                        taxCalculationPayrollRun(blockedTax) <- futureRun;
+                        taxCalculationSocialPayments(blockedTax) <- socialPrerequisite;
+                        taxCalculationStatus(blockedTax) <- TaxCalculationStatus.draft;
+                        calculateTaxes(blockedTax);
+
+                        EXPORT JSON FROM
+                            baselinePackApproved = packCode(
+                                approvedRegulatoryPackOn(2026_01_31)) == 'KZ-2026.1',
+                            baselineSocialParametersComplete =
+                                NOT missingSocialStatutoryParameter(2026_01_31),
+                            baselineTaxParametersComplete =
+                                NOT missingTaxStatutoryParameter(2026_01_31),
+                            futurePackMissing = NOT approvedRegulatoryPackOn(2027_01_31),
+                            futureSocialBlocked =
+                                socialPaymentStatus(blockedSocial) == SocialPaymentStatus.draft AND
+                                NOT socialPaymentRegulatoryPack(blockedSocial),
+                            futureTaxBlocked =
+                                taxCalculationStatus(blockedTax) == TaxCalculationStatus.draft AND
+                                NOT taxCalculationRegulatoryPack(blockedTax);
+                    }
+                }
+            }
+        }
+    }
+}

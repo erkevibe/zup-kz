@@ -1,7 +1,84 @@
 MODULE KZLegalFramework;
 
-REQUIRE SystemEvents;
+REQUIRE SystemEvents, Authentication;
 NAMESPACE ZUPKZ;
+
+CLASS RegulatoryPackStatus 'Статус нормативного набора' {
+    draft 'Черновик',
+    approved 'Утверждён',
+    retired 'Выведен из действия'
+}
+
+CLASS RegulatoryPack 'Нормативный набор';
+
+packCode 'Код' = DATA STRING[50] (RegulatoryPack);
+packName 'Наименование' = DATA STRING[200] (RegulatoryPack);
+packVersion 'Версия' = DATA STRING[30] (RegulatoryPack);
+packValidFrom 'Действует с' = DATA DATE (RegulatoryPack);
+packValidTo 'Действует по' = DATA DATE (RegulatoryPack);
+packStatus 'Статус' = DATA RegulatoryPackStatus (RegulatoryPack);
+packApprovedAt 'Утверждён' = DATA DATETIME (RegulatoryPack);
+packApprovedBy 'Кем утверждён' = DATA CustomUser (RegulatoryPack);
+regulatoryPackLifecycleTransition = DATA LOCAL BOOLEAN (RegulatoryPack);
+
+regulatoryPackCodeCount(STRING[50] value) = GROUP SUM 1 IF
+    packCode(RegulatoryPack p) == value;
+CONSTRAINT regulatoryPackCodeCount(STRING[50] value) > 1
+    MESSAGE 'Код нормативного набора должен быть уникальным';
+CONSTRAINT packValidTo(RegulatoryPack p) < packValidFrom(p)
+    MESSAGE 'Дата окончания набора не может быть раньше даты начала';
+overlappingApprovedPackCount(RegulatoryPack p) = GROUP SUM 1 IF
+    packStatus(RegulatoryPack other) == RegulatoryPackStatus.approved AND
+    packValidFrom(other) <= (IF packValidTo(p) THEN packValidTo(p) ELSE 9999_12_31) AND
+    (IF packValidTo(other) THEN packValidTo(other) ELSE 9999_12_31) >= packValidFrom(p);
+CONSTRAINT packStatus(RegulatoryPack p) == RegulatoryPackStatus.approved AND
+           overlappingApprovedPackCount(p) > 1
+    MESSAGE 'Периоды утверждённых нормативных наборов не должны пересекаться';
+CONSTRAINT CHANGED(packStatus(RegulatoryPack p)) AND PREV(packStatus(p)) AND
+           NOT regulatoryPackLifecycleTransition(p)
+    MESSAGE 'Статус нормативного набора изменяется только штатными действиями';
+CONSTRAINT (CHANGED(packCode(RegulatoryPack p)) OR CHANGED(packName(p)) OR
+            CHANGED(packVersion(p)) OR CHANGED(packValidFrom(p)) OR
+            CHANGED(packValidTo(p))) AND PREV(packStatus(p)) == RegulatoryPackStatus.approved
+    MESSAGE 'Утверждённый нормативный набор неизменяем';
+
+regulatoryPackByCode(STRING[50] value) = GROUP AGGR RegulatoryPack p BY packCode(p);
+approvedRegulatoryPackOn(DATE date) = GROUP LAST RegulatoryPack p IF
+    packStatus(p) == RegulatoryPackStatus.approved AND packValidFrom(p) <= date AND
+    (NOT packValidTo(p) OR packValidTo(p) >= date)
+    ORDER packValidFrom(p), p;
+
+approveRegulatoryPack 'Утвердить' (RegulatoryPack p) {
+    IF packStatus(p) AND packStatus(p) != RegulatoryPackStatus.draft THEN
+        MESSAGE 'Утвердить можно только черновик';
+    ELSE IF NOT packCode(p) OR NOT packName(p) OR NOT packVersion(p) OR
+            NOT packValidFrom(p) OR NOT packValidTo(p) THEN
+        MESSAGE 'Заполните код, наименование, версию и период';
+    ELSE {
+        regulatoryPackLifecycleTransition(p) <- TRUE;
+        packStatus(p) <- RegulatoryPackStatus.approved;
+        packApprovedAt(p) <- currentDateTime();
+        packApprovedBy(p) <- currentUser() AS CustomUser;
+        APPLY;
+    }
+}
+
+retireRegulatoryPack 'Вывести из действия' (RegulatoryPack p) {
+    IF packStatus(p) != RegulatoryPackStatus.approved THEN
+        MESSAGE 'Вывести можно только утверждённый набор';
+    ELSE {
+        regulatoryPackLifecycleTransition(p) <- TRUE;
+        packStatus(p) <- RegulatoryPackStatus.retired;
+        APPLY;
+    }
+}
+
+FORM regulatoryPacks 'Нормативные наборы'
+    OBJECTS p = RegulatoryPack
+    PROPERTIES(p) packCode, packName, packVersion, packValidFrom, packValidTo
+    PROPERTIES(p) READONLY packStatus, packApprovedAt, packApprovedBy
+    PROPERTIES(p) approveRegulatoryPack, retireRegulatoryPack
+;
 
 // Нормативный источник: закон, кодекс, приказ или официальное разъяснение.
 CLASS LegalSource 'Нормативный источник';
@@ -29,6 +106,7 @@ description 'Описание' = DATA STRING[500] (StatutoryParameter);
 
 CLASS StatutoryParameterValue 'Значение параметра законодательства';
 
+statutoryValuePack 'Нормативный набор' = DATA RegulatoryPack (StatutoryParameterValue);
 parameter 'Параметр' = DATA StatutoryParameter (StatutoryParameterValue);
 validFrom 'Действует с' = DATA DATE (StatutoryParameterValue);
 validTo 'Действует по' = DATA DATE (StatutoryParameterValue);
@@ -48,12 +126,20 @@ statutoryParameterCodeCount(STRING[50] value) = GROUP SUM 1 IF
 CONSTRAINT statutoryParameterCodeCount(STRING[50] value) > 1
     MESSAGE 'Код параметра законодательства должен быть уникальным';
 overlappingStatutoryValueCount(StatutoryParameterValue v) = GROUP SUM 1 IF
-    parameter(StatutoryParameterValue other) == parameter(v) AND
+    statutoryValuePack(StatutoryParameterValue other) == statutoryValuePack(v) AND
+    parameter(other) == parameter(v) AND
     validFrom(other) <= (IF validTo(v) THEN validTo(v) ELSE 9999_12_31) AND
     (IF validTo(other) THEN validTo(other) ELSE 9999_12_31) >= validFrom(v);
 CONSTRAINT parameter(StatutoryParameterValue v) AND validFrom(v) AND
            overlappingStatutoryValueCount(v) > 1
     MESSAGE 'Периоды значений одного параметра законодательства не должны пересекаться';
+CONSTRAINT (CHANGED(statutoryValuePack(StatutoryParameterValue v)) OR
+            CHANGED(parameter(v)) OR CHANGED(validFrom(v)) OR CHANGED(validTo(v)) OR
+            CHANGED(numericValue(v)) OR CHANGED(textValue(v)) OR
+            CHANGED(legalSource(v)) OR CHANGED(note(v))) AND
+           (PREV(packStatus(statutoryValuePack(v))) == RegulatoryPackStatus.approved OR
+            packStatus(statutoryValuePack(v)) == RegulatoryPackStatus.approved)
+    MESSAGE 'Значения утверждённого нормативного набора неизменяемы';
 
 FORM legalSources 'Нормативные источники'
     OBJECTS s = LegalSource
@@ -68,7 +154,7 @@ FORM statutoryParameters 'Параметры законодательства'
 
 FORM statutoryParameterValues 'Значения параметров законодательства'
     OBJECTS v = StatutoryParameterValue
-    PROPERTIES(v) parameter, validFrom, validTo, numericValue, textValue,
+    PROPERTIES(v) statutoryValuePack, parameter, validFrom, validTo, numericValue, textValue,
                   legalSource, note
 ;
 
@@ -76,15 +162,33 @@ legalSourceByCode(STRING[50] sourceCode) =
     GROUP AGGR LegalSource s BY code(s);
 statutoryParameterByCode(STRING[50] code) =
     GROUP AGGR StatutoryParameter p BY parameterCode(p);
-statutoryValueByPeriod(StatutoryParameter parameter, DATE dateFrom) =
-    GROUP AGGR StatutoryParameterValue v BY parameter(v), validFrom(v);
+statutoryValueByPeriod(RegulatoryPack pack, StatutoryParameter parameter, DATE dateFrom) =
+    GROUP AGGR StatutoryParameterValue v BY statutoryValuePack(v), parameter(v), validFrom(v);
 statutoryValueOn(StatutoryParameter p, DATE date) =
     GROUP LAST StatutoryParameterValue v
-    IF parameter(v) == p AND validFrom(v) <= date AND
+    IF statutoryValuePack(v) == approvedRegulatoryPackOn(date) AND
+       parameter(v) == p AND validFrom(v) <= date AND
        (NOT validTo(v) OR validTo(v) >= date)
     ORDER validFrom(v), v;
 numericStatutoryValueOn(StatutoryParameter p, DATE date) =
     numericValue(statutoryValueOn(p, date));
+numericStatutoryValueCountOn(STRING[50] requiredCode, DATE date) = GROUP SUM 1 IF
+    statutoryValuePack(StatutoryParameterValue v) == approvedRegulatoryPackOn(date) AND
+    parameterCode(parameter(v)) == requiredCode AND numericValue(v) AND
+    validFrom(v) <= date AND (NOT validTo(v) OR validTo(v) >= date);
+numericStatutoryParameterReady(STRING[50] requiredCode, DATE date) =
+    numericStatutoryValueCountOn(requiredCode, date) == 1;
+
+ensureRegulatoryPack() {
+    IF NOT regulatoryPackByCode('KZ-2026.1') THEN NEW p = RegulatoryPack {
+        packCode(p) <- 'KZ-2026.1';
+        packName(p) <- 'Базовый набор законодательства РК 2026';
+        packVersion(p) <- '2026.1';
+        packValidFrom(p) <- 2026_01_01;
+        packValidTo(p) <- 2026_12_31;
+        packStatus(p) <- RegulatoryPackStatus.draft;
+    }
+}
 
 ensureLegalSource(STRING[50] sourceCode, STRING[250] sourceTitle,
                   STRING[500] url, DATE dateFrom, DATE checkedOn) {
@@ -113,20 +217,25 @@ ensureStatutoryParameter(STRING[50] code, STRING[200] name,
 
 ensureStatutoryValue(StatutoryParameter p, DATE dateFrom, DATE dateTo,
                      NUMERIC[18,6] value, LegalSource source, STRING[500] valueNote) {
-    IF NOT statutoryValueByPeriod(p, dateFrom) THEN {
-        NEW v = StatutoryParameterValue {
-            parameter(v) <- p;
-            validFrom(v) <- dateFrom;
-            validTo(v) <- dateTo;
-            numericValue(v) <- value;
-            legalSource(v) <- source;
-            note(v) <- valueNote;
-        }
+    IF NOT statutoryValueByPeriod(regulatoryPackByCode('KZ-2026.1'), p, dateFrom) THEN {
+        IF statutoryValueByPeriod(NULL, p, dateFrom) THEN
+            statutoryValuePack(statutoryValueByPeriod(NULL, p, dateFrom)) <-
+                regulatoryPackByCode('KZ-2026.1');
+        ELSE NEW v = StatutoryParameterValue {
+                statutoryValuePack(v) <- regulatoryPackByCode('KZ-2026.1');
+                parameter(v) <- p;
+                validFrom(v) <- dateFrom;
+                validTo(v) <- dateTo;
+                numericValue(v) <- value;
+                legalSource(v) <- source;
+                note(v) <- valueNote;
+            }
     }
 }
 
 loadBaselineLegalParameters() {
     NEWSESSION {
+        ensureRegulatoryPack();
         ensureLegalSource('LABOR_CODE_KZ', 'Трудовой кодекс Республики Казахстан',
             'https://adilet.zan.kz/rus/docs/K1500000414', 2016_01_01, 2026_08_31);
         ensureLegalSource('BUDGET_2026_2028', 'О республиканском бюджете на 2026–2028 годы',
@@ -251,6 +360,13 @@ loadBaselineLegalParameters() {
             33.333333, legalSourceByCode('FAMILY_CODE_KZ'), 'Одна треть дохода');
         ensureStatutoryValue(statutoryParameterByCode('ALIMONY_THREE_CHILD_RATE'), 2026_01_01, NULL,
             50.000000, legalSourceByCode('FAMILY_CODE_KZ'), 'Половина дохода');
+        // Persist the complete draft first; approval makes all its values immutable.
+        APPLY;
+        IF packStatus(regulatoryPackByCode('KZ-2026.1')) == RegulatoryPackStatus.draft THEN {
+            regulatoryPackLifecycleTransition(regulatoryPackByCode('KZ-2026.1')) <- TRUE;
+            packStatus(regulatoryPackByCode('KZ-2026.1')) <- RegulatoryPackStatus.approved;
+            packApprovedAt(regulatoryPackByCode('KZ-2026.1')) <- currentDateTime();
+        }
         APPLY;
     }
 }

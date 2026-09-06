@@ -59,14 +59,16 @@ CLASS SocialPaymentDocument 'Расчёт социальных платежей'
 socialPaymentPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (SocialPaymentDocument);
 socialPaymentStatus 'Статус' = DATA SocialPaymentStatus (SocialPaymentDocument);
 socialPaymentCalculatedAt 'Рассчитан' = DATA DATETIME (SocialPaymentDocument);
+socialPaymentRegulatoryPack 'Нормативный набор' = DATA RegulatoryPack (SocialPaymentDocument);
 socialPaymentLifecycleTransition = DATA LOCAL BOOLEAN (SocialPaymentDocument);
 
 CONSTRAINT CHANGED(socialPaymentStatus(SocialPaymentDocument d)) AND
            PREV(socialPaymentStatus(d)) AND NOT socialPaymentLifecycleTransition(d)
     MESSAGE 'Статус социальных платежей изменяется только штатными действиями';
-CONSTRAINT CHANGED(socialPaymentCalculatedAt(SocialPaymentDocument d)) AND
+CONSTRAINT (CHANGED(socialPaymentCalculatedAt(SocialPaymentDocument d)) OR
+            CHANGED(socialPaymentRegulatoryPack(d))) AND
            PREV(socialPaymentStatus(d)) AND NOT socialPaymentLifecycleTransition(d)
-    MESSAGE 'Дата расчёта социальных платежей изменяется только штатным действием';
+    MESSAGE 'Снимок расчёта социальных платежей изменяется только штатным действием';
 
 CLASS SocialPaymentLine 'Социальные платежи сотрудника';
 
@@ -186,6 +188,20 @@ payrollEmployeeLineCount(PayrollRun run, Employee worker) = GROUP SUM 1
 missingSocialPaymentBirthDateCount(PayrollRun run) = GROUP SUM 1
     IF linePayrollRun(PayrollLine l) == run AND
        NOT birthDate(employee(employment(linePayrollAssignment(l))));
+missingSocialStatutoryParameter(DATE date) =
+    NOT numericStatutoryParameterReady('MZP', date) OR
+    NOT numericStatutoryParameterReady('OPV_MAX_MZP', date) OR
+    NOT numericStatutoryParameterReady('OPV_RATE', date) OR
+    NOT numericStatutoryParameterReady('OPVR_MIN_MZP', date) OR
+    NOT numericStatutoryParameterReady('OPVR_MAX_MZP', date) OR
+    NOT numericStatutoryParameterReady('OPVR_RATE', date) OR
+    NOT numericStatutoryParameterReady('SO_MIN_MZP', date) OR
+    NOT numericStatutoryParameterReady('SO_MAX_MZP', date) OR
+    NOT numericStatutoryParameterReady('SO_RATE', date) OR
+    NOT numericStatutoryParameterReady('VOSMS_MAX_MZP', date) OR
+    NOT numericStatutoryParameterReady('VOSMS_RATE', date) OR
+    NOT numericStatutoryParameterReady('OOSMS_MAX_MZP', date) OR
+    NOT numericStatutoryParameterReady('OOSMS_RATE', date);
 socialPaymentLineCount(SocialPaymentDocument d, Employee worker) = GROUP SUM 1 IF
     socialPaymentDocument(SocialPaymentLine l) == d AND socialPaymentEmployee(l) == worker;
 CONSTRAINT socialPaymentLineCount(SocialPaymentDocument d, Employee worker) > 1
@@ -224,6 +240,9 @@ calculateSocialPayments 'Рассчитать' (SocialPaymentDocument d) {
         MESSAGE 'Выберите рассчитанную зарплату';
     ELSE IF missingSocialPaymentBirthDateCount(socialPaymentPayrollRun(d)) THEN
         MESSAGE 'Заполните даты рождения сотрудников для определения ОПВР';
+    ELSE IF NOT approvedRegulatoryPackOn(payrollPeriodTo(socialPaymentPayrollRun(d))) OR
+            missingSocialStatutoryParameter(payrollPeriodTo(socialPaymentPayrollRun(d))) THEN
+        MESSAGE 'Нет полного утверждённого набора ставок социальных платежей на дату расчёта';
     ELSE {
         FOR worker IS Employee AND payrollEmployeeLineCount(socialPaymentPayrollRun(d), worker) DO {
             NEW l = SocialPaymentLine {
@@ -266,6 +285,8 @@ calculateSocialPayments 'Рассчитать' (SocialPaymentDocument d) {
             }
         }
         socialPaymentLifecycleTransition(d) <- TRUE;
+        socialPaymentRegulatoryPack(d) <-
+            approvedRegulatoryPackOn(payrollPeriodTo(socialPaymentPayrollRun(d)));
         socialPaymentStatus(d) <- SocialPaymentStatus.calculated;
         socialPaymentCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -322,6 +343,7 @@ FORM socialPaymentDocuments 'Расчёт социальных платежей'
     OBJECTS d = SocialPaymentDocument
     PROPERTIES(d) socialPaymentPayrollRun
     PROPERTIES(d) READONLY socialPaymentStatus, socialPaymentCalculatedAt,
+                           socialPaymentRegulatoryPack,
                            totalOpv, totalOpvr, totalSo, totalVosms, totalOosms,
                            payableAfterSocialPayments
     PROPERTIES(d) calculateSocialPayments, approveSocialPayments, cancelSocialPayments
