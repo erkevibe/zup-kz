@@ -265,12 +265,12 @@ CONSTRAINT (CHANGED(archiveDocumentDestructionAct(ArchiveDocument d)) OR
            PREV(archiveDocumentStatus(d)) == ArchiveDocumentStatus.destroyed
     MESSAGE 'Нельзя изменить реквизиты зарегистрированного уничтожения';
 
-archiveDocumentCount(ArchiveCase c) = GROUP SUM 1 IF
+archiveDocumentCount 'Документов' (ArchiveCase c) = GROUP SUM 1 IF
     archiveDocumentCase(ArchiveDocument d) == c;
 archiveDraftDocumentCount(ArchiveCase c) = GROUP SUM 1 IF
     archiveDocumentCase(ArchiveDocument d) == c AND
     archiveDocumentStatus(d) == ArchiveDocumentStatus.draft;
-archiveDestroyedDocumentCount(ArchiveCase c) = GROUP SUM 1 IF
+archiveDestroyedDocumentCount 'Уничтожено документов' (ArchiveCase c) = GROUP SUM 1 IF
     archiveDocumentCase(ArchiveDocument d) == c AND
     archiveDocumentStatus(d) == ArchiveDocumentStatus.destroyed;
 

@@ -65,7 +65,7 @@ cardEmployeeBirthDate 'Дата рождения / Туған күні' (Employe
 cardEmployeeGender 'Пол / Жынысы' (EmployeeCard c) = gender(cardEmployee(c));
 cardEmployeeCitizenship 'Гражданство / Азаматтығы' (EmployeeCard c) =
     citizenshipCode(cardEmployee(c));
-employeeCardReady(EmployeeCard c) =
+employeeCardReady 'Карточка заполнена' (EmployeeCard c) =
     cardEmployee(c) AND cardOrganization(c) AND cardNumber(c) AND cardDate(c) AND
     personnelNumber(c) AND iin(cardEmployee(c)) AND lastName(cardEmployee(c)) AND
     firstName(cardEmployee(c)) AND birthDate(cardEmployee(c)) AND consentDate(c) AND

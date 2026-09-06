@@ -87,7 +87,7 @@ insurancePolicyKeyCount(Organization org, STRING[80] number) = GROUP SUM 1 IF
 CONSTRAINT insurancePolicyKeyCount(insurancePolicyOrganization(AccidentInsurancePolicy p),
                                    insurancePolicyNumber(p)) > 1
     MESSAGE 'Номер договора страхования должен быть уникальным в организации';
-insurancePolicyEffectiveValidTo(AccidentInsurancePolicy p) =
+insurancePolicyEffectiveValidTo 'Действует по (фактически)' (AccidentInsurancePolicy p) =
     IF insurancePolicyStatus(p) == AccidentInsurancePolicyStatus.cancelled AND
        insurancePolicyTerminationDate(p) THEN insurancePolicyTerminationDate(p)
     ELSE insurancePolicyValidTo(p);
