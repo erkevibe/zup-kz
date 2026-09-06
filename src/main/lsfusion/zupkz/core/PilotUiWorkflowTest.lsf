@@ -238,6 +238,24 @@ pilotUiPayslipPdfTest() {
     ELSE PRINT payrollSettlementCard OBJECTS
         l = settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee()) PDF TO exportFile;
 }
+pilotUiPayslipAugustPdfTest() {
+    IF NOT settlementViewAllowed(pilotUiSettlement()) THEN EXPORT JSON FROM denied = TRUE;
+    ELSE PRINT payrollSettlementCard OBJECTS l = pilotUiSettlement() PDF TO exportFile;
+}
+pilotUiPayslipDetailVerificationTest() {
+    EXPORT JSON FROM
+        augustCount = settlementDetailCount(pilotUiSettlement()),
+        septemberCount = settlementDetailCount(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
+        augustSalary = (GROUP SUM calculationAmount(PayrollLine d) IF settlementContainsLine(pilotUiSettlement(), d) AND
+            calculationCode(lineCalculationType(d)) == 'BASE_SALARY'),
+        augustBonus = (GROUP SUM calculationAmount(PayrollLine d) IF settlementContainsLine(pilotUiSettlement(), d) AND
+            calculationCode(lineCalculationType(d)) == 'FIXED_BONUS'),
+        augustAccrued = (GROUP SUM calculationAmount(PayrollLine d) IF settlementContainsLine(pilotUiSettlement(), d) AND
+            calculationCategory(lineCalculationType(d)) == CalculationCategory.accrual),
+        crossPeriodLeaks = (GROUP SUM 1 IF settlementContainsLine(pilotUiSettlement(), PayrollLine d) AND
+            linePayrollRun(d) == pilotUiPreparationRun()),
+        allowed = settlementViewAllowed(pilotUiSettlement());
+}
 
 pilotUiDataSetupTest() {
     IF pilotUiPayrollRun() THEN

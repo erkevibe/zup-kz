@@ -425,6 +425,13 @@ settlementViewAllowed(PayrollSettlementLine l) = l IS PayrollSettlementLine AND
     settlementClosedAt(l) AND settlementViewRoleAllowed() AND
     organizationAllowed(payrollOrganization(settlementPayrollRun(l)));
 
+// Детализация использует защищённые PayrollLine, только этого работника и расчёта.
+settlementContainsLine(PayrollSettlementLine l, PayrollLine d) =
+    linePayrollRun(d) == settlementPayrollRun(l) AND
+    employee(employment(linePayrollAssignment(d))) == settlementEmployee(l);
+settlementDetailCategory 'Категория' (PayrollLine d) = caption(calculationCategory(lineCalculationType(d)));
+settlementDetailCount(PayrollSettlementLine l) = GROUP SUM 1 IF settlementContainsLine(l, PayrollLine d);
+
 FORM payrollSettlementCard 'Расчётный листок - суммы в тенге'
     OBJECTS l = PayrollSettlementLine PANEL
     PROPERTIES(l) READONLY settlementOrganizationName, settlementRunNumber,
@@ -434,6 +441,10 @@ FORM payrollSettlementCard 'Расчётный листок - суммы в те
         settlementOpvr, settlementSo, settlementOosms, settlementSocialTax,
         settlementClosedAt
     FILTERS settlementViewAllowed(l)
+    OBJECTS d = PayrollLine
+    PROPERTIES(d) READONLY lineTypeName, settlementDetailCategory, calculationAmount
+    FILTERS settlementContainsLine(l, d)
+    ORDERS lineTypeName(d)
 ;
 
 DESIGN payrollSettlementCard {
@@ -481,7 +492,12 @@ EXTEND FORM payrollSettlementCard
     PROPERTIES(l) printPayrollSettlementPdf TOOLBAR
 ;
 DESIGN payrollSettlementCard {
-    MOVE PROPERTY(printPayrollSettlementPdf(l)) AFTER amounts { align = END; }
+    MOVE BOX(d) AFTER amounts {
+        caption = 'Расшифровка начислений и прочих удержаний';
+        height = 180;
+        flex = 0;
+    }
+    MOVE PROPERTY(printPayrollSettlementPdf(l)) AFTER BOX(d) { align = END; }
     REMOVE BOX(l);
 }
 
