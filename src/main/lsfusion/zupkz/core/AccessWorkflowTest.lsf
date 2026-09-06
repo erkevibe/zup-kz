@@ -3,35 +3,82 @@ MODULE AccessWorkflowTest;
 REQUIRE SickLeaveWorkflowTest;
 NAMESPACE ZUPKZ;
 
+accessAssignedOrganization() = organizationByBin('333333333333');
+accessHiddenOrganization() = organizationByBin('222222222222');
+accessHiddenTimesheet() = GROUP LAST Timesheet t IF
+    timesheetNumber(t) == 'ACCESS-HIDDEN-1' ORDER t;
+
 accessWorkflowTest() {
     loadZupRoles();
     NEW assignedOrg = Organization {
+        name(assignedOrg) <- 'Доступ A';
         bin(assignedOrg) <- '333333333333';
         NEW hiddenOrg = Organization {
+            name(hiddenOrg) <- 'Доступ B';
             bin(hiddenOrg) <- '222222222222';
             NEW user = CustomUser {
                 login(user) <- 'zup-access-test';
+                calculateBase64Hash('SHA-256', 'zup-access-ci-only');
+                sha256Password(user) <- calculatedHash();
                 in(user, userRoleSID('zup_hr')) <- TRUE;
                 NEW access = UserOrganizationAccess {
                     accessUser(access) <- user;
                     accessOrganization(access) <- assignedOrg;
                     accessActive(access) <- TRUE;
 
-                    EXPORT JSON FROM
-                        allRolesCreated = userRoleSID('zup_hr') AND
-                            userRoleSID('zup_timekeeper') AND userRoleSID('zup_payroll') AND
-                            userRoleSID('zup_chief_accountant') AND userRoleSID('zup_auditor'),
-                        userHasHrRole = has(user, userRoleSID('zup_hr')),
-                        assignedOrganizationAllowed = userOrganizationAllowed(user, assignedOrg),
-                        hiddenOrganizationRejected = NOT userOrganizationAllowed(user, hiddenOrg),
-                        hrPersonnelPermitted = dataPermission(userRoleSID('zup_hr'),
-                            navigatorElementCanonicalName('ZUPKZ.personnel')) == Permission.permit,
-                        hrPayrollForbidden = dataPermission(userRoleSID('zup_hr'),
-                            navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.forbid,
-                        auditorReadOnly = dataPermissionChange(userRoleSID('zup_auditor'),
-                            propertyGroup('System_root')) == Permission.forbid;
+                    NEW hiddenTimesheet = Timesheet {
+                        timesheetOrganization(hiddenTimesheet) <- hiddenOrg;
+                        timesheetNumber(hiddenTimesheet) <- 'ACCESS-HIDDEN-1';
+                        timesheetPeriodFrom(hiddenTimesheet) <- 2026_01_01;
+                        timesheetPeriodTo(hiddenTimesheet) <- 2026_01_31;
+                        timesheetStatus(hiddenTimesheet) <- TimesheetStatus.draft;
+
+                        APPLY;
+
+                        EXPORT JSON FROM
+                            allRolesCreated = userRoleSID('zup_hr') AND
+                                userRoleSID('zup_timekeeper') AND userRoleSID('zup_payroll') AND
+                                userRoleSID('zup_chief_accountant') AND userRoleSID('zup_auditor'),
+                            userHasHrRole = has(user, userRoleSID('zup_hr')),
+                            assignedOrganizationAllowed = userOrganizationAllowed(user, assignedOrg),
+                            hiddenOrganizationRejected = NOT userOrganizationAllowed(user, hiddenOrg),
+                            hrPersonnelPermitted = dataPermission(userRoleSID('zup_hr'),
+                                navigatorElementCanonicalName('ZUPKZ.personnel')) == Permission.permit,
+                            hrPayrollForbidden = dataPermission(userRoleSID('zup_hr'),
+                                navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.forbid,
+                            auditorReadOnly = dataPermissionChange(userRoleSID('zup_auditor'),
+                                propertyGroup('System_root')) == Permission.forbid;
+                    }
                 }
             }
         }
     }
+}
+
+crossOrganizationPolicyTest() {
+    changeOrganizationName(accessHiddenOrganization(), 'УТЕЧК');
+    changeOrganizationName(accessAssignedOrganization(), 'Доступ A изменён');
+
+    EXPORT JSON FROM
+        authenticatedAsRestrictedUser = login(currentUser() AS CustomUser) == 'zup-access-test',
+        assignedReadAllowed = allowedOrganizationName(accessAssignedOrganization()) ==
+            'Доступ A изменён',
+        hiddenReadBlocked = NOT allowedOrganizationName(accessHiddenOrganization()),
+        assignedWriteAllowed = name(accessAssignedOrganization()) == 'Доступ A изменён',
+        hiddenWriteBlocked = name(accessHiddenOrganization()) == 'Доступ B',
+        hiddenActionBlocked = NOT organizationActionAllowed(accessHiddenOrganization());
+}
+
+crossOrganizationStatusAttackTest() {
+    // Имитируем злонамеренное action: даже внутренний lifecycle-token
+    // не должен обойти границу организации.
+    timesheetLifecycleTransition(accessHiddenTimesheet()) <- TRUE;
+    timesheetStatus(accessHiddenTimesheet()) <- TimesheetStatus.approved;
+    APPLY;
+}
+
+crossOrganizationVerificationTest() {
+    EXPORT JSON FROM
+        hiddenStatusPreserved = timesheetStatus(accessHiddenTimesheet()) == TimesheetStatus.draft,
+        hiddenNamePreserved = name(accessHiddenOrganization()) == 'Доступ B';
 }

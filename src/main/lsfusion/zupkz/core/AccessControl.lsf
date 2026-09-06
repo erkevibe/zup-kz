@@ -11,24 +11,106 @@ REQUIRE Security, KZOrganization, HRDepartment, HRPosition, HRStaffSchedule,
         ReportsKZForm20005;
 NAMESPACE ZUPKZ;
 
-CLASS UserOrganizationAccess 'Доступ пользователя к организации';
-
-accessUser 'Пользователь' = DATA CustomUser (UserOrganizationAccess);
-accessOrganization 'Организация' = DATA Organization (UserOrganizationAccess);
-accessActive 'Активен' = DATA BOOLEAN (UserOrganizationAccess);
-
-accessPairCount(CustomUser user, Organization org) = GROUP SUM 1 IF
-    accessUser(UserOrganizationAccess a) == user AND accessOrganization(a) == org;
-CONSTRAINT accessPairCount(CustomUser user, Organization org) > 1
-    MESSAGE 'Организация может быть назначена пользователю только один раз';
-
-userOrganizationAllowed(CustomUser user, Organization org) =
-    has(user, userRoleSID('admin')) OR GROUP MAX accessActive(UserOrganizationAccess a)
-        IF accessUser(a) == user AND accessOrganization(a) == org;
-organizationAllowed(Organization org) =
-    userOrganizationAllowed(currentUser() AS CustomUser, org);
 employeeAllowed(Employee worker) = GROUP MAX organizationAllowed(organization(Employment contract))
     IF employee(contract) == worker;
+
+// UI-фильтры не являются границей безопасности. Эти constraints запрещают
+// любой workflow-переход чужой организации, включая Action API и прямой APPLY.
+CONSTRAINT CHANGED(archiveCaseStatus(ArchiveCase c)) AND
+           NOT organizationActionAllowed(archiveCaseOrganization(c))
+    MESSAGE 'Нет доступа к архивному делу этой организации';
+CONSTRAINT CHANGED(archiveDocumentStatus(ArchiveDocument d)) AND
+           NOT organizationActionAllowed(archiveCaseOrganization(archiveDocumentCase(d)))
+    MESSAGE 'Нет доступа к архивному документу этой организации';
+CONSTRAINT CHANGED(form200Status(Form200Declaration d)) AND
+           NOT organizationActionAllowed(form200Organization(d))
+    MESSAGE 'Нет доступа к форме 200.00 этой организации';
+CONSTRAINT CHANGED(personnelNoticeStatus(PersonnelNotice n)) AND
+           NOT organizationActionAllowed(personnelNoticeOrganization(n))
+    MESSAGE 'Нет доступа к уведомлению этой организации';
+CONSTRAINT CHANGED(approvalStatus(ApprovalRequest r)) AND
+           NOT organizationActionAllowed(approvalOrganization(r))
+    MESSAGE 'Нет доступа к согласованию этой организации';
+CONSTRAINT CHANGED(approvalStepStatus(ApprovalStep s)) AND
+           NOT organizationActionAllowed(approvalOrganization(approvalStepRequest(s)))
+    MESSAGE 'Нет доступа к этапу согласования этой организации';
+CONSTRAINT CHANGED(vacationScheduleStatus(VacationSchedule s)) AND
+           NOT organizationActionAllowed(vacationScheduleOrganization(s))
+    MESSAGE 'Нет доступа к графику отпусков этой организации';
+CONSTRAINT CHANGED(averageStatus(AverageEarningsDocument d)) AND
+           NOT organizationActionAllowed(organization(employment(averageAssignment(d))))
+    MESSAGE 'Нет доступа к среднему заработку этой организации';
+CONSTRAINT CHANGED(recalculationStatus(PayrollRecalculation d)) AND
+           NOT organizationActionAllowed(payrollOrganization(recalculationTargetRun(d)))
+    MESSAGE 'Нет доступа к перерасчёту этой организации';
+CONSTRAINT CHANGED(tripStatus(BusinessTripDocument d)) AND
+           NOT organizationActionAllowed(tripOrganization(d))
+    MESSAGE 'Нет доступа к командировке этой организации';
+CONSTRAINT CHANGED(enforcementStatus(EnforcementOrder o)) AND
+           NOT organizationActionAllowed(enforcementOrganization(o))
+    MESSAGE 'Нет доступа к исполнительному документу этой организации';
+CONSTRAINT CHANGED(enforcementCalculationStatus(EnforcementCalculationDocument d)) AND
+           NOT organizationActionAllowed(payrollOrganization(
+               taxCalculationPayrollRun(enforcementTaxCalculation(d))))
+    MESSAGE 'Нет доступа к расчёту взысканий этой организации';
+CONSTRAINT CHANGED(civilContractStatus(CivilContract c)) AND
+           NOT organizationActionAllowed(civilContractOrganization(c))
+    MESSAGE 'Нет доступа к договору ГПХ этой организации';
+CONSTRAINT CHANGED(civilActStatus(CivilContractAct a)) AND
+           NOT organizationActionAllowed(civilContractOrganization(civilActContract(a)))
+    MESSAGE 'Нет доступа к акту ГПХ этой организации';
+CONSTRAINT CHANGED(civilLiabilityStatus(CivilLiabilityDocument d)) AND
+           NOT organizationActionAllowed(civilContractOrganization(
+               civilActContract(civilLiabilityAct(d))))
+    MESSAGE 'Нет доступа к платежам ГПХ этой организации';
+CONSTRAINT CHANGED(interimPaymentStatus(InterimPayment p)) AND
+           NOT organizationActionAllowed(organization(employment(interimPaymentAssignment(p))))
+    MESSAGE 'Нет доступа к межрасчётной выплате этой организации';
+CONSTRAINT CHANGED(sickLeaveStatus(SickLeaveDocument d)) AND
+           NOT organizationActionAllowed(organization(employment(sickLeaveAssignment(d))))
+    MESSAGE 'Нет доступа к больничному этой организации';
+CONSTRAINT CHANGED(payrollRunStatus(PayrollRun r)) AND
+           NOT organizationActionAllowed(payrollOrganization(r))
+    MESSAGE 'Нет доступа к расчёту зарплаты этой организации';
+CONSTRAINT CHANGED(taxCalculationStatus(TaxCalculationDocument d)) AND
+           NOT organizationActionAllowed(payrollOrganization(taxCalculationPayrollRun(d)))
+    MESSAGE 'Нет доступа к расчёту налогов этой организации';
+CONSTRAINT CHANGED(leaveStatus(LeaveDocument l)) AND
+           NOT organizationActionAllowed(organization(employment(leaveAssignment(l))))
+    MESSAGE 'Нет доступа к отпуску этой организации';
+CONSTRAINT CHANGED(paymentStatementStatus(PaymentStatement d)) AND
+           NOT organizationActionAllowed(payrollOrganization(paymentStatementPayrollRun(d)))
+    MESSAGE 'Нет доступа к платёжной ведомости этой организации';
+CONSTRAINT CHANGED(bankRegisterStatus(SalaryBankRegister r)) AND
+           NOT organizationActionAllowed(bankRegisterOrganization(r))
+    MESSAGE 'Нет доступа к банковскому реестру этой организации';
+CONSTRAINT CHANGED(liabilityStatus(PayrollLiabilityDocument d)) AND
+           NOT organizationActionAllowed(payrollOrganization(liabilityPayrollRun(d)))
+    MESSAGE 'Нет доступа к обязательным платежам этой организации';
+CONSTRAINT CHANGED(socialPaymentStatus(SocialPaymentDocument d)) AND
+           NOT organizationActionAllowed(payrollOrganization(socialPaymentPayrollRun(d)))
+    MESSAGE 'Нет доступа к социальным платежам этой организации';
+CONSTRAINT CHANGED(socialTransferStatus(SocialTransferRegister r)) AND
+           NOT organizationActionAllowed(socialTransferOrganization(r))
+    MESSAGE 'Нет доступа к реестру социальных платежей этой организации';
+CONSTRAINT CHANGED(eventStatus(PersonnelEvent e)) AND
+           NOT organizationActionAllowed(organization(eventEmployment(e)))
+    MESSAGE 'Нет доступа к кадровому событию этой организации';
+CONSTRAINT CHANGED(esutdStatus(PersonnelEvent e)) AND
+           NOT organizationActionAllowed(organization(eventEmployment(e)))
+    MESSAGE 'Нет доступа к ЕСУТД этой организации';
+CONSTRAINT CHANGED(insurancePolicyStatus(AccidentInsurancePolicy p)) AND
+           NOT organizationActionAllowed(insurancePolicyOrganization(p))
+    MESSAGE 'Нет доступа к страховому договору этой организации';
+CONSTRAINT CHANGED(workAccidentStatus(WorkAccident a)) AND
+           NOT organizationActionAllowed(workAccidentOrganization(a))
+    MESSAGE 'Нет доступа к несчастному случаю этой организации';
+CONSTRAINT CHANGED(insuranceClaimStatus(AccidentInsuranceClaim c)) AND
+           NOT organizationActionAllowed(workAccidentOrganization(insuranceClaimAccident(c)))
+    MESSAGE 'Нет доступа к страховому требованию этой организации';
+CONSTRAINT CHANGED(timesheetStatus(Timesheet t)) AND
+           NOT organizationActionAllowed(timesheetOrganization(t))
+    MESSAGE 'Нет доступа к табелю этой организации';
 
 FORM userOrganizationAccesses 'Доступ к организациям'
     OBJECTS a = UserOrganizationAccess
