@@ -7,6 +7,58 @@ accessAssignedOrganization() = organizationByBin('333333333333');
 accessHiddenOrganization() = organizationByBin('222222222222');
 accessHiddenTimesheet() = GROUP LAST Timesheet t IF
     timesheetNumber(t) == 'ACCESS-HIDDEN-1' ORDER t;
+uiRoleTestUser(STRING[100] value) = GROUP LAST CustomUser u IF login(u) == value ORDER u;
+
+createUiRoleTestUser(STRING[100] loginValue, STRING[50] roleSid, Organization org) {
+    NEW user = CustomUser {
+        login(user) <- loginValue;
+        calculateBase64Hash('SHA-256', 'zup-ui-test-only');
+        sha256Password(user) <- calculatedHash();
+        in(user, userRoleSID(roleSid)) <- TRUE;
+        NEW access = UserOrganizationAccess {
+            accessUser(access) <- user;
+            accessOrganization(access) <- org;
+            accessActive(access) <- TRUE;
+        }
+    }
+}
+
+uiRoleSetupTest() {
+    loadZupRoles();
+    NEW org = Organization {
+        name(org) <- 'UI Test Organization';
+        bin(org) <- '555555555555';
+        createUiRoleTestUser('ui-hr', 'zup_hr', org);
+        createUiRoleTestUser('ui-time', 'zup_timekeeper', org);
+        createUiRoleTestUser('ui-payroll', 'zup_payroll', org);
+        createUiRoleTestUser('ui-chief', 'zup_chief_accountant', org);
+        createUiRoleTestUser('ui-auditor', 'zup_auditor', org);
+        APPLY;
+
+        EXPORT JSON FROM
+            hrReady = has(uiRoleTestUser('ui-hr'), userRoleSID('zup_hr')),
+            timeReady = has(uiRoleTestUser('ui-time'), userRoleSID('zup_timekeeper')),
+            payrollReady = has(uiRoleTestUser('ui-payroll'), userRoleSID('zup_payroll')),
+            chiefReady = has(uiRoleTestUser('ui-chief'), userRoleSID('zup_chief_accountant')),
+            auditorReady = has(uiRoleTestUser('ui-auditor'), userRoleSID('zup_auditor'));
+    }
+}
+
+initialRolePermissionsTest() {
+    EXPORT JSON FROM
+        hrPersonnelPermitted = dataPermission(userRoleSID('zup_hr'),
+            navigatorElementCanonicalName('ZUPKZ.personnel')) == Permission.permit,
+        hrPayrollForbidden = dataPermission(userRoleSID('zup_hr'),
+            navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.forbid,
+        timeWorkingTimePermitted = dataPermission(userRoleSID('zup_timekeeper'),
+            navigatorElementCanonicalName('ZUPKZ.workingTime')) == Permission.permit,
+        payrollPayrollPermitted = dataPermission(userRoleSID('zup_payroll'),
+            navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.permit,
+        chiefReportsPermitted = dataPermission(userRoleSID('zup_chief_accountant'),
+            navigatorElementCanonicalName('ZUPKZ.reportsKz')) == Permission.permit,
+        auditorReadOnly = dataPermissionChange(userRoleSID('zup_auditor'),
+            propertyGroup('System_root')) == Permission.forbid;
+}
 
 accessWorkflowTest() {
     loadZupRoles();
@@ -82,4 +134,21 @@ crossOrganizationVerificationTest() {
     EXPORT JSON FROM
         hiddenStatusPreserved = timesheetStatus(accessHiddenTimesheet()) == TimesheetStatus.draft,
         hiddenNamePreserved = name(accessHiddenOrganization()) == 'Доступ B';
+}
+
+NAVIGATOR {
+    NEW FOLDER uiTestInternalForms 'UI-тест внутренних форм' WINDOW toolbar {
+        NEW archiveCaseInventory;
+        NEW businessTripOrder;
+        NEW employeePersonalCard;
+        NEW employmentAssignments;
+        NEW employments;
+        NEW form20005Xml;
+        NEW leaveOrder;
+        NEW personnelEventCard;
+        NEW personnelEventOrder;
+        NEW personnelEvents;
+        NEW vacationSchedulePrint;
+        NEW workAccidentAct;
+    }
 }

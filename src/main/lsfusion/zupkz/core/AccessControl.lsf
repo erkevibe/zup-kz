@@ -144,7 +144,7 @@ permitBusinessFolders(UserRole role) {
     dataPermission(role, navigatorElementCanonicalName('ZUPKZ.reportsKz')) <- Permission.permit;
 }
 
-loadZupRoles() {
+ensureZupRoles() {
     IF NOT userRoleSID('zup_hr') THEN NEW role = UserRole {
         sid(role) <- 'zup_hr';
         name(role) <- 'ZUP KZ — HR';
@@ -166,6 +166,9 @@ loadZupRoles() {
         name(role) <- 'ZUP KZ — Auditor';
     }
 
+}
+
+applyZupRolePermissions() {
     // Пользователей ЗУП создаёт администратор; публичная регистрация запрещена.
     disableRole(userRoleSID('selfRegister')) <- TRUE;
 
@@ -198,7 +201,22 @@ loadZupRoles() {
     dataPermissionEditObjects(userRoleSID('zup_auditor'), propertyGroup('System_root')) <- Permission.forbid;
 }
 
-onStarted() + { loadZupRoles(); }
+loadZupRoles() {
+    // userRoleSID is materialized: use a fresh session after creating roles.
+    NEWSESSION {
+        ensureZupRoles();
+        APPLY;
+    }
+    NEWSESSION {
+        applyZupRolePermissions();
+        APPLY;
+    }
+}
+
+// Initial synchronization and permission assignment are distinct platform phases.
+// This guarantees that materialized userRoleSID resolves newly created roles.
+onStarted() + { ensureZupRoles(); }
+onFinallyStarted() + { applyZupRolePermissions(); }
 
 EXTEND FORM organizations FILTERS organizationAllowed(o);
 EXTEND FORM departments FILTERS organizationAllowed(organization(d));
