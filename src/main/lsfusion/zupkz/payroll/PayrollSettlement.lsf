@@ -407,14 +407,89 @@ changeStatementMethod(PaymentStatement d) {
     DO paymentStatementMethod(d) <- selected;
 }
 
+// Денежные показатели берутся только из закрытого снимка, без повторного расчёта.
+settlementOrganizationName 'Организация' (PayrollSettlementLine l) = name(payrollOrganization(settlementPayrollRun(l)));
+settlementPeriodFrom 'Период с' (PayrollSettlementLine l) = payrollPeriodFrom(settlementPayrollRun(l));
+settlementPeriodTo 'Период по' (PayrollSettlementLine l) = payrollPeriodTo(settlementPayrollRun(l));
+settlementTotalDeducted 'Всего удержано' (PayrollSettlementLine l) =
+    (IF settlementPayrollDeducted(l) THEN settlementPayrollDeducted(l) ELSE 0.00) +
+    (IF settlementOpv(l) THEN settlementOpv(l) ELSE 0.00) +
+    (IF settlementVosms(l) THEN settlementVosms(l) ELSE 0.00) +
+    (IF settlementIpn(l) THEN settlementIpn(l) ELSE 0.00) +
+    (IF settlementEnforcement(l) THEN settlementEnforcement(l) ELSE 0.00);
+settlementViewRoleAllowed() = has(currentUser() AS CustomUser, userRoleSID('admin')) OR
+    has(currentUser() AS CustomUser, userRoleSID('zup_chief_accountant')) OR
+    has(currentUser() AS CustomUser, userRoleSID('zup_payroll')) OR
+    has(currentUser() AS CustomUser, userRoleSID('zup_auditor'));
+settlementViewAllowed(PayrollSettlementLine l) = l IS PayrollSettlementLine AND
+    settlementClosedAt(l) AND settlementViewRoleAllowed() AND
+    organizationAllowed(payrollOrganization(settlementPayrollRun(l)));
+
+FORM payrollSettlementCard 'Расчётный листок - суммы в тенге'
+    OBJECTS l = PayrollSettlementLine PANEL
+    PROPERTIES(l) READONLY settlementOrganizationName, settlementRunNumber,
+        settlementEmployeeName, settlementPeriodFrom, settlementPeriodTo,
+        settlementAccrued, settlementPayrollDeducted, settlementOpv, settlementVosms,
+        settlementIpn, settlementEnforcement, settlementTotalDeducted, settlementPayable,
+        settlementOpvr, settlementSo, settlementOosms, settlementSocialTax,
+        settlementClosedAt
+    FILTERS settlementViewAllowed(l)
+;
+
+DESIGN payrollSettlementCard {
+    NEW summary FIRST {
+        caption = 'Сотрудник и период';
+        MOVE PROPERTY(settlementOrganizationName(l)) { charWidth = 40; }
+        MOVE PROPERTY(settlementEmployeeName(l)) { charWidth = 40; }
+        MOVE PROPERTY(settlementRunNumber(l));
+        MOVE PROPERTY(settlementPeriodFrom(l));
+        MOVE PROPERTY(settlementPeriodTo(l));
+    }
+    NEW amounts AFTER summary {
+        horizontal = TRUE;
+        NEW employeeAmounts {
+            caption = 'Начисления и удержания работника';
+            MOVE PROPERTY(settlementAccrued(l));
+            MOVE PROPERTY(settlementPayrollDeducted(l));
+            MOVE PROPERTY(settlementOpv(l));
+            MOVE PROPERTY(settlementVosms(l));
+            MOVE PROPERTY(settlementIpn(l));
+            MOVE PROPERTY(settlementEnforcement(l));
+            MOVE PROPERTY(settlementTotalDeducted(l));
+            MOVE PROPERTY(settlementPayable(l));
+        }
+        NEW employerAmounts {
+            caption = 'За счёт работодателя (не удерживаются из зарплаты)';
+            MOVE PROPERTY(settlementOpvr(l));
+            MOVE PROPERTY(settlementSo(l));
+            MOVE PROPERTY(settlementOosms(l));
+            MOVE PROPERTY(settlementSocialTax(l));
+            MOVE PROPERTY(settlementClosedAt(l));
+        }
+    }
+}
+
+openPayrollSettlement 'Открыть листок' (PayrollSettlementLine l) {
+    IF NOT settlementViewAllowed(l) THEN MESSAGE 'Нет доступа к закрытому расчётному листку';
+    ELSE SHOW payrollSettlementCard OBJECTS l = l NOWAIT;
+}
+printPayrollSettlementPdf 'PDF / Печать листка' (PayrollSettlementLine l) {
+    IF NOT settlementViewAllowed(l) THEN MESSAGE 'Нет доступа к закрытому расчётному листку';
+    ELSE PRINT payrollSettlementCard OBJECTS l = l PDF;
+}
+EXTEND FORM payrollSettlementCard
+    PROPERTIES(l) printPayrollSettlementPdf TOOLBAR
+;
+DESIGN payrollSettlementCard {
+    MOVE PROPERTY(printPayrollSettlementPdf(l)) AFTER amounts { align = END; }
+    REMOVE BOX(l);
+}
+
 FORM payrollSettlements 'Расчётные листки'
     OBJECTS l = PayrollSettlementLine
     PROPERTIES(l) READONLY settlementRunNumber, settlementEmployeeName, settlementAccrued,
-                           settlementPayrollDeducted, settlementOpv, settlementVosms,
-                           settlementIpn, settlementEnforcement, settlementPayable,
-                           settlementOpvr, settlementSo, settlementOosms, settlementSocialTax,
-                           settlementClosedAt, settlementLegalCode, remainingSettlementAmount,
-                           unpaidSettlementAmount
+        settlementTotalDeducted, settlementPayable, unpaidSettlementAmount
+    PROPERTIES(l) openPayrollSettlement TOOLBAR, printPayrollSettlementPdf TOOLBAR
 ;
 
 FORM payrollLifecycleEntries 'История закрытия расчётов зарплаты'

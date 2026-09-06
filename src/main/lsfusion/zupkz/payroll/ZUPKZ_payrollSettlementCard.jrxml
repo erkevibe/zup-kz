@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- lsFusion fields match payrollSettlementCard property SIDs. No tax calculations here. -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+    name="ZUPKZ_payrollSettlementCard" pageWidth="595" pageHeight="842"
+    columnWidth="523" leftMargin="36" rightMargin="36" topMargin="36" bottomMargin="36">
+    <style name="Default" isDefault="true" fontName="DejaVu Sans" fontSize="11" pdfEncoding="Identity-H" isPdfEmbedded="true"/>
+    <field name="settlementOrganizationName(l)" class="java.lang.String"/>
+    <field name="settlementRunNumber(l)" class="java.lang.String"/>
+    <field name="settlementEmployeeName(l)" class="java.lang.String"/>
+    <field name="settlementPeriodFrom(l)" class="java.lang.Object"/>
+    <field name="settlementPeriodTo(l)" class="java.lang.Object"/>
+    <field name="settlementAccrued(l)" class="java.math.BigDecimal"/>
+    <field name="settlementPayrollDeducted(l)" class="java.math.BigDecimal"/>
+    <field name="settlementOpv(l)" class="java.math.BigDecimal"/>
+    <field name="settlementVosms(l)" class="java.math.BigDecimal"/>
+    <field name="settlementIpn(l)" class="java.math.BigDecimal"/>
+    <field name="settlementEnforcement(l)" class="java.math.BigDecimal"/>
+    <field name="settlementTotalDeducted(l)" class="java.math.BigDecimal"/>
+    <field name="settlementPayable(l)" class="java.math.BigDecimal"/>
+    <field name="settlementOpvr(l)" class="java.math.BigDecimal"/>
+    <field name="settlementSo(l)" class="java.math.BigDecimal"/>
+    <field name="settlementOosms(l)" class="java.math.BigDecimal"/>
+    <field name="settlementSocialTax(l)" class="java.math.BigDecimal"/>
+    <field name="settlementClosedAt(l)" class="java.lang.Object"/>
+    <detail><band height="718" splitType="Prevent">
+        <staticText><reportElement x="0" y="0" width="523" height="28"/><textElement><font size="18" isBold="true"/></textElement><text><![CDATA[РАСЧЁТНЫЙ ЛИСТОК]]></text></staticText>
+        <staticText><reportElement x="0" y="40" width="523" height="16"/><textElement><font size="9" isBold="false"/></textElement><text><![CDATA[Организация]]></text></staticText>
+        <textField isBlankWhenNull="true"><reportElement x="0" y="58" width="523" height="42"/><textElement><font isBold="false"/></textElement><textFieldExpression><![CDATA[$F{settlementOrganizationName(l)}]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="106" width="523" height="16"/><textElement><font size="9" isBold="false"/></textElement><text><![CDATA[Сотрудник]]></text></staticText>
+        <textField isBlankWhenNull="true"><reportElement x="0" y="124" width="523" height="42"/><textElement><font isBold="false"/></textElement><textFieldExpression><![CDATA[$F{settlementEmployeeName(l)}]]></textFieldExpression></textField>
+        <textField isBlankWhenNull="true"><reportElement x="0" y="172" width="523" height="20"/><textElement><font isBold="false"/></textElement><textFieldExpression><![CDATA["Период: " + $F{settlementPeriodFrom(l)} + " - " + $F{settlementPeriodTo(l)}]]></textFieldExpression></textField>
+        <textField isBlankWhenNull="true"><reportElement x="0" y="196" width="523" height="22"/><textElement><font isBold="false"/></textElement><textFieldExpression><![CDATA["Расчёт: " + $F{settlementRunNumber(l)}]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="230" width="410" height="22"/><textElement><font size="11" isBold="true"/></textElement><text><![CDATA[НАЧИСЛЕНИЯ И УДЕРЖАНИЯ РАБОТНИКА]]></text></staticText>
+        <staticText><reportElement x="425" y="230" width="98" height="22"/><textElement><font size="10" isBold="false"/></textElement><text><![CDATA[Тенге (KZT)]]></text></staticText>
+        <staticText><reportElement x="0" y="260" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[Начислено]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="260" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementAccrued(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementAccrued(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="285" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[Прочие удержания]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="285" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementPayrollDeducted(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementPayrollDeducted(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="310" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[ОПВ]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="310" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementOpv(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementOpv(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="335" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[ВОСМС]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="335" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementVosms(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementVosms(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="360" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[ИПН]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="360" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementIpn(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementIpn(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="385" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[Исполнительные удержания]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="385" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementEnforcement(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementEnforcement(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="410" width="355" height="22"/><textElement><font size="11" isBold="true"/></textElement><text><![CDATA[Всего удержано]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="410" width="158" height="22"/><textElement textAlignment="Right"><font isBold="true"/></textElement><textFieldExpression><![CDATA[($F{settlementTotalDeducted(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementTotalDeducted(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="435" width="355" height="22"/><textElement><font size="11" isBold="true"/></textElement><text><![CDATA[К ВЫПЛАТЕ]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="435" width="158" height="22"/><textElement textAlignment="Right"><font isBold="true"/></textElement><textFieldExpression><![CDATA[($F{settlementPayable(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementPayable(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="478" width="523" height="22"/><textElement><font size="11" isBold="true"/></textElement><text><![CDATA[ПЛАТЕЖИ РАБОТОДАТЕЛЯ]]></text></staticText>
+        <staticText><reportElement x="0" y="502" width="523" height="18"/><textElement><font size="9" isBold="false"/></textElement><text><![CDATA[Не удерживаются из заработной платы работника]]></text></staticText>
+        <staticText><reportElement x="0" y="530" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[ОПВР работодателя]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="530" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementOpvr(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementOpvr(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="555" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[Социальные отчисления]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="555" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementSo(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementSo(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="580" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[ООСМС работодателя]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="580" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementOosms(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementOosms(l)})]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="605" width="355" height="22"/><textElement><font size="11" isBold="false"/></textElement><text><![CDATA[Социальный налог]]></text></staticText>
+        <textField isBlankWhenNull="true" pattern="#,##0.00"><reportElement x="365" y="605" width="158" height="22"/><textElement textAlignment="Right"><font isBold="false"/></textElement><textFieldExpression><![CDATA[($F{settlementSocialTax(l)} == null ? java.math.BigDecimal.ZERO : $F{settlementSocialTax(l)})]]></textFieldExpression></textField>
+        <textField isBlankWhenNull="true"><reportElement x="0" y="650" width="523" height="20"/><textElement><font isBold="false"/></textElement><textFieldExpression><![CDATA["Закрыт: " + $F{settlementClosedAt(l)}]]></textFieldExpression></textField>
+        <staticText><reportElement x="0" y="680" width="523" height="30"/><textElement><font size="9" isBold="false"/></textElement><text><![CDATA[Суммы из закрытого расчёта. Листок не подтверждает фактическую выплату.]]></text></staticText>
+    </band></detail>
+</jasperReport>

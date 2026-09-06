@@ -221,6 +221,24 @@ pilotUiPreparationVerificationTest() {
         employeeLabel = settlementEmployeeName(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee()));
 }
 
+// Проверка представления на сохранённом сентябрьском снимке, без записи в БД.
+pilotUiPayslipVerificationTest() {
+    EXPORT JSON FROM
+        allowed = settlementViewAllowed(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
+        withheld = settlementTotalDeducted(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
+        accrued = settlementAccrued(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
+        payable = settlementPayable(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
+        organization = settlementOrganizationName(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
+        employee = settlementEmployeeName(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())),
+        nullDenied = NOT settlementViewAllowed(NULL);
+}
+pilotUiPayslipPdfTest() {
+    IF NOT settlementViewAllowed(settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee())) THEN
+        EXPORT JSON FROM denied = TRUE;
+    ELSE PRINT payrollSettlementCard OBJECTS
+        l = settlementLineByEmployee(pilotUiPreparationRun(), pilotUiEmployee()) PDF TO exportFile;
+}
+
 pilotUiDataSetupTest() {
     IF pilotUiPayrollRun() THEN
         EXPORT JSON FROM
