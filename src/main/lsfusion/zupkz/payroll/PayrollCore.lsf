@@ -176,12 +176,14 @@ CONSTRAINT (CHANGED(linePayrollRun(PayrollLine l)) OR
             CHANGED(calculationNote(l))) AND
            (PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.calculated OR
             PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.approved OR
-            PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.paid)
+            PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.paid) AND
+           NOT payrollLifecycleTransition(PREV(linePayrollRun(l)))
     MESSAGE 'Нельзя изменить строку рассчитанной зарплаты';
 CONSTRAINT DROPPED(PayrollLine l IS PayrollLine) AND
            (PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.calculated OR
             PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.approved OR
-            PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.paid)
+            PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.paid) AND
+           NOT payrollLifecycleTransition(PREV(linePayrollRun(l)))
     MESSAGE 'Нельзя удалить строку рассчитанной зарплаты';
 
 // Оклад покрывает каждый фактически отработанный час по одинарной ставке.

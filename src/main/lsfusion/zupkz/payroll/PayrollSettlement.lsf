@@ -11,6 +11,7 @@ latestPayrollPaymentDate 'Предельная дата выплаты' (Payroll
 payrollPaymentLegalSource 'Нормативное основание выплаты' (PayrollRun r) =
     legalSourceByCode('LABOR_CODE_KZ');
 payrollReopenReason 'Причина переоткрытия' = DATA STRING[500] (PayrollRun);
+payrollResetReason 'Причина пересчёта' = DATA STRING[500] (PayrollRun);
 
 CONSTRAINT payrollPaymentDueDate(PayrollRun r) <= payrollPeriodTo(r)
     MESSAGE 'Дата выплаты должна быть позже окончания расчётного периода';
@@ -49,7 +50,8 @@ settlementLegalSource 'Нормативное основание' (PayrollSettle
 
 CLASS PayrollLifecycleOperation 'Операция с расчётом зарплаты' {
     closed 'Закрытие',
-    reopened 'Переоткрытие'
+    reopened 'Переоткрытие',
+    resetForRecalculation 'Сброс для пересчёта'
 }
 
 CLASS PayrollLifecycleEntry 'История расчёта зарплаты';
@@ -346,6 +348,43 @@ reopenPayroll 'Переоткрыть расчёт' (PayrollRun r) {
     }
 }
 
+payrollSettlementLineCountForRun(PayrollRun run) = GROUP SUM 1 IF
+    settlementPayrollRun(PayrollSettlementLine l) == run;
+
+resetPayrollForRecalculation 'Сбросить для пересчёта' (PayrollRun r) {
+    IF payrollRunStatus(r) != PayrollRunStatus.calculated THEN
+        MESSAGE 'Сбросить можно только рассчитанную зарплату';
+    ELSE IF payrollSettlementLineCountForRun(r) THEN
+        MESSAGE 'Сначала переоткройте закрытый расчёт';
+    ELSE IF activePaymentStatementCount(r) THEN
+        MESSAGE 'Нельзя пересчитать зарплату после формирования платёжной ведомости';
+    ELSE IF NOT payrollResetReason(r) THEN
+        MESSAGE 'Укажите причину пересчёта зарплаты';
+    ELSE {
+        FOR enforcementPayrollRun(EnforcementCalculationDocument d) == r AND
+            (enforcementCalculationStatus(d) == EnforcementCalculationStatus.calculated OR
+             enforcementCalculationStatus(d) == EnforcementCalculationStatus.approved) DO
+            cancelEnforcementSnapshot(d);
+        FOR taxCalculationPayrollRun(TaxCalculationDocument d) == r AND
+            (taxCalculationStatus(d) == TaxCalculationStatus.calculated OR
+             taxCalculationStatus(d) == TaxCalculationStatus.approved) DO
+            cancelTaxesSnapshot(d);
+        FOR socialPaymentPayrollRun(SocialPaymentDocument d) == r AND
+            (socialPaymentStatus(d) == SocialPaymentStatus.calculated OR
+             socialPaymentStatus(d) == SocialPaymentStatus.approved) DO
+            cancelSocialPaymentsSnapshot(d);
+
+        recordPayrollLifecycle(r, PayrollLifecycleOperation.resetForRecalculation,
+            PayrollRunStatus.calculated, PayrollRunStatus.timeCollected, payrollResetReason(r));
+        payrollLifecycleTransition(r) <- TRUE;
+        DELETE PayrollLine l WHERE linePayrollRun(l) == r;
+        payrollRunStatus(r) <- PayrollRunStatus.timeCollected;
+        payrollCalculatedAt(r) <- NULL;
+        payrollResetReason(r) <- NULL;
+        APPLY;
+    }
+}
+
 FORM payrollSettlements 'Расчётные листки'
     OBJECTS l = PayrollSettlementLine
     PROPERTIES(l) READONLY settlementPayrollRun, settlementEmployee, settlementAccrued,
@@ -382,6 +421,7 @@ FORM paymentStatementLines 'Строки ведомостей выплаты'
 
 EXTEND FORM payrollRuns
     PROPERTIES(r) payrollPaymentDueDate, latestPayrollPaymentDate, payrollPaymentLegalSource,
-                  remainingPayrollAmount, unpaidPayrollAmount, payrollReopenReason
-    PROPERTIES(r) closePayroll, reopenPayroll
+                  remainingPayrollAmount, unpaidPayrollAmount, payrollReopenReason,
+                  payrollResetReason
+    PROPERTIES(r) closePayroll, reopenPayroll, resetPayrollForRecalculation
 ;

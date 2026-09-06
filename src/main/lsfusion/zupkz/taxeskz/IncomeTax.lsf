@@ -241,7 +241,8 @@ CONSTRAINT (CHANGED(ipnBasicDeduction(TaxCalculationLine l)) OR
             CHANGED(ipnAmount(l)) OR CHANGED(socialTaxAmount(l))) AND
            (PREV(taxCalculationStatus(taxCalculationDocument(l))) == TaxCalculationStatus.calculated OR
             PREV(taxCalculationStatus(taxCalculationDocument(l))) == TaxCalculationStatus.approved OR
-            PREV(taxCalculationStatus(taxCalculationDocument(l))) == TaxCalculationStatus.cancelled)
+            PREV(taxCalculationStatus(taxCalculationDocument(l))) == TaxCalculationStatus.cancelled) AND
+           NOT taxCalculationLifecycleTransition(PREV(taxCalculationDocument(l)))
     MESSAGE 'Нельзя изменить снимок рассчитанных налогов';
 
 priorBasicDeduction(TaxCalculationLine l) = GROUP SUM
@@ -410,6 +411,25 @@ approveTaxes 'Утвердить' (TaxCalculationDocument d) {
         MESSAGE 'Сначала рассчитайте налоги';
 }
 
+cancelTaxesSnapshot(TaxCalculationDocument d) {
+    FOR taxCalculationDocument(TaxCalculationLine l) == d AND
+        taxCalculationLedgerEntry(l) AND NOT taxCalculationReversalLedgerEntry(l) DO {
+        NEW reversal = PersonalTaxLedgerEntry {
+            taxLedgerOrganization(reversal) <- taxLedgerOrganization(taxCalculationLedgerEntry(l));
+            taxLedgerEmployee(reversal) <- taxLedgerEmployee(taxCalculationLedgerEntry(l));
+            taxLedgerDate(reversal) <- taxLedgerDate(taxCalculationLedgerEntry(l));
+            taxLedgerBasicDeduction(reversal) <- -taxLedgerBasicDeduction(taxCalculationLedgerEntry(l));
+            taxLedgerSocialDeduction(reversal) <- -taxLedgerSocialDeduction(taxCalculationLedgerEntry(l));
+            taxLedgerTaxableIncome(reversal) <- -taxLedgerTaxableIncome(taxCalculationLedgerEntry(l));
+            taxLedgerIpn(reversal) <- -taxLedgerIpn(taxCalculationLedgerEntry(l));
+            taxLedgerReversalOf(reversal) <- taxCalculationLedgerEntry(l);
+            taxCalculationReversalLedgerEntry(l) <- reversal;
+        }
+    }
+    taxCalculationLifecycleTransition(d) <- TRUE;
+    taxCalculationStatus(d) <- TaxCalculationStatus.cancelled;
+}
+
 cancelTaxes 'Отменить и сторнировать' (TaxCalculationDocument d) {
     IF taxCalculationStatus(d) != TaxCalculationStatus.calculated AND
        taxCalculationStatus(d) != TaxCalculationStatus.approved THEN
@@ -417,22 +437,7 @@ cancelTaxes 'Отменить и сторнировать' (TaxCalculationDocume
     ELSE IF payrollRunStatus(taxCalculationPayrollRun(d)) != PayrollRunStatus.calculated THEN
         MESSAGE 'Налоги закрытого расчёта отменять нельзя';
     ELSE {
-        FOR taxCalculationDocument(TaxCalculationLine l) == d AND
-            taxCalculationLedgerEntry(l) AND NOT taxCalculationReversalLedgerEntry(l) DO {
-            NEW reversal = PersonalTaxLedgerEntry {
-                taxLedgerOrganization(reversal) <- taxLedgerOrganization(taxCalculationLedgerEntry(l));
-                taxLedgerEmployee(reversal) <- taxLedgerEmployee(taxCalculationLedgerEntry(l));
-                taxLedgerDate(reversal) <- taxLedgerDate(taxCalculationLedgerEntry(l));
-                taxLedgerBasicDeduction(reversal) <- -taxLedgerBasicDeduction(taxCalculationLedgerEntry(l));
-                taxLedgerSocialDeduction(reversal) <- -taxLedgerSocialDeduction(taxCalculationLedgerEntry(l));
-                taxLedgerTaxableIncome(reversal) <- -taxLedgerTaxableIncome(taxCalculationLedgerEntry(l));
-                taxLedgerIpn(reversal) <- -taxLedgerIpn(taxCalculationLedgerEntry(l));
-                taxLedgerReversalOf(reversal) <- taxCalculationLedgerEntry(l);
-                taxCalculationReversalLedgerEntry(l) <- reversal;
-            }
-        }
-        taxCalculationLifecycleTransition(d) <- TRUE;
-        taxCalculationStatus(d) <- TaxCalculationStatus.cancelled;
+        cancelTaxesSnapshot(d);
         APPLY;
     }
 }

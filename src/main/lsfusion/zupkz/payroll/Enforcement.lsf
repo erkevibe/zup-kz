@@ -68,7 +68,8 @@ protectedMinimumException(EnforcementOrder o) =
 CLASS EnforcementCalculationStatus 'Статус расчёта взысканий' {
     draft 'Черновик',
     calculated 'Рассчитан',
-    approved 'Утверждён'
+    approved 'Утверждён',
+    cancelled 'Отменён'
 }
 
 CLASS EnforcementCalculationDocument 'Расчёт исполнительных удержаний';
@@ -264,6 +265,23 @@ approveEnforcement 'Утвердить' (EnforcementCalculationDocument d) {
         MESSAGE 'Сначала рассчитайте исполнительные удержания';
 }
 
+cancelEnforcementSnapshot(EnforcementCalculationDocument d) {
+    enforcementCalculationLifecycleTransition(d) <- TRUE;
+    enforcementCalculationStatus(d) <- EnforcementCalculationStatus.cancelled;
+}
+
+cancelEnforcement 'Отменить' (EnforcementCalculationDocument d) {
+    IF enforcementCalculationStatus(d) != EnforcementCalculationStatus.calculated AND
+       enforcementCalculationStatus(d) != EnforcementCalculationStatus.approved THEN
+        MESSAGE 'Отменить можно только рассчитанный или утверждённый документ взысканий';
+    ELSE IF payrollRunStatus(enforcementPayrollRun(d)) != PayrollRunStatus.calculated THEN
+        MESSAGE 'Взыскания закрытого расчёта отменять нельзя';
+    ELSE {
+        cancelEnforcementSnapshot(d);
+        APPLY;
+    }
+}
+
 totalEnforcementWithheld 'Исполнительные удержания' (EnforcementCalculationDocument d) =
     GROUP SUM enforcementWithheldAmount(EnforcementCalculationLine l)
     IF enforcementCalculationDocument(l) == d;
@@ -292,7 +310,7 @@ FORM enforcementCalculationDocuments 'Расчёт исполнительных 
     OBJECTS d = EnforcementCalculationDocument
     PROPERTIES(d) enforcementTaxCalculation, totalEnforcementWithheld, payableAfterEnforcement
     PROPERTIES(d) READONLY enforcementCalculationStatus, enforcementCalculatedAt
-    PROPERTIES(d) calculateEnforcement, approveEnforcement
+    PROPERTIES(d) calculateEnforcement, approveEnforcement, cancelEnforcement
 ;
 
 FORM enforcementCalculationLines 'Строки исполнительных удержаний'

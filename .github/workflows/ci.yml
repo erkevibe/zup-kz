@@ -88,6 +88,13 @@ jobs:
                 payroll-closure-workflow-result.json
 
               curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollResetWorkflowTest' \
+                --output payroll-reset-workflow-result.json
+
+              python3 tests/assert_payroll_reset_workflow.py \
+                payroll-reset-workflow-result.json
+
+              curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.statutoryGuardTest' \
                 --output statutory-guard-result.json
 

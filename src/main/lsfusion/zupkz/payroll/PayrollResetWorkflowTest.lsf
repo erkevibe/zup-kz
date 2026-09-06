@@ -1,0 +1,111 @@
+MODULE PayrollResetWorkflowTest;
+
+REQUIRE PayrollClosureWorkflowTest;
+NAMESPACE ZUPKZ;
+
+payrollResetReasonEntryCount(PayrollRun run, STRING[500] reason) = GROUP SUM 1 IF
+    payrollLifecycleRun(PayrollLifecycleEntry e) == run AND
+    payrollLifecycleOperation(e) == PayrollLifecycleOperation.resetForRecalculation AND
+    payrollLifecycleReason(e) == reason;
+
+payrollResetWorkflowTest() {
+    NEW org = Organization {
+        name(org) <- 'Тест сквозного пересчёта зарплаты';
+        bin(org) <- '606090600002';
+        NEW worker = Employee {
+            iin(worker) <- '900101300098';
+            lastName(worker) <- 'Пересчёт';
+            firstName(worker) <- 'Тест';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                salary(contract) <- 100000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_08_01;
+                    NEW run = PayrollRun {
+                        payrollOrganization(run) <- org;
+                        payrollNumber(run) <- 'RESET-2026-08';
+                        payrollPeriodFrom(run) <- 2026_08_01;
+                        payrollPeriodTo(run) <- 2026_08_31;
+                        payrollRunStatus(run) <- PayrollRunStatus.calculated;
+                        payrollCalculatedAt(run) <- currentDateTime();
+                        NEW summary = PayrollTimeSummary {
+                            summaryPayrollRun(summary) <- run;
+                            summaryAssignment(summary) <- assignment;
+                            summaryPlannedHours(summary) <- 168.00;
+                            summaryWorkedHours(summary) <- 168.00;
+                            summaryWorkedDays(summary) <- 21.00;
+                            NEW oldPayrollLine = PayrollLine {
+                                linePayrollRun(oldPayrollLine) <- run;
+                                linePayrollAssignment(oldPayrollLine) <- assignment;
+                                lineCalculationType(oldPayrollLine) <-
+                                    calculationTypeByCode('BASE_SALARY');
+                                calculationAmount(oldPayrollLine) <- 90000.00;
+                                NEW social = SocialPaymentDocument {
+                                    socialPaymentPayrollRun(social) <- run;
+                                    socialPaymentStatus(social) <- SocialPaymentStatus.approved;
+                                    NEW taxes = TaxCalculationDocument {
+                                        taxCalculationPayrollRun(taxes) <- run;
+                                        taxCalculationSocialPayments(taxes) <- social;
+                                        taxCalculationStatus(taxes) <- TaxCalculationStatus.approved;
+                                        NEW ledger = PersonalTaxLedgerEntry {
+                                            taxLedgerOrganization(ledger) <- org;
+                                            taxLedgerEmployee(ledger) <- worker;
+                                            taxLedgerDate(ledger) <- 2026_08_31;
+                                            taxLedgerBasicDeduction(ledger) <- 1000.00;
+                                            taxLedgerSocialDeduction(ledger) <- 200.00;
+                                            taxLedgerTaxableIncome(ledger) <- 800.00;
+                                            taxLedgerIpn(ledger) <- 80.00;
+                                            NEW taxLine = TaxCalculationLine {
+                                                taxCalculationDocument(taxLine) <- taxes;
+                                                taxCalculationEmployee(taxLine) <- worker;
+                                                taxCalculationLedgerEntry(taxLine) <- ledger;
+                                                ipnBasicDeduction(taxLine) <- 1000.00;
+                                                ipnSocialDeduction(taxLine) <- 200.00;
+                                                ipnTaxableIncome(taxLine) <- 800.00;
+                                                ipnAmount(taxLine) <- 80.00;
+                                                NEW enforcement = EnforcementCalculationDocument {
+                                                    enforcementTaxCalculation(enforcement) <- taxes;
+                                                    enforcementCalculationStatus(enforcement) <-
+                                                        EnforcementCalculationStatus.approved;
+                                                    APPLY;
+
+                                                    resetPayrollForRecalculation(run);
+                                                    payrollResetReason(run) <-
+                                                        'Исправление начисления';
+                                                    resetPayrollForRecalculation(run);
+                                                    calculatePayroll(run);
+
+                                                    EXPORT JSON FROM
+                                                        payrollRecalculated = payrollRunStatus(run) ==
+                                                            PayrollRunStatus.calculated,
+                                                        oneFreshPayrollLine = payrollLineCount(run) == 1,
+                                                        recalculatedAmount = totalAccrued(run),
+                                                        timeSnapshotPreserved = payrollSummaryCount(run) == 1,
+                                                        socialCancelled = socialPaymentStatus(social) ==
+                                                            SocialPaymentStatus.cancelled,
+                                                        taxesCancelled = taxCalculationStatus(taxes) ==
+                                                            TaxCalculationStatus.cancelled,
+                                                        enforcementCancelled =
+                                                            enforcementCalculationStatus(enforcement) ==
+                                                                EnforcementCalculationStatus.cancelled,
+                                                        taxReversalCreated = TRUE IF
+                                                            taxCalculationReversalLedgerEntry(taxLine),
+                                                        reversedIpn = taxLedgerIpn(
+                                                            taxCalculationReversalLedgerEntry(taxLine)),
+                                                        resetReasonSaved = payrollResetReasonEntryCount(run,
+                                                            'Исправление начисления') == 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

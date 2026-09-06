@@ -293,6 +293,11 @@ calculateSocialPayments 'Рассчитать' (SocialPaymentDocument d) {
     }
 }
 
+cancelSocialPaymentsSnapshot(SocialPaymentDocument d) {
+    socialPaymentLifecycleTransition(d) <- TRUE;
+    socialPaymentStatus(d) <- SocialPaymentStatus.cancelled;
+}
+
 cancelSocialPayments 'Отменить' (SocialPaymentDocument d) {
     IF socialPaymentStatus(d) != SocialPaymentStatus.calculated AND
        socialPaymentStatus(d) != SocialPaymentStatus.approved THEN
@@ -300,8 +305,7 @@ cancelSocialPayments 'Отменить' (SocialPaymentDocument d) {
     ELSE IF payrollRunStatus(socialPaymentPayrollRun(d)) != PayrollRunStatus.calculated THEN
         MESSAGE 'Социальные платежи закрытого расчёта отменять нельзя';
     ELSE {
-        socialPaymentLifecycleTransition(d) <- TRUE;
-        socialPaymentStatus(d) <- SocialPaymentStatus.cancelled;
+        cancelSocialPaymentsSnapshot(d);
         APPLY;
     }
 }
