@@ -127,6 +127,14 @@ taxCalculationPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (TaxC
 taxCalculationSocialPayments 'Социальные платежи' = DATA SocialPaymentDocument (TaxCalculationDocument);
 taxCalculationStatus 'Статус' = DATA TaxCalculationStatus (TaxCalculationDocument);
 taxCalculationCalculatedAt 'Рассчитан' = DATA DATETIME (TaxCalculationDocument);
+taxCalculationLifecycleTransition = DATA LOCAL BOOLEAN (TaxCalculationDocument);
+
+CONSTRAINT CHANGED(taxCalculationStatus(TaxCalculationDocument d)) AND
+           PREV(taxCalculationStatus(d)) AND NOT taxCalculationLifecycleTransition(d)
+    MESSAGE 'Статус налогового документа изменяется только штатными действиями';
+CONSTRAINT CHANGED(taxCalculationCalculatedAt(TaxCalculationDocument d)) AND
+           PREV(taxCalculationStatus(d)) AND NOT taxCalculationLifecycleTransition(d)
+    MESSAGE 'Дата расчёта налогового документа изменяется только штатным действием';
 
 calculatedTaxDocumentCount(PayrollRun run) = GROUP SUM 1 IF
     taxCalculationPayrollRun(TaxCalculationDocument d) == run AND
@@ -221,7 +229,12 @@ socialTaxAmount 'Социальный налог' = DATA NUMERIC[18,2] (TaxCalcu
 
 CONSTRAINT (CHANGED(ipnBasicDeduction(TaxCalculationLine l)) OR
             CHANGED(taxCalculationDocument(l)) OR CHANGED(taxCalculationEmployee(l)) OR
+            CHANGED(taxCalculationResident(l)) OR CHANGED(taxCalculationIncomeStatus(l)) OR
+            CHANGED(taxCalculationCategoryCodes(l)) OR CHANGED(taxCalculationAifc(l)) OR
+            CHANGED(taxCalculationUnregisteredDivision(l)) OR
+            CHANGED(taxCalculationDeductionCodes(l)) OR
             CHANGED(taxCalculationLedgerEntry(l)) OR
+            CHANGED(taxCalculationReversalLedgerEntry(l)) OR
             CHANGED(ipnSocialDeduction(l)) OR CHANGED(ipnTaxableIncome(l)) OR
             CHANGED(ipnAmount(l)) OR CHANGED(socialTaxAmount(l))) AND
            (PREV(taxCalculationStatus(taxCalculationDocument(l))) == TaxCalculationStatus.calculated OR
@@ -363,6 +376,7 @@ calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {
                 }
             }
         }
+        taxCalculationLifecycleTransition(d) <- TRUE;
         taxCalculationStatus(d) <- TaxCalculationStatus.calculated;
         taxCalculationCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -371,6 +385,7 @@ calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {
 
 approveTaxes 'Утвердить' (TaxCalculationDocument d) {
     IF taxCalculationStatus(d) == TaxCalculationStatus.calculated THEN {
+        taxCalculationLifecycleTransition(d) <- TRUE;
         taxCalculationStatus(d) <- TaxCalculationStatus.approved;
         APPLY;
     } ELSE
@@ -398,6 +413,7 @@ cancelTaxes 'Отменить и сторнировать' (TaxCalculationDocume
                 taxCalculationReversalLedgerEntry(l) <- reversal;
             }
         }
+        taxCalculationLifecycleTransition(d) <- TRUE;
         taxCalculationStatus(d) <- TaxCalculationStatus.cancelled;
         APPLY;
     }
@@ -434,21 +450,22 @@ FORM organizationTaxProfiles 'Налоговые профили организа
 
 FORM taxCalculationDocuments 'Расчёт ИПН и социального налога'
     OBJECTS d = TaxCalculationDocument
-    PROPERTIES(d) taxCalculationPayrollRun, taxCalculationSocialPayments,
-                  taxCalculationStatus, taxCalculationCalculatedAt,
-                  totalIpnBasicDeduction, totalIpnTaxableIncome,
-                  totalIpn, totalSocialTax, payableAfterTaxes
+    PROPERTIES(d) taxCalculationPayrollRun, taxCalculationSocialPayments
+    PROPERTIES(d) READONLY taxCalculationStatus, taxCalculationCalculatedAt,
+                           totalIpnBasicDeduction, totalIpnTaxableIncome,
+                           totalIpn, totalSocialTax, payableAfterTaxes
     PROPERTIES(d) calculateTaxes, approveTaxes, cancelTaxes
 ;
 
 FORM taxCalculationLines 'Налоги сотрудников'
     OBJECTS l = TaxCalculationLine
-    PROPERTIES(l) taxCalculationDocument, taxCalculationEmployee,
-                  taxCalculationResident, taxCalculationIncomeStatus,
-                  taxCalculationCategoryCodes, taxCalculationAifc,
-                  taxCalculationUnregisteredDivision, taxCalculationDeductionCodes,
-                  ipnGrossIncome, ipnOpvDeduction, ipnVosmsDeduction,
-                  ipnIncomeAfterSocialPayments, ipnBasicDeduction,
-                  ipnSocialDeduction, ipnTaxableIncome, ipnAmount,
-                  socialTaxGrossBase, socialTaxBase, socialTaxRate, socialTaxAmount
+    PROPERTIES(l) READONLY taxCalculationDocument, taxCalculationEmployee,
+                           taxCalculationResident, taxCalculationIncomeStatus,
+                           taxCalculationCategoryCodes, taxCalculationAifc,
+                           taxCalculationUnregisteredDivision, taxCalculationDeductionCodes,
+                           ipnGrossIncome, ipnOpvDeduction, ipnVosmsDeduction,
+                           ipnIncomeAfterSocialPayments, ipnBasicDeduction,
+                           ipnSocialDeduction, ipnTaxableIncome, ipnAmount,
+                           socialTaxGrossBase, socialTaxBase, socialTaxRate,
+                           socialTaxAmount
 ;

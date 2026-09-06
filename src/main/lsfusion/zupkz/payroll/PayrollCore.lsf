@@ -63,9 +63,16 @@ payrollPeriodFrom 'Период с' = DATA DATE (PayrollRun);
 payrollPeriodTo 'Период по' = DATA DATE (PayrollRun);
 payrollRunStatus 'Статус' = DATA PayrollRunStatus (PayrollRun);
 payrollCalculatedAt 'Рассчитан' = DATA DATETIME (PayrollRun);
+payrollLifecycleTransition = DATA LOCAL BOOLEAN (PayrollRun);
 
 CONSTRAINT payrollPeriodTo(PayrollRun r) < payrollPeriodFrom(r)
     MESSAGE 'Окончание расчётного периода не может быть раньше начала';
+CONSTRAINT CHANGED(payrollRunStatus(PayrollRun r)) AND PREV(payrollRunStatus(r)) AND
+           NOT payrollLifecycleTransition(r)
+    MESSAGE 'Статус расчёта зарплаты изменяется только штатными действиями';
+CONSTRAINT CHANGED(payrollCalculatedAt(PayrollRun r)) AND PREV(payrollRunStatus(r)) AND
+           NOT payrollLifecycleTransition(r)
+    MESSAGE 'Дата расчёта зарплаты изменяется только штатным действием';
 CONSTRAINT CHANGED(payrollOrganization(PayrollRun r)) AND
            PREV(payrollRunStatus(r)) != PayrollRunStatus.draft
     MESSAGE 'Нельзя изменить организацию начатого расчёта зарплаты';
@@ -91,6 +98,18 @@ summaryHolidayHours 'Праздничных часов' = DATA NUMERIC[10,2] (Pa
 summaryWeekendHours 'Часов в выходной' = DATA NUMERIC[10,2] (PayrollTimeSummary);
 summaryBusinessTripHours 'Часов командировки' = DATA NUMERIC[10,2] (PayrollTimeSummary);
 summaryAbsenceHours 'Часов отсутствия' = DATA NUMERIC[10,2] (PayrollTimeSummary);
+
+CONSTRAINT (CHANGED(summaryPayrollRun(PayrollTimeSummary s)) OR
+            CHANGED(summaryAssignment(s)) OR CHANGED(summaryPlannedHours(s)) OR
+            CHANGED(summaryWorkedHours(s)) OR CHANGED(summaryWorkedDays(s)) OR
+            CHANGED(summaryNightHours(s)) OR CHANGED(summaryOvertimeHours(s)) OR
+            CHANGED(summaryHolidayHours(s)) OR CHANGED(summaryWeekendHours(s)) OR
+            CHANGED(summaryBusinessTripHours(s)) OR CHANGED(summaryAbsenceHours(s))) AND
+           PREV(summaryPayrollRun(s))
+    MESSAGE 'Нельзя изменить снимок табеля для расчёта зарплаты';
+CONSTRAINT DROPPED(PayrollTimeSummary s IS PayrollTimeSummary) AND
+           PREV(summaryPayrollRun(s))
+    MESSAGE 'Нельзя удалить снимок табеля для расчёта зарплаты';
 
 // Входные начисления и удержания периода рассчитываются вместе с окладом,
 // чтобы результат оставался единым снимком PayrollRun.
@@ -148,9 +167,13 @@ calculationCoefficient 'Коэффициент' = DATA NUMERIC[18,6] (PayrollLin
 calculationAmount 'Сумма' = DATA NUMERIC[18,2] (PayrollLine);
 calculationNote 'Комментарий' = DATA STRING[500] (PayrollLine);
 
-CONSTRAINT (CHANGED(calculationBase(PayrollLine l)) OR
+CONSTRAINT (CHANGED(linePayrollRun(PayrollLine l)) OR
+            CHANGED(linePayrollAssignment(l)) OR CHANGED(lineCalculationType(l)) OR
+            CHANGED(lineTimeSummary(l)) OR CHANGED(linePayrollInput(l)) OR
+            CHANGED(calculationBase(l)) OR
             CHANGED(calculationQuantity(l)) OR CHANGED(calculationRate(l)) OR
-            CHANGED(calculationCoefficient(l)) OR CHANGED(calculationAmount(l))) AND
+            CHANGED(calculationCoefficient(l)) OR CHANGED(calculationAmount(l)) OR
+            CHANGED(calculationNote(l))) AND
            (PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.calculated OR
             PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.approved OR
             PREV(payrollRunStatus(linePayrollRun(l))) == PayrollRunStatus.paid)
@@ -320,8 +343,10 @@ cancelTimesheet 'Отменить табель' (Timesheet t) {
     ELSE IF timesheetUsedInPayrollCount(t) THEN
         MESSAGE 'Нельзя отменить табель, уже собранный в расчёт зарплаты';
     ELSE {
+        timesheetLifecycleTransition(t) <- TRUE;
         timesheetStatus(t) <- TimesheetStatus.cancelled;
         cancelledAt(t) <- currentDateTime();
+        cancelledBy(t) <- currentUserName();
         APPLY;
     }
 }
@@ -359,6 +384,7 @@ collectApprovedTime 'Собрать утверждённый табель' (Payr
                 }
             }
         }
+        payrollLifecycleTransition(r) <- TRUE;
         payrollRunStatus(r) <- PayrollRunStatus.timeCollected;
         APPLY;
     }
@@ -456,6 +482,7 @@ calculatePayroll 'Рассчитать зарплату' (PayrollRun r) {
                 calculationNote(l) <- inputBasis(i);
             }
         }
+        payrollLifecycleTransition(r) <- TRUE;
         payrollRunStatus(r) <- PayrollRunStatus.calculated;
         payrollCalculatedAt(r) <- currentDateTime();
         APPLY;
@@ -489,17 +516,18 @@ FORM payrollRules 'Правила расчёта'
 FORM payrollRuns 'Расчёты зарплаты'
     OBJECTS r = PayrollRun
     PROPERTIES(r) payrollOrganization, payrollNumber, payrollPeriodFrom,
-                  payrollPeriodTo, payrollRunStatus, payrollCalculatedAt,
-                  totalAccrued, totalDeducted, totalPayable
+                  payrollPeriodTo
+    PROPERTIES(r) READONLY payrollRunStatus, payrollCalculatedAt,
+                           totalAccrued, totalDeducted, totalPayable
     PROPERTIES(r) collectApprovedTime, calculatePayroll
 ;
 
 FORM payrollTimeSummaries 'Данные табеля для расчёта'
     OBJECTS s = PayrollTimeSummary
-    PROPERTIES(s) summaryPayrollRun, summaryAssignment, summaryPlannedHours,
-                  summaryWorkedHours, summaryWorkedDays, summaryNightHours, summaryOvertimeHours,
-                  summaryHolidayHours, summaryWeekendHours,
-                  summaryBusinessTripHours, summaryAbsenceHours
+    PROPERTIES(s) READONLY summaryPayrollRun, summaryAssignment, summaryPlannedHours,
+                           summaryWorkedHours, summaryWorkedDays, summaryNightHours,
+                           summaryOvertimeHours, summaryHolidayHours, summaryWeekendHours,
+                           summaryBusinessTripHours, summaryAbsenceHours
 ;
 
 FORM payrollInputs 'Начисления и удержания периода'
@@ -510,8 +538,8 @@ FORM payrollInputs 'Начисления и удержания периода'
 
 FORM payrollLines 'Строки расчёта зарплаты'
     OBJECTS l = PayrollLine
-    PROPERTIES(l) linePayrollRun, linePayrollAssignment, lineCalculationType,
-                  lineTimeSummary, linePayrollInput, calculationBase, calculationQuantity,
-                  calculationRate, calculationCoefficient, calculationAmount,
-                  calculationNote
+    PROPERTIES(l) READONLY linePayrollRun, linePayrollAssignment, lineCalculationType,
+                           lineTimeSummary, linePayrollInput, calculationBase,
+                           calculationQuantity, calculationRate, calculationCoefficient,
+                           calculationAmount, calculationNote
 ;

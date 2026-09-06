@@ -59,6 +59,14 @@ CLASS SocialPaymentDocument 'Расчёт социальных платежей'
 socialPaymentPayrollRun 'Расчёт зарплаты' = DATA PayrollRun (SocialPaymentDocument);
 socialPaymentStatus 'Статус' = DATA SocialPaymentStatus (SocialPaymentDocument);
 socialPaymentCalculatedAt 'Рассчитан' = DATA DATETIME (SocialPaymentDocument);
+socialPaymentLifecycleTransition = DATA LOCAL BOOLEAN (SocialPaymentDocument);
+
+CONSTRAINT CHANGED(socialPaymentStatus(SocialPaymentDocument d)) AND
+           PREV(socialPaymentStatus(d)) AND NOT socialPaymentLifecycleTransition(d)
+    MESSAGE 'Статус социальных платежей изменяется только штатными действиями';
+CONSTRAINT CHANGED(socialPaymentCalculatedAt(SocialPaymentDocument d)) AND
+           PREV(socialPaymentStatus(d)) AND NOT socialPaymentLifecycleTransition(d)
+    MESSAGE 'Дата расчёта социальных платежей изменяется только штатным действием';
 
 CLASS SocialPaymentLine 'Социальные платежи сотрудника';
 
@@ -257,6 +265,7 @@ calculateSocialPayments 'Рассчитать' (SocialPaymentDocument d) {
                 oosmsAmount(l) <- calculatedOosmsAmount(l);
             }
         }
+        socialPaymentLifecycleTransition(d) <- TRUE;
         socialPaymentStatus(d) <- SocialPaymentStatus.calculated;
         socialPaymentCalculatedAt(d) <- currentDateTime();
         APPLY;
@@ -270,6 +279,7 @@ cancelSocialPayments 'Отменить' (SocialPaymentDocument d) {
     ELSE IF payrollRunStatus(socialPaymentPayrollRun(d)) != PayrollRunStatus.calculated THEN
         MESSAGE 'Социальные платежи закрытого расчёта отменять нельзя';
     ELSE {
+        socialPaymentLifecycleTransition(d) <- TRUE;
         socialPaymentStatus(d) <- SocialPaymentStatus.cancelled;
         APPLY;
     }
@@ -277,6 +287,7 @@ cancelSocialPayments 'Отменить' (SocialPaymentDocument d) {
 
 approveSocialPayments 'Утвердить' (SocialPaymentDocument d) {
     IF socialPaymentStatus(d) == SocialPaymentStatus.calculated THEN {
+        socialPaymentLifecycleTransition(d) <- TRUE;
         socialPaymentStatus(d) <- SocialPaymentStatus.approved;
         APPLY;
     } ELSE
@@ -309,20 +320,23 @@ FORM socialPaymentProfiles 'Профили социальных платежей
 
 FORM socialPaymentDocuments 'Расчёт социальных платежей'
     OBJECTS d = SocialPaymentDocument
-    PROPERTIES(d) socialPaymentPayrollRun, socialPaymentStatus, socialPaymentCalculatedAt,
-                  totalOpv, totalOpvr, totalSo, totalVosms, totalOosms,
-                  payableAfterSocialPayments
+    PROPERTIES(d) socialPaymentPayrollRun
+    PROPERTIES(d) READONLY socialPaymentStatus, socialPaymentCalculatedAt,
+                           totalOpv, totalOpvr, totalSo, totalVosms, totalOosms,
+                           payableAfterSocialPayments
     PROPERTIES(d) calculateSocialPayments, approveSocialPayments, cancelSocialPayments
 ;
 
 FORM socialPaymentLines 'Социальные платежи сотрудников'
     OBJECTS l = SocialPaymentLine
-    PROPERTIES(l) socialPaymentDocument, socialPaymentEmployee,
-                  socialPaymentMZP,
-                  opvGrossBase, opvMaximum, opvRate, opvExempt, opvBase, opvAmount,
-                  opvrGrossBase, opvrMinimum, opvrMaximum, opvrRate, opvrExempt, opvrBase, opvrAmount,
-                  soGrossBase, soIncomeAfterOpv, soMinimum, soMaximum, soRate, soExempt, soBase, soAmount,
-                  vosmsGrossBase, vosmsMaximum, vosmsRate, vosmsExempt, vosmsBase, vosmsAmount,
-                  oosmsGrossBase, oosmsMaximum, oosmsRate, oosmsExempt, oosmsBase, oosmsAmount,
-                  employeeSocialWithholding, employerSocialCharge
+    PROPERTIES(l) READONLY socialPaymentDocument, socialPaymentEmployee,
+                           socialPaymentMZP,
+                           opvGrossBase, opvMaximum, opvRate, opvExempt, opvBase, opvAmount,
+                           opvrGrossBase, opvrMinimum, opvrMaximum, opvrRate, opvrExempt,
+                           opvrBase, opvrAmount, soGrossBase, soIncomeAfterOpv, soMinimum,
+                           soMaximum, soRate, soExempt, soBase, soAmount,
+                           vosmsGrossBase, vosmsMaximum, vosmsRate, vosmsExempt,
+                           vosmsBase, vosmsAmount, oosmsGrossBase, oosmsMaximum,
+                           oosmsRate, oosmsExempt, oosmsBase, oosmsAmount,
+                           employeeSocialWithholding, employerSocialCharge
 ;

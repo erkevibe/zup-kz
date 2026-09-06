@@ -150,6 +150,30 @@ jobs:
 
               python3 tests/assert_insurance_workflow.py insurance-workflow-result.json
 
+              for action in \
+                lifecycleGuardSetupTest \
+                timesheetStatusGuardTest \
+                payrollStatusGuardTest \
+                socialStatusGuardTest \
+                payrollSnapshotGuardTest \
+                payrollSnapshotDeleteGuardTest \
+                taxSnapshotGuardTest \
+                lifecycleGuardVerificationTest; do
+                curl --fail --silent --show-error \
+                  "http://localhost:7651/exec?action=ZUPKZ.${action}" \
+                  --output "${action}.json"
+              done
+
+              python3 tests/assert_lifecycle_guards.py \
+                lifecycleGuardSetupTest.json \
+                timesheetStatusGuardTest.json \
+                payrollStatusGuardTest.json \
+                socialStatusGuardTest.json \
+                payrollSnapshotGuardTest.json \
+                payrollSnapshotDeleteGuardTest.json \
+                taxSnapshotGuardTest.json \
+                lifecycleGuardVerificationTest.json
+
               kill -TERM "$server_pid"
               wait "$server_pid" || true
               trap - EXIT

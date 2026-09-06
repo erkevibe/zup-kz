@@ -118,6 +118,7 @@ closePayroll 'Закрыть расчёт' (PayrollRun r) {
                 settlementClosedAt(l) <- currentDateTime();
             }
         }
+        payrollLifecycleTransition(r) <- TRUE;
         payrollRunStatus(r) <- PayrollRunStatus.approved;
         APPLY;
     }

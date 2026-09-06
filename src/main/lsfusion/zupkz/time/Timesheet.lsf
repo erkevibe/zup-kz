@@ -1,6 +1,6 @@
 MODULE TimeTimesheet;
 
-REQUIRE KZOrganization, HREmployment, TimeProductionCalendar, TimeWorkSchedule;
+REQUIRE Authentication, KZOrganization, HREmployment, TimeProductionCalendar, TimeWorkSchedule;
 NAMESPACE ZUPKZ;
 
 CLASS TimesheetStatus 'Статус табеля' {
@@ -33,6 +33,7 @@ approvedAt 'Утверждён' = DATA DATETIME (Timesheet);
 approvedBy 'Кем утверждён' = DATA STRING[150] (Timesheet);
 cancelledAt 'Отменён' = DATA DATETIME (Timesheet);
 cancelledBy 'Кем отменён' = DATA STRING[150] (Timesheet);
+timesheetLifecycleTransition = DATA LOCAL BOOLEAN (Timesheet);
 
 CONSTRAINT timesheetPeriodTo(Timesheet t) < timesheetPeriodFrom(t)
     MESSAGE 'Окончание периода табеля не может быть раньше начала';
@@ -42,6 +43,13 @@ CONSTRAINT (CHANGED(timesheetOrganization(Timesheet t)) OR
             PREV(timesheetStatus(t)) == TimesheetStatus.closed OR
             PREV(timesheetStatus(t)) == TimesheetStatus.cancelled)
     MESSAGE 'Нельзя изменить организацию или период проведённого табеля';
+CONSTRAINT CHANGED(timesheetStatus(Timesheet t)) AND PREV(timesheetStatus(t)) AND
+           NOT timesheetLifecycleTransition(t)
+    MESSAGE 'Статус табеля изменяется только штатными действиями';
+CONSTRAINT (CHANGED(approvedAt(Timesheet t)) OR CHANGED(approvedBy(t)) OR
+            CHANGED(cancelledAt(t)) OR CHANGED(cancelledBy(t))) AND
+           PREV(timesheetStatus(t)) AND NOT timesheetLifecycleTransition(t)
+    MESSAGE 'Служебные реквизиты табеля изменяются только штатными действиями';
 
 CLASS TimesheetLine 'Строка табеля';
 
@@ -199,8 +207,10 @@ approveTimesheet 'Утвердить табель' (Timesheet t) {
     ELSE IF invalidTimesheetLineCount(t) THEN
         MESSAGE 'Во всех строках заполните назначение, дату и вид времени';
     ELSE {
+        timesheetLifecycleTransition(t) <- TRUE;
         timesheetStatus(t) <- TimesheetStatus.approved;
         approvedAt(t) <- currentDateTime();
+        approvedBy(t) <- currentUserName();
         APPLY;
     }
 }
@@ -208,8 +218,9 @@ approveTimesheet 'Утвердить табель' (Timesheet t) {
 FORM timesheets 'Табели рабочего времени'
     OBJECTS t = Timesheet
     PROPERTIES(t) timesheetOrganization, timesheetNumber, timesheetPeriodFrom,
-                  timesheetPeriodTo, timesheetStatus, approvedAt, approvedBy
-    PROPERTIES(t) cancelledAt, cancelledBy
+                  timesheetPeriodTo
+    PROPERTIES(t) READONLY timesheetStatus, approvedAt, approvedBy,
+                           cancelledAt, cancelledBy
     PROPERTIES(t) fillTimesheet, approveTimesheet
 ;
 

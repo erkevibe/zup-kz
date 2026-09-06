@@ -1,0 +1,93 @@
+MODULE LifecycleGuardTest;
+
+REQUIRE InsuranceWorkflowTest, PayrollSettlement;
+NAMESPACE ZUPKZ;
+
+lifecycleGuardTimesheet() = GROUP LAST Timesheet t
+    IF timesheetNumber(t) == 'LIFECYCLE-GUARD' ORDER t;
+lifecycleGuardRun() = GROUP LAST PayrollRun r
+    IF payrollNumber(r) == 'LIFECYCLE-GUARD' ORDER r;
+lifecycleGuardSummary() = GROUP LAST PayrollTimeSummary s
+    IF summaryPayrollRun(s) == lifecycleGuardRun() ORDER s;
+lifecycleGuardSocialDocument() = GROUP LAST SocialPaymentDocument d
+    IF socialPaymentPayrollRun(d) == lifecycleGuardRun() ORDER d;
+lifecycleGuardTaxDocument() = GROUP LAST TaxCalculationDocument d
+    IF taxCalculationPayrollRun(d) == lifecycleGuardRun() ORDER d;
+lifecycleGuardTaxLine() = GROUP LAST TaxCalculationLine l
+    IF taxCalculationDocument(l) == lifecycleGuardTaxDocument() ORDER l;
+
+lifecycleGuardSetupTest() {
+    NEW timesheet = Timesheet {
+        timesheetNumber(timesheet) <- 'LIFECYCLE-GUARD';
+        timesheetStatus(timesheet) <- TimesheetStatus.draft;
+        NEW run = PayrollRun {
+            payrollNumber(run) <- 'LIFECYCLE-GUARD';
+            payrollRunStatus(run) <- PayrollRunStatus.calculated;
+            NEW summary = PayrollTimeSummary {
+                summaryPayrollRun(summary) <- run;
+                summaryWorkedHours(summary) <- 160.00;
+            }
+            NEW social = SocialPaymentDocument {
+                socialPaymentPayrollRun(social) <- run;
+                socialPaymentStatus(social) <- SocialPaymentStatus.calculated;
+            }
+            NEW taxes = TaxCalculationDocument {
+                taxCalculationPayrollRun(taxes) <- run;
+                taxCalculationStatus(taxes) <- TaxCalculationStatus.calculated;
+                NEW taxLine = TaxCalculationLine {
+                    taxCalculationDocument(taxLine) <- taxes;
+                }
+            }
+        }
+    }
+    APPLY;
+    EXPORT JSON FROM setupSucceeded = NOT canceled();
+}
+
+timesheetStatusGuardTest() {
+    timesheetStatus(lifecycleGuardTimesheet()) <- TimesheetStatus.approved;
+    APPLY;
+    EXPORT JSON FROM timesheetStatusBlocked = canceled();
+}
+
+payrollStatusGuardTest() {
+    payrollRunStatus(lifecycleGuardRun()) <- PayrollRunStatus.draft;
+    APPLY;
+    EXPORT JSON FROM payrollStatusBlocked = canceled();
+}
+
+socialStatusGuardTest() {
+    socialPaymentStatus(lifecycleGuardSocialDocument()) <- SocialPaymentStatus.approved;
+    APPLY;
+    EXPORT JSON FROM socialStatusBlocked = canceled();
+}
+
+payrollSnapshotGuardTest() {
+    summaryWorkedHours(lifecycleGuardSummary()) <- 161.00;
+    APPLY;
+    EXPORT JSON FROM payrollSnapshotBlocked = canceled();
+}
+
+payrollSnapshotDeleteGuardTest() {
+    DELETE PayrollTimeSummary s WHERE s == lifecycleGuardSummary();
+    APPLY;
+    EXPORT JSON FROM payrollSnapshotDeleteBlocked = canceled();
+}
+
+taxSnapshotGuardTest() {
+    taxCalculationResident(lifecycleGuardTaxLine()) <- TRUE;
+    APPLY;
+    EXPORT JSON FROM taxSnapshotBlocked = canceled();
+}
+
+lifecycleGuardVerificationTest() {
+    EXPORT JSON FROM
+        timesheetStatusPreserved = timesheetStatus(lifecycleGuardTimesheet()) ==
+            TimesheetStatus.draft,
+        payrollStatusPreserved = payrollRunStatus(lifecycleGuardRun()) ==
+            PayrollRunStatus.calculated,
+        socialStatusPreserved = socialPaymentStatus(lifecycleGuardSocialDocument()) ==
+            SocialPaymentStatus.calculated,
+        payrollSnapshotPreserved = summaryWorkedHours(lifecycleGuardSummary()) == 160.00,
+        taxSnapshotPreserved = NOT taxCalculationResident(lifecycleGuardTaxLine());
+}
