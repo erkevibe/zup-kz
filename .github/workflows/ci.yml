@@ -95,6 +95,33 @@ jobs:
                 payroll-reset-workflow-result.json
 
               curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollRecalculationWorkflowTest' \
+                --output payroll-recalculation-workflow-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.recalculationLineSnapshotGuardTest' \
+                --output recalculation-line-guard-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.recalculationInputSnapshotGuardTest' \
+                --output recalculation-input-guard-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.recalculationPeriodGuardTest' \
+                --output recalculation-period-guard-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.recalculationWorkflowVerificationTest' \
+                --output recalculation-verification-result.json
+
+              python3 tests/assert_payroll_recalculation_workflow.py \
+                payroll-recalculation-workflow-result.json \
+                recalculation-line-guard-result.json \
+                recalculation-input-guard-result.json \
+                recalculation-verification-result.json \
+                recalculation-period-guard-result.json
+
+              curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.statutoryGuardTest' \
                 --output statutory-guard-result.json
 

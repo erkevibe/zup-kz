@@ -1,0 +1,167 @@
+MODULE PayrollRecalculationWorkflowTest;
+
+REQUIRE PayrollResetWorkflowTest;
+NAMESPACE ZUPKZ;
+
+recalculationWorkflowDocument() = GROUP LAST PayrollRecalculation d
+    IF recalculationNumber(d) == 'RECALC-WORKFLOW-2026-09' ORDER d;
+recalculationWorkflowPositiveLine() = GROUP LAST PayrollRecalculationLine l
+    IF lineRecalculation(l) == recalculationWorkflowDocument() AND
+       lineRecalculationDelta(l) > 0.00 ORDER l;
+recalculationWorkflowNegativeLine() = GROUP LAST PayrollRecalculationLine l
+    IF lineRecalculation(l) == recalculationWorkflowDocument() AND
+       lineRecalculationDelta(l) < 0.00 ORDER l;
+recalculationRegistrationCount(PayrollRecalculation d) = GROUP SUM 1 IF
+    lineRecalculation(PayrollRecalculationLine l) == d AND lineRecalculationInput(l);
+recalculationPayrollLineCount(PayrollRecalculation d) = GROUP SUM 1 IF
+    lineRecalculation(PayrollRecalculationLine source) == d AND
+    linePayrollInput(PayrollLine result) == lineRecalculationInput(source);
+
+payrollRecalculationWorkflowTest() {
+    NEW org = Organization {
+        name(org) <- 'Тест расширенного перерасчёта';
+        bin(org) <- '606090600003';
+        NEW worker = Employee {
+            iin(worker) <- '900101300097';
+            lastName(worker) <- 'Разница';
+            firstName(worker) <- 'Период';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                salary(contract) <- 100000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_08_01;
+                    assignmentSalary(assignment) <- 100000.00;
+                    NEW originalRun = PayrollRun {
+                        payrollOrganization(originalRun) <- org;
+                        payrollNumber(originalRun) <- 'RECALC-ORIGINAL-2026-08';
+                        payrollPeriodFrom(originalRun) <- 2026_08_01;
+                        payrollPeriodTo(originalRun) <- 2026_08_31;
+                        payrollRunStatus(originalRun) <- PayrollRunStatus.approved;
+                        NEW originalAccrual = PayrollLine {
+                            linePayrollRun(originalAccrual) <- originalRun;
+                            linePayrollAssignment(originalAccrual) <- assignment;
+                            lineCalculationType(originalAccrual) <- calculationTypeByCode('BASE_SALARY');
+                            calculationAmount(originalAccrual) <- 100000.00;
+                            NEW originalBonus = PayrollLine {
+                                linePayrollRun(originalBonus) <- originalRun;
+                                linePayrollAssignment(originalBonus) <- assignment;
+                                lineCalculationType(originalBonus) <- calculationTypeByCode('BONUS_FIXED');
+                                calculationAmount(originalBonus) <- 20000.00;
+                                NEW targetRun = PayrollRun {
+                                    payrollOrganization(targetRun) <- org;
+                                    payrollNumber(targetRun) <- 'RECALC-TARGET-2026-09';
+                                    payrollPeriodFrom(targetRun) <- 2026_09_01;
+                                    payrollPeriodTo(targetRun) <- 2026_09_30;
+                                    payrollRunStatus(targetRun) <- PayrollRunStatus.timeCollected;
+                                    NEW summary = PayrollTimeSummary {
+                                        summaryPayrollRun(summary) <- targetRun;
+                                        summaryAssignment(summary) <- assignment;
+                                        summaryPlannedHours(summary) <- 176.00;
+                                        summaryWorkedHours(summary) <- 176.00;
+                                        summaryWorkedDays(summary) <- 22.00;
+                                        NEW document = PayrollRecalculation {
+                                            recalculationNumber(document) <- 'RECALC-WORKFLOW-2026-09';
+                                            recalculationDate(document) <- 2026_09_05;
+                                            recalculationOriginalRun(document) <- originalRun;
+                                            recalculationTargetRun(document) <- targetRun;
+                                            recalculationReason(document) <- 'Исправление начислений августа';
+                                            recalculationStatus(document) <- PayrollRecalculationStatus.draft;
+                                            NEW positive = PayrollRecalculationLine {
+                                                lineRecalculation(positive) <- document;
+                                                lineOriginalPayrollLine(positive) <- originalAccrual;
+                                                lineOriginalAmount(positive) <- 100000.00;
+                                                lineCorrectedAmount(positive) <- 110000.00;
+                                                NEW negative = PayrollRecalculationLine {
+                                                    lineRecalculation(negative) <- document;
+                                                    lineOriginalPayrollLine(negative) <- originalBonus;
+                                                    lineOriginalAmount(negative) <- 20000.00;
+                                                    lineCorrectedAmount(negative) <- 17000.00;
+                                                    APPLY;
+
+                                                    calculateRecalculation(document);
+                                                    postRecalculation(document);
+                                                    postRecalculation(document);
+                                                    calculatePayroll(targetRun);
+
+                                                    EXPORT JSON FROM
+                                                        positiveDelta = lineRecalculationDelta(positive),
+                                                        negativeDelta = lineRecalculationDelta(negative),
+                                                        positiveRegisteredAmount = inputManualAmount(
+                                                            lineRecalculationInput(positive)),
+                                                        negativeRegisteredAmount = inputManualAmount(
+                                                            lineRecalculationInput(negative)),
+                                                        positiveRegisteredAsAccrual = calculationCategory(
+                                                            inputCalculationType(lineRecalculationInput(positive))) ==
+                                                            CalculationCategory.accrual,
+                                                        negativeRegisteredAsDeduction = calculationCategory(
+                                                            inputCalculationType(lineRecalculationInput(negative))) ==
+                                                            CalculationCategory.deduction,
+                                                        registrationCount = recalculationRegistrationCount(document),
+                                                        targetPayrollLineCount = recalculationPayrollLineCount(document),
+                                                        targetCalculated = payrollRunStatus(targetRun) ==
+                                                            PayrollRunStatus.calculated,
+                                                        originalAccrualPreserved = calculationAmount(originalAccrual) ==
+                                                            100000.00,
+                                                        originalBonusPreserved = calculationAmount(originalBonus) ==
+                                                            20000.00,
+                                                        recalculationApproved = recalculationStatus(document) ==
+                                                            PayrollRecalculationStatus.approved;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+recalculationLineSnapshotGuardTest() {
+    lineCorrectedAmount(recalculationWorkflowPositiveLine()) <- 999999.00;
+    APPLY;
+    EXPORT JSON FROM recalculationLineSnapshotBlocked = canceled();
+}
+
+recalculationInputSnapshotGuardTest() {
+    inputManualAmount(lineRecalculationInput(recalculationWorkflowNegativeLine())) <- 999999.00;
+    APPLY;
+    EXPORT JSON FROM recalculationInputSnapshotBlocked = canceled();
+}
+
+recalculationPeriodGuardTest() {
+    NEW earlierRun = PayrollRun {
+        payrollOrganization(earlierRun) <- payrollOrganization(
+            recalculationOriginalRun(recalculationWorkflowDocument()));
+        payrollNumber(earlierRun) <- 'RECALC-INVALID-2026-07';
+        payrollPeriodFrom(earlierRun) <- 2026_07_01;
+        payrollPeriodTo(earlierRun) <- 2026_07_31;
+        payrollRunStatus(earlierRun) <- PayrollRunStatus.draft;
+        NEW invalidDocument = PayrollRecalculation {
+            recalculationNumber(invalidDocument) <- 'RECALC-INVALID-PERIOD';
+            recalculationDate(invalidDocument) <- 2026_09_06;
+            recalculationOriginalRun(invalidDocument) <-
+                recalculationOriginalRun(recalculationWorkflowDocument());
+            recalculationTargetRun(invalidDocument) <- earlierRun;
+            recalculationReason(invalidDocument) <- 'Проверка периода';
+            recalculationStatus(invalidDocument) <- PayrollRecalculationStatus.draft;
+            APPLY;
+            EXPORT JSON FROM recalculationPeriodBlocked = canceled();
+        }
+    }
+}
+
+recalculationWorkflowVerificationTest() {
+    EXPORT JSON FROM
+        recalculationLineSnapshotPreserved =
+            lineCorrectedAmount(recalculationWorkflowPositiveLine()) == 110000.00,
+        recalculationInputSnapshotPreserved = inputManualAmount(
+            lineRecalculationInput(recalculationWorkflowNegativeLine())) == 3000.00,
+        registrationCountPreserved =
+            recalculationRegistrationCount(recalculationWorkflowDocument()) == 2;
+}
