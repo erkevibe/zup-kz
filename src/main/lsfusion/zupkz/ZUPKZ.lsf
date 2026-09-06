@@ -102,6 +102,7 @@ NAVIGATOR {
         NEW FOLDER payrollPayments 'Выплаты' {
             NEW interimPayments;
             NEW payrollSettlements;
+            NEW payrollLifecycleEntries;
             NEW paymentStatements;
             NEW paymentStatementLines;
             NEW salaryBankRegisters;

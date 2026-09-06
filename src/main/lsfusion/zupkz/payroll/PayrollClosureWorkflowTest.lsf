@@ -1,0 +1,106 @@
+MODULE PayrollClosureWorkflowTest;
+
+REQUIRE PayrollFormulaTest;
+NAMESPACE ZUPKZ;
+
+payrollLifecycleEntryCount(PayrollRun run) = GROUP SUM 1 IF
+    payrollLifecycleRun(PayrollLifecycleEntry e) == run;
+payrollReopenReasonEntryCount(PayrollRun run, STRING[500] reason) = GROUP SUM 1 IF
+    payrollLifecycleRun(PayrollLifecycleEntry e) == run AND
+    payrollLifecycleOperation(e) == PayrollLifecycleOperation.reopened AND
+    payrollLifecycleReason(e) == reason;
+payrollSettlementLineCount(PayrollRun run) = GROUP SUM 1 IF
+    settlementPayrollRun(PayrollSettlementLine l) == run;
+
+payrollClosureWorkflowTest() {
+    NEW org = Organization {
+        name(org) <- 'Тест переоткрытия зарплаты';
+        bin(org) <- '606090600001';
+        NEW worker = Employee {
+            iin(worker) <- '900101300099';
+            lastName(worker) <- 'Переоткрытие';
+            firstName(worker) <- 'Тест';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                salary(contract) <- 100000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_08_01;
+                    NEW run = PayrollRun {
+                        payrollOrganization(run) <- org;
+                        payrollNumber(run) <- 'REOPEN-2026-08';
+                        payrollPeriodFrom(run) <- 2026_08_01;
+                        payrollPeriodTo(run) <- 2026_08_31;
+                        payrollPaymentDueDate(run) <- 2026_09_10;
+                        payrollRunStatus(run) <- PayrollRunStatus.calculated;
+                        NEW payrollLine = PayrollLine {
+                            linePayrollRun(payrollLine) <- run;
+                            linePayrollAssignment(payrollLine) <- assignment;
+                            lineCalculationType(payrollLine) <- calculationTypeByCode('BASE_SALARY');
+                            calculationAmount(payrollLine) <- 100000.00;
+                            NEW social = SocialPaymentDocument {
+                                socialPaymentPayrollRun(social) <- run;
+                                socialPaymentStatus(social) <- SocialPaymentStatus.approved;
+                                NEW socialLine = SocialPaymentLine {
+                                    socialPaymentDocument(socialLine) <- social;
+                                    socialPaymentEmployee(socialLine) <- worker;
+                                    NEW taxes = TaxCalculationDocument {
+                                        taxCalculationPayrollRun(taxes) <- run;
+                                        taxCalculationSocialPayments(taxes) <- social;
+                                        taxCalculationStatus(taxes) <- TaxCalculationStatus.approved;
+                                        NEW taxLine = TaxCalculationLine {
+                                            taxCalculationDocument(taxLine) <- taxes;
+                                            taxCalculationEmployee(taxLine) <- worker;
+                                            NEW enforcement = EnforcementCalculationDocument {
+                                                enforcementTaxCalculation(enforcement) <- taxes;
+                                                enforcementCalculationStatus(enforcement) <-
+                                                    EnforcementCalculationStatus.approved;
+                                                APPLY;
+
+                                                closePayroll(run);
+                                                reopenPayroll(run);
+                                                payrollReopenReason(run) <- 'Исправление исходных данных';
+                                                reopenPayroll(run);
+
+                                                closePayroll(run);
+                                                NEW payment = PaymentStatement {
+                                                    paymentStatementPayrollRun(payment) <- run;
+                                                    paymentStatementNumber(payment) <- 'REOPEN-PAY-2026-08';
+                                                    paymentStatementDate(payment) <- 2026_09_10;
+                                                    paymentStatementMethod(payment) <- PaymentMethod.bankTransfer;
+                                                    paymentStatementStatus(payment) <-
+                                                        PaymentStatementStatus.calculated;
+                                                    payrollReopenReason(run) <-
+                                                        'Недопустимая отмена после ведомости';
+                                                    APPLY;
+                                                    reopenPayroll(run);
+
+                                                    EXPORT JSON FROM
+                                                        reopenedAndReasonSaved =
+                                                            payrollReopenReasonEntryCount(run,
+                                                                'Исправление исходных данных') == 1,
+                                                        reclosed = payrollRunStatus(run) ==
+                                                            PayrollRunStatus.approved,
+                                                        settlementLineCount =
+                                                            payrollSettlementLineCount(run),
+                                                        lifecycleEntryCount =
+                                                            payrollLifecycleEntryCount(run),
+                                                        paymentBlocksReopen = payrollRunStatus(run) ==
+                                                            PayrollRunStatus.approved AND
+                                                            payrollLifecycleEntryCount(run) == 3,
+                                                        blockedReasonPreserved = payrollReopenReason(run) ==
+                                                            'Недопустимая отмена после ведомости';
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

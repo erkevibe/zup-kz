@@ -10,6 +10,7 @@ latestPayrollPaymentDate 'Предельная дата выплаты' (Payroll
     firstDayOfMonth(sumMonth(payrollPeriodTo(r), 1)) + 9;
 payrollPaymentLegalSource 'Нормативное основание выплаты' (PayrollRun r) =
     legalSourceByCode('LABOR_CODE_KZ');
+payrollReopenReason 'Причина переоткрытия' = DATA STRING[500] (PayrollRun);
 
 CONSTRAINT payrollPaymentDueDate(PayrollRun r) <= payrollPeriodTo(r)
     MESSAGE 'Дата выплаты должна быть позже окончания расчётного периода';
@@ -46,6 +47,46 @@ settlementClosedAt 'Закрыт' = DATA DATETIME (PayrollSettlementLine);
 settlementLegalSource 'Нормативное основание' (PayrollSettlementLine l) =
     payrollPaymentLegalSource(settlementPayrollRun(l));
 
+CLASS PayrollLifecycleOperation 'Операция с расчётом зарплаты' {
+    closed 'Закрытие',
+    reopened 'Переоткрытие'
+}
+
+CLASS PayrollLifecycleEntry 'История расчёта зарплаты';
+
+payrollLifecycleRun 'Расчёт зарплаты' = DATA PayrollRun (PayrollLifecycleEntry);
+payrollLifecycleOperation 'Операция' = DATA PayrollLifecycleOperation (PayrollLifecycleEntry);
+payrollLifecycleStatusFrom 'Статус до' = DATA PayrollRunStatus (PayrollLifecycleEntry);
+payrollLifecycleStatusTo 'Статус после' = DATA PayrollRunStatus (PayrollLifecycleEntry);
+payrollLifecycleReason 'Причина' = DATA STRING[500] (PayrollLifecycleEntry);
+payrollLifecycleAt 'Дата и время' = DATA DATETIME (PayrollLifecycleEntry);
+payrollLifecycleUser 'Пользователь' = DATA CustomUser (PayrollLifecycleEntry);
+
+CONSTRAINT (CHANGED(payrollLifecycleRun(PayrollLifecycleEntry e)) OR
+            CHANGED(payrollLifecycleOperation(e)) OR
+            CHANGED(payrollLifecycleStatusFrom(e)) OR
+            CHANGED(payrollLifecycleStatusTo(e)) OR
+            CHANGED(payrollLifecycleReason(e)) OR CHANGED(payrollLifecycleAt(e)) OR
+            CHANGED(payrollLifecycleUser(e))) AND PREV(payrollLifecycleRun(e))
+    MESSAGE 'Историю расчёта зарплаты изменять нельзя';
+CONSTRAINT DROPPED(PayrollLifecycleEntry e IS PayrollLifecycleEntry) AND
+           PREV(payrollLifecycleRun(e))
+    MESSAGE 'Историю расчёта зарплаты удалять нельзя';
+
+recordPayrollLifecycle(PayrollRun run, PayrollLifecycleOperation operation,
+                       PayrollRunStatus statusFrom, PayrollRunStatus statusTo,
+                       STRING[500] reason) {
+    NEW entry = PayrollLifecycleEntry {
+        payrollLifecycleRun(entry) <- run;
+        payrollLifecycleOperation(entry) <- operation;
+        payrollLifecycleStatusFrom(entry) <- statusFrom;
+        payrollLifecycleStatusTo(entry) <- statusTo;
+        payrollLifecycleReason(entry) <- reason;
+        payrollLifecycleAt(entry) <- currentDateTime();
+        payrollLifecycleUser(entry) <- currentUser() AS CustomUser;
+    }
+}
+
 CONSTRAINT (CHANGED(settlementPayrollRun(PayrollSettlementLine l)) OR
             CHANGED(settlementEmployee(l)) OR CHANGED(settlementAccrued(l)) OR
             CHANGED(settlementPayrollDeducted(l)) OR CHANGED(settlementOpv(l)) OR
@@ -55,11 +96,13 @@ CONSTRAINT (CHANGED(settlementPayrollRun(PayrollSettlementLine l)) OR
             CHANGED(settlementEnforcement(l)) OR CHANGED(settlementPayable(l)) OR
             CHANGED(settlementClosedAt(l))) AND
            (PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.approved OR
-            PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.paid)
+            PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.paid) AND
+           NOT payrollLifecycleTransition(PREV(settlementPayrollRun(l)))
     MESSAGE 'Нельзя изменить закрытый расчётный листок';
 CONSTRAINT DROPPED(PayrollSettlementLine l IS PayrollSettlementLine) AND
            (PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.approved OR
-            PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.paid)
+            PREV(payrollRunStatus(settlementPayrollRun(l))) == PayrollRunStatus.paid) AND
+           NOT payrollLifecycleTransition(PREV(settlementPayrollRun(l)))
     MESSAGE 'Нельзя удалить закрытый расчётный листок';
 
 settlementLineByEmployee(PayrollRun run, Employee worker) =
@@ -121,6 +164,8 @@ closePayroll 'Закрыть расчёт' (PayrollRun r) {
                 settlementClosedAt(l) <- currentDateTime();
             }
         }
+        recordPayrollLifecycle(r, PayrollLifecycleOperation.closed,
+            PayrollRunStatus.calculated, PayrollRunStatus.approved, NULL);
         payrollLifecycleTransition(r) <- TRUE;
         payrollRunStatus(r) <- PayrollRunStatus.approved;
         APPLY;
@@ -279,6 +324,27 @@ markPaymentStatementPaid 'Отметить выплаченной' (PaymentState
 
 totalPaymentStatementAmount 'Сумма ведомости' (PaymentStatement d) = GROUP SUM
     paymentLineAmount(PaymentStatementLine l) IF paymentLineStatement(l) == d;
+activePaymentStatementCount(PayrollRun run) = GROUP SUM 1 IF
+    paymentStatementPayrollRun(PaymentStatement d) == run AND
+    paymentStatementStatus(d) != PaymentStatementStatus.draft;
+
+reopenPayroll 'Переоткрыть расчёт' (PayrollRun r) {
+    IF payrollRunStatus(r) != PayrollRunStatus.approved THEN
+        MESSAGE 'Переоткрыть можно только закрытый и ещё не выплаченный расчёт';
+    ELSE IF activePaymentStatementCount(r) THEN
+        MESSAGE 'Нельзя переоткрыть расчёт после заполнения платёжной ведомости';
+    ELSE IF NOT payrollReopenReason(r) THEN
+        MESSAGE 'Укажите причину переоткрытия расчёта';
+    ELSE {
+        recordPayrollLifecycle(r, PayrollLifecycleOperation.reopened,
+            PayrollRunStatus.approved, PayrollRunStatus.calculated, payrollReopenReason(r));
+        payrollLifecycleTransition(r) <- TRUE;
+        DELETE PayrollSettlementLine l WHERE settlementPayrollRun(l) == r;
+        payrollRunStatus(r) <- PayrollRunStatus.calculated;
+        payrollReopenReason(r) <- NULL;
+        APPLY;
+    }
+}
 
 FORM payrollSettlements 'Расчётные листки'
     OBJECTS l = PayrollSettlementLine
@@ -288,6 +354,13 @@ FORM payrollSettlements 'Расчётные листки'
                            settlementOpvr, settlementSo, settlementOosms, settlementSocialTax,
                            settlementClosedAt, settlementLegalSource, remainingSettlementAmount,
                            unpaidSettlementAmount
+;
+
+FORM payrollLifecycleEntries 'История закрытия расчётов зарплаты'
+    OBJECTS e = PayrollLifecycleEntry
+    PROPERTIES(e) READONLY payrollLifecycleRun, payrollLifecycleOperation,
+                           payrollLifecycleStatusFrom, payrollLifecycleStatusTo,
+                           payrollLifecycleReason, payrollLifecycleAt, payrollLifecycleUser
 ;
 
 FORM paymentStatements 'Ведомости выплаты зарплаты'
@@ -309,6 +382,6 @@ FORM paymentStatementLines 'Строки ведомостей выплаты'
 
 EXTEND FORM payrollRuns
     PROPERTIES(r) payrollPaymentDueDate, latestPayrollPaymentDate, payrollPaymentLegalSource,
-                  remainingPayrollAmount, unpaidPayrollAmount
-    PROPERTIES(r) closePayroll
+                  remainingPayrollAmount, unpaidPayrollAmount, payrollReopenReason
+    PROPERTIES(r) closePayroll, reopenPayroll
 ;

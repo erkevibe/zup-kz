@@ -274,6 +274,8 @@ EXTEND FORM payrollTimeSummaries FILTERS
     organizationAllowed(payrollOrganization(summaryPayrollRun(s)));
 EXTEND FORM payrollInputs FILTERS organizationAllowed(payrollOrganization(inputPayrollRun(i)));
 EXTEND FORM payrollLines FILTERS organizationAllowed(payrollOrganization(linePayrollRun(l)));
+EXTEND FORM payrollLifecycleEntries
+    FILTERS organizationAllowed(payrollOrganization(payrollLifecycleRun(e)));
 EXTEND FORM averageEarningsDocuments FILTERS
     organizationAllowed(organization(employment(averageAssignment(d))));
 EXTEND FORM averageEarningsBaseLines FILTERS

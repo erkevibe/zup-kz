@@ -81,6 +81,13 @@ jobs:
               python3 tests/assert_payroll.py payroll-result.json
 
               curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollClosureWorkflowTest' \
+                --output payroll-closure-workflow-result.json
+
+              python3 tests/assert_payroll_closure_workflow.py \
+                payroll-closure-workflow-result.json
+
+              curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.statutoryGuardTest' \
                 --output statutory-guard-result.json
 
