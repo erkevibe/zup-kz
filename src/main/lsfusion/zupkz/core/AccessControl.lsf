@@ -112,9 +112,15 @@ CONSTRAINT CHANGED(timesheetStatus(Timesheet t)) AND
            NOT organizationActionAllowed(timesheetOrganization(t))
     MESSAGE 'Нет доступа к табелю этой организации';
 
+accessUserLogin 'Логин пользователя' (UserOrganizationAccess access) =
+    login(accessUser(access) AS CustomUser);
+accessOrganizationName 'Название организации' (UserOrganizationAccess access) =
+    name(accessOrganization(access));
+
 FORM userOrganizationAccesses 'Доступ к организациям'
     OBJECTS a = UserOrganizationAccess
     PROPERTIES(a) accessUser, accessOrganization, accessActive
+    PROPERTIES(a) READONLY accessUserLogin, accessOrganizationName
 ;
 
 denyBusinessFolders(UserRole role) {

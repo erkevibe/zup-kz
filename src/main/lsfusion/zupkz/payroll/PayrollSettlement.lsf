@@ -8,7 +8,8 @@ NAMESPACE ZUPKZ;
 payrollPaymentDueDate 'Дата выплаты' = DATA DATE (PayrollRun);
 latestPayrollPaymentDate 'Предельная дата выплаты' (PayrollRun r) =
     firstDayOfMonth(sumMonth(payrollPeriodTo(r), 1)) + 9;
-payrollPaymentLegalSource(PayrollRun r) = legalSourceByCode('LABOR_CODE_KZ');
+payrollPaymentLegalSource 'Нормативное основание выплаты' (PayrollRun r) =
+    legalSourceByCode('LABOR_CODE_KZ');
 
 CONSTRAINT payrollPaymentDueDate(PayrollRun r) <= payrollPeriodTo(r)
     MESSAGE 'Дата выплаты должна быть позже окончания расчётного периода';
@@ -253,9 +254,11 @@ approvePaymentStatement 'Утвердить ведомость' (PaymentStatemen
     }
 }
 
-remainingPayrollAmount(PayrollRun run) = GROUP SUM remainingSettlementAmount(PayrollSettlementLine s)
+remainingPayrollAmount 'Остаток к выплате' (PayrollRun run) =
+    GROUP SUM remainingSettlementAmount(PayrollSettlementLine s)
     IF settlementPayrollRun(s) == run;
-unpaidPayrollAmount(PayrollRun run) = GROUP SUM unpaidSettlementAmount(PayrollSettlementLine s)
+unpaidPayrollAmount 'Фактически не выплачено' (PayrollRun run) =
+    GROUP SUM unpaidSettlementAmount(PayrollSettlementLine s)
     IF settlementPayrollRun(s) == run;
 
 markPaymentStatementPaid 'Отметить выплаченной' (PaymentStatement d) {
