@@ -421,14 +421,58 @@ enforcementLineOrderNumber 'Исполнительный документ' (Enfo
     enforcementNumber(enforcementCalculationOrder(l));
 enforcementLineEmployeeName 'Сотрудник' (EnforcementCalculationLine l) =
     employeeFullName(enforcementLineEmployee(l));
+enforcementLineStatusName 'Статус' (EnforcementCalculationLine l) =
+    enforcementStatusName(enforcementCalculationDocument(l));
+enforcementLineCalculatedAt 'Рассчитан' (EnforcementCalculationLine l) =
+    enforcementCalculatedAt(enforcementCalculationDocument(l));
 
 FORM enforcementCalculationLines 'Строки исполнительных удержаний'
     OBJECTS l = EnforcementCalculationLine
-    PROPERTIES(l) READONLY enforcementLineRunNumber, enforcementSavedOrderNumber,
-                  enforcementLineEmployeeName, enforcementConditionsStatus, enforcementSavedPriority,
+    PROPERTIES(l) READONLY enforcementLineRunNumber, enforcementLineEmployeeName,
+                  enforcementLineStatusName, enforcementWithheldAmount
+    PROPERTIES(l) PANEL READONLY selectedEmployee = enforcementLineEmployeeName,
+                  enforcementLineCalculatedAt, enforcementConditionsStatus,
+                  enforcementSavedOrderNumber, enforcementSavedPriority,
                   enforcementSavedGrossIncome, enforcementSavedNetIncome,
                   enforcementSavedPercent, enforcementSavedBasis, enforcementSavedKind,
                   enforcementSavedMethod, enforcementSavedFixedAmount, enforcementSavedDebt, enforcementRequestedAmount,
-                  enforcementMaximumAmount, enforcementWithheldAmount,
-                  enforcementUnpaidAmount
+                  enforcementMaximumAmount, enforcementUnpaidAmount
 ;
+
+// Штатная панель выбранной строки: те же фильтры организаций и READONLY,
+// без нового действия открытия и отдельной схемы прав. Только сохранённые условия.
+DESIGN enforcementCalculationLines {
+    PROPERTY(enforcementLineRunNumber(l)) { caption = 'Расчёт'; charWidth = 19; }
+    PROPERTY(enforcementLineEmployeeName(l)) { charWidth = 28; }
+    PROPERTY(enforcementLineStatusName(l)) { charWidth = 10; }
+    PROPERTY(enforcementWithheldAmount(l)) { caption = 'Удержано, ₸'; charWidth = 12; }
+    MOVE BOX(l) FIRST { caption = 'Удержания — выберите строку для просмотра'; height = 240; flex = 0; }
+    NEW details AFTER BOX(l) {
+        caption = 'Выбранное удержание · суммы в тенге';
+        MOVE PROPERTY(selectedEmployee) { charWidth = 40; charHeight = 2; }
+        MOVE PROPERTY(enforcementLineCalculatedAt(l));
+        MOVE PROPERTY(enforcementConditionsStatus(l)) { charWidth = 40; }
+        NEW detailTabs {
+            tabbed = TRUE;
+            NEW amounts {
+                caption = 'Суммы';
+                MOVE PROPERTY(enforcementRequestedAmount(l));
+                MOVE PROPERTY(enforcementMaximumAmount(l));
+                MOVE PROPERTY(enforcementUnpaidAmount(l));
+                MOVE PROPERTY(enforcementSavedGrossIncome(l));
+                MOVE PROPERTY(enforcementSavedNetIncome(l));
+            }
+            NEW conditions {
+                caption = 'Условия на дату расчёта';
+                MOVE PROPERTY(enforcementSavedOrderNumber(l)) { caption = 'Документ'; charWidth = 40; }
+                MOVE PROPERTY(enforcementSavedKind(l)) { caption = 'Вид требования'; charWidth = 40; charHeight = 2; }
+                MOVE PROPERTY(enforcementSavedMethod(l)) { caption = 'Способ расчёта'; charWidth = 40; }
+                MOVE PROPERTY(enforcementSavedPriority(l)) { caption = 'Очередь'; }
+                MOVE PROPERTY(enforcementSavedPercent(l)) { caption = 'Доля, %'; }
+                MOVE PROPERTY(enforcementSavedFixedAmount(l)) { caption = 'Фиксированная сумма'; }
+                MOVE PROPERTY(enforcementSavedDebt(l)) { caption = 'Остаток долга'; }
+                MOVE PROPERTY(enforcementSavedBasis(l)) { caption = 'Основание'; charWidth = 40; charHeight = 3; }
+            }
+        }
+    }
+}
