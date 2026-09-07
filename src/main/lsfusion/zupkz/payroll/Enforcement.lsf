@@ -255,14 +255,26 @@ activeEnforcementOrder(EnforcementCalculationDocument d, EnforcementOrder o) =
     enforcementValidFrom(o) <= enforcementCalculationDate(d) AND
     (NOT enforcementValidTo(o) OR enforcementValidTo(o) >= enforcementCalculationDate(d));
 
+// Один список для подсказки в карточке и проверки действия. Черновик можно
+// сохранять незаполненным; набор обязательных реквизитов не расширяется.
+enforcementActivationMissing 'Для активации заполните' (EnforcementOrder o) = TEXT(
+    CONCAT '\n',
+        'Документ → Организация' IF NOT enforcementOrganization(o),
+        'Документ → Сотрудник' IF NOT enforcementEmployee(o),
+        'Документ → Номер документа' IF NOT enforcementNumber(o),
+        'Документ → Дата документа' IF NOT enforcementDate(o),
+        'Документ → Удерживать с' IF NOT enforcementValidFrom(o),
+        'Условия удержания → Вид требования' IF NOT enforcementKind(o),
+        'Условия удержания → Способ расчёта' IF NOT enforcementCalculationKind(o),
+        'Условия удержания → Очередь' IF NOT enforcementPriority(o)
+) IF o IS EnforcementOrder;
+
 activateEnforcementOrder 'Активировать' (EnforcementOrder o) {
-    IF enforcementStatus(o) == EnforcementOrderStatus.closed THEN
+    IF NOT o IS EnforcementOrder THEN MESSAGE 'Выберите исполнительный документ';
+    ELSE IF enforcementStatus(o) == EnforcementOrderStatus.closed THEN
         MESSAGE 'Завершённый исполнительный документ нельзя активировать';
-    ELSE IF NOT enforcementOrganization(o) OR NOT enforcementEmployee(o) OR
-            NOT enforcementKind(o) OR NOT enforcementCalculationKind(o) OR
-            NOT enforcementNumber(o) OR NOT enforcementDate(o) OR
-            NOT enforcementValidFrom(o) OR NOT enforcementPriority(o) THEN
-        MESSAGE 'Заполните обязательные реквизиты исполнительного документа';
+    ELSE IF enforcementActivationMissing(o) THEN
+        MESSAGE 'Не удалось активировать документ. Заполните поля на указанных вкладках:\n\n' + enforcementActivationMissing(o);
     ELSE {
         enforcementLifecycleTransition(o) <- TRUE;
         enforcementStatus(o) <- EnforcementOrderStatus.active;
@@ -424,6 +436,7 @@ FORM enforcementOrders 'Исполнительные документы'
     OBJECTS o = EnforcementOrder
     PROPERTIES(o) READONLY listNumber = enforcementNumber, listEmployee = enforcementEmployeeName,
                   listDate = enforcementDate, enforcementOrderStatusName
+    PROPERTIES(o) PANEL READONLY enforcementActivationMissing SHOWIF enforcementActivationMissing(o)
     PROPERTIES(o) PANEL enforcementOrganizationName ON CHANGE changeEnforcementOrganization(o) READONLYIF enforcementOrderUsed(o),
                   enforcementEmployeeName ON CHANGE changeEnforcementEmployee(o) READONLYIF enforcementOrderUsed(o)
     PROPERTIES(o) PANEL enforcementKindName ON CHANGE changeEnforcementKind(o),
@@ -445,15 +458,16 @@ DESIGN enforcementOrders {
     MOVE BOX(o) FIRST { caption = 'Исполнительные документы — выберите строку'; height = 220; flex = 0; }
     NEW card AFTER BOX(o) {
         caption = 'Реквизиты выбранного документа';
+        MOVE PROPERTY(enforcementActivationMissing(o)) { charWidth = 55; autoSize = TRUE; wrap = TRUE; }
         NEW sections {
             tabbed = TRUE;
             NEW document {
                 caption = 'Документ';
-                MOVE PROPERTY(enforcementOrganizationName(o)) { charWidth = 40; }
-                MOVE PROPERTY(enforcementEmployeeName(o)) { charWidth = 40; charHeight = 2; wrap = TRUE; }
-                MOVE PROPERTY(enforcementNumber(o)) { charWidth = 40; }
-                MOVE PROPERTY(enforcementDate(o));
-                MOVE PROPERTY(enforcementValidFrom(o));
+                MOVE PROPERTY(enforcementOrganizationName(o)) { caption = 'Организация *'; charWidth = 40; }
+                MOVE PROPERTY(enforcementEmployeeName(o)) { caption = 'Сотрудник *'; charWidth = 40; charHeight = 2; wrap = TRUE; }
+                MOVE PROPERTY(enforcementNumber(o)) { caption = 'Номер документа *'; charWidth = 40; }
+                MOVE PROPERTY(enforcementDate(o)) { caption = 'Дата документа *'; }
+                MOVE PROPERTY(enforcementValidFrom(o)) { caption = 'Удерживать с *'; }
                 MOVE PROPERTY(enforcementValidTo(o));
                 // STRING-редактор однострочный; обычное текстовое представление
                 // переносит основание при просмотре, сохраняя штатное редактирование.
@@ -462,9 +476,9 @@ DESIGN enforcementOrders {
             }
             NEW terms {
                 caption = 'Условия удержания';
-                MOVE PROPERTY(enforcementKindName(o)) { charWidth = 40; charHeight = 2; wrap = TRUE; placeholder = 'Выберите вид требования'; changeOnSingleClick = TRUE; }
-                MOVE PROPERTY(enforcementMethodName(o)) { charWidth = 40; placeholder = 'Выберите способ расчёта'; changeOnSingleClick = TRUE; }
-                MOVE PROPERTY(enforcementPriority(o));
+                MOVE PROPERTY(enforcementKindName(o)) { caption = 'Вид требования *'; charWidth = 40; charHeight = 2; wrap = TRUE; placeholder = 'Выберите вид требования'; changeOnSingleClick = TRUE; }
+                MOVE PROPERTY(enforcementMethodName(o)) { caption = 'Способ расчёта *'; charWidth = 40; placeholder = 'Выберите способ расчёта'; changeOnSingleClick = TRUE; }
+                MOVE PROPERTY(enforcementPriority(o)) { caption = 'Очередь *'; }
                 MOVE PROPERTY(enforcementPercent(o));
                 MOVE PROPERTY(enforcementFixedAmount(o));
                 MOVE PROPERTY(enforcementChildCount(o));

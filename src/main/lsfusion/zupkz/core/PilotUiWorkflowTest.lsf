@@ -568,6 +568,8 @@ pilotUiUnusedEnforcementVerificationTest() {
         kindName = enforcementKindName(pilotUiUnusedEnforcementOrder()),
         methodName = enforcementMethodName(pilotUiUnusedEnforcementOrder()),
         activeStatusName = enforcementOrderStatusName(pilotUiEnforcementCycleOrder()),
+        missing = enforcementActivationMissing(pilotUiUnusedEnforcementOrder()),
+        completeOrderReady = NOT enforcementActivationMissing(pilotUiEnforcementCycleOrder()),
         usedOwnerPreserved = enforcementEmployee(pilotUiEnforcementCycleOrder()) == pilotUiEmployee();
 }
 // Только после установки защиты: ожидаемый отказ APPLY не меняет постоянный набор.
