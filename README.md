@@ -30,6 +30,9 @@ mvn --batch-mode clean package -Passemble,embed-server
 java -Xms256m -Xmx2g -jar target/lsfusion-server-0.1.0-SNAPSHOT.jar
 ```
 
+Постоянный запуск через systemd и ежедневное резервное копирование описаны в
+[`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+
 ## Реализованный контур
 
 - организации, подразделения, должности и сотрудники;

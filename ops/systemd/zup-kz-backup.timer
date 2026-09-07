@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily ZUP Kazakhstan database backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Asia/Almaty
+Persistent=true
+RandomizedDelaySec=10m
+Unit=zup-kz-backup.service
+
+[Install]
+WantedBy=timers.target

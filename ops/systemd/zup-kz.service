@@ -1,0 +1,22 @@
+[Unit]
+Description=ZUP Kazakhstan lsFusion server
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=zupdev
+Group=zupdev
+WorkingDirectory=/srv/zup-kz
+ExecStart=/usr/bin/java -Xms256m -Xmx2g -jar /srv/zup-kz/app/lsfusion-server.jar
+Restart=on-failure
+RestartSec=10
+SuccessExitStatus=143
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/zup-kz
+
+[Install]
+WantedBy=multi-user.target

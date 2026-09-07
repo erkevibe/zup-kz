@@ -1,0 +1,15 @@
+[Unit]
+Description=Back up the ZUP Kazakhstan PostgreSQL database
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+EnvironmentFile=/etc/default/zup-kz-backup
+ExecStart=/srv/zup-kz/bin/backup-db.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/zup-kz

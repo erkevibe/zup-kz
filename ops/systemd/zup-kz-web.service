@@ -1,0 +1,22 @@
+[Unit]
+Description=ZUP Kazakhstan lsFusion web client
+After=network-online.target zup-kz.service
+Requires=zup-kz.service
+
+[Service]
+Type=simple
+User=zupdev
+Group=zupdev
+WorkingDirectory=/opt/zup-web/tomcat
+ExecStart=/opt/zup-web/tomcat/bin/catalina.sh run
+ExecStop=/opt/zup-web/tomcat/bin/catalina.sh stop
+Restart=on-failure
+RestartSec=10
+SuccessExitStatus=143
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
