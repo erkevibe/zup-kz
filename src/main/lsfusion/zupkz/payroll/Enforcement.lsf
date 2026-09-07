@@ -384,21 +384,109 @@ changeEnforcementEmployee(EnforcementOrder o) {
         DO enforcementEmployee(o) <- selected;
 }
 
+enforcementKindName 'Вид требования' (EnforcementOrder o) = caption(enforcementKind(o));
+enforcementMethodName 'Способ расчёта' (EnforcementOrder o) = caption(enforcementCalculationKind(o));
+enforcementOrderStatusName 'Статус' (EnforcementOrder o) =
+    IF enforcementStatus(o) THEN caption(enforcementStatus(o)) ELSE 'Не активирован'
+    IF o IS EnforcementOrder;
+enforcementLegalSourceName 'Нормативное основание' (EnforcementOrder o) = title(enforcementLegalSource(o));
+FORM enforcementKinds 'Виды исполнительных требований'
+    OBJECTS k = EnforcementOrderKind
+    PROPERTIES(k) READONLY caption
+;
+FORM enforcementMethods 'Способы расчёта взысканий'
+    OBJECTS m = EnforcementCalculationKind
+    PROPERTIES(m) READONLY caption
+;
+DESIGN enforcementKinds {
+    PROPERTY(caption(k)) { caption = 'Вид требования'; charWidth = 52; }
+}
+DESIGN enforcementMethods {
+    PROPERTY(caption(m)) { caption = 'Способ расчёта'; charWidth = 30; }
+}
+changeEnforcementKind(EnforcementOrder o) {
+    IF NOT organizationActionAllowed(enforcementOrganization(o)) THEN MESSAGE 'Нет доступа к изменению исполнительного документа';
+    ELSE DIALOG enforcementKinds OBJECTS k = enforcementKind(o) NULL INPUT selected NULL
+        DO enforcementKind(o) <- selected;
+}
+changeEnforcementMethod(EnforcementOrder o) {
+    IF NOT organizationActionAllowed(enforcementOrganization(o)) THEN MESSAGE 'Нет доступа к изменению исполнительного документа';
+    ELSE DIALOG enforcementMethods OBJECTS m = enforcementCalculationKind(o) NULL INPUT selected NULL
+        DO enforcementCalculationKind(o) <- selected;
+}
+changeEnforcementLegalSource(EnforcementOrder o) {
+    IF NOT organizationActionAllowed(enforcementOrganization(o)) THEN MESSAGE 'Нет доступа к изменению исполнительного документа';
+    ELSE DIALOG legalSources OBJECTS s = enforcementLegalSource(o) NULL INPUT selected NULL
+        DO enforcementLegalSource(o) <- selected;
+}
+
 FORM enforcementOrders 'Исполнительные документы'
     OBJECTS o = EnforcementOrder
-    PROPERTIES(o) enforcementOrganizationName ON CHANGE changeEnforcementOrganization(o) READONLYIF enforcementOrderUsed(o),
+    PROPERTIES(o) READONLY listNumber = enforcementNumber, listEmployee = enforcementEmployeeName,
+                  listDate = enforcementDate, enforcementOrderStatusName
+    PROPERTIES(o) PANEL enforcementOrganizationName ON CHANGE changeEnforcementOrganization(o) READONLYIF enforcementOrderUsed(o),
                   enforcementEmployeeName ON CHANGE changeEnforcementEmployee(o) READONLYIF enforcementOrderUsed(o)
-    PROPERTIES(o) enforcementKind,
-                  enforcementCalculationKind, enforcementNumber,
+    PROPERTIES(o) PANEL enforcementKindName ON CHANGE changeEnforcementKind(o),
+                  enforcementMethodName ON CHANGE changeEnforcementMethod(o), enforcementNumber,
                   enforcementDate, enforcementValidFrom, enforcementValidTo,
                   enforcementPriority, enforcementPercent, enforcementFixedAmount,
                   enforcementChildCount, enforcementRemainingDebt,
                   enforcementRecipient, enforcementRecipientIin, enforcementRecipientIban,
                   enforcementOfficer, enforcementProceedingNumber,
-                  enforcementBasis, enforcementLegalSource
-    PROPERTIES(o) READONLY enforcementStatus
-    PROPERTIES(o) activateEnforcementOrder, suspendEnforcementOrder, closeEnforcementOrder
+                  enforcementBasis, enforcementLegalSourceName ON CHANGE changeEnforcementLegalSource(o)
+    PROPERTIES(o) activateEnforcementOrder TOOLBAR, suspendEnforcementOrder TOOLBAR, closeEnforcementOrder TOOLBAR
 ;
+
+DESIGN enforcementOrders {
+    PROPERTY(listNumber) { caption = 'Документ'; charWidth = 24; }
+    PROPERTY(listEmployee) { charWidth = 28; }
+    PROPERTY(listDate) { caption = 'Дата'; charWidth = 10; }
+    PROPERTY(enforcementOrderStatusName(o)) { charWidth = 15; }
+    MOVE BOX(o) FIRST { caption = 'Исполнительные документы — выберите строку'; height = 220; flex = 0; }
+    NEW card AFTER BOX(o) {
+        caption = 'Реквизиты выбранного документа';
+        NEW sections {
+            tabbed = TRUE;
+            NEW document {
+                caption = 'Документ';
+                MOVE PROPERTY(enforcementOrganizationName(o)) { charWidth = 40; }
+                MOVE PROPERTY(enforcementEmployeeName(o)) { charWidth = 40; charHeight = 2; wrap = TRUE; }
+                MOVE PROPERTY(enforcementNumber(o)) { charWidth = 40; }
+                MOVE PROPERTY(enforcementDate(o));
+                MOVE PROPERTY(enforcementValidFrom(o));
+                MOVE PROPERTY(enforcementValidTo(o));
+                // STRING-редактор однострочный; обычное текстовое представление
+                // переносит основание при просмотре, сохраняя штатное редактирование.
+                MOVE PROPERTY(enforcementBasis(o)) { charWidth = 40; charHeight = 3; wrap = TRUE; tag = 'div'; }
+                MOVE PROPERTY(enforcementLegalSourceName(o)) { charWidth = 40; charHeight = 2; wrap = TRUE; placeholder = 'Выберите источник'; changeOnSingleClick = TRUE; }
+            }
+            NEW terms {
+                caption = 'Условия удержания';
+                MOVE PROPERTY(enforcementKindName(o)) { charWidth = 40; charHeight = 2; wrap = TRUE; placeholder = 'Выберите вид требования'; changeOnSingleClick = TRUE; }
+                MOVE PROPERTY(enforcementMethodName(o)) { charWidth = 40; placeholder = 'Выберите способ расчёта'; changeOnSingleClick = TRUE; }
+                MOVE PROPERTY(enforcementPriority(o));
+                MOVE PROPERTY(enforcementPercent(o));
+                MOVE PROPERTY(enforcementFixedAmount(o));
+                MOVE PROPERTY(enforcementChildCount(o));
+                MOVE PROPERTY(enforcementRemainingDebt(o));
+            }
+            NEW recipient {
+                caption = 'Получатель и исполнитель';
+                MOVE PROPERTY(enforcementRecipient(o)) { charWidth = 40; charHeight = 2; wrap = TRUE; tag = 'div'; }
+                MOVE PROPERTY(enforcementRecipientIin(o));
+                MOVE PROPERTY(enforcementRecipientIban(o)) { charWidth = 40; }
+                MOVE PROPERTY(enforcementOfficer(o)) { charWidth = 40; charHeight = 2; wrap = TRUE; tag = 'div'; }
+                MOVE PROPERTY(enforcementProceedingNumber(o)) { charWidth = 40; }
+            }
+        }
+        NEW lifecycle {
+            horizontal = TRUE;
+            MOVE PROPERTY(activateEnforcementOrder(o));
+            MOVE PROPERTY(suspendEnforcementOrder(o));
+            MOVE PROPERTY(closeEnforcementOrder(o));
+        }
+    }
+}
 
 enforcementRunNumber 'Расчёт зарплаты' (EnforcementCalculationDocument d) = payrollNumber(enforcementPayrollRun(d));
 enforcementStatusName 'Статус' (EnforcementCalculationDocument d) = caption(enforcementCalculationStatus(d));

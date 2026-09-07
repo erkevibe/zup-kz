@@ -564,6 +564,10 @@ pilotUiUnusedEnforcementVerificationTest() {
     EXPORT JSON FROM owner = enforcementEmployeeName(pilotUiUnusedEnforcementOrder()),
         unused = NOT enforcementOrderUsed(pilotUiUnusedEnforcementOrder()),
         inactive = NOT enforcementStatus(pilotUiUnusedEnforcementOrder()),
+        statusName = enforcementOrderStatusName(pilotUiUnusedEnforcementOrder()),
+        kindName = enforcementKindName(pilotUiUnusedEnforcementOrder()),
+        methodName = enforcementMethodName(pilotUiUnusedEnforcementOrder()),
+        activeStatusName = enforcementOrderStatusName(pilotUiEnforcementCycleOrder()),
         usedOwnerPreserved = enforcementEmployee(pilotUiEnforcementCycleOrder()) == pilotUiEmployee();
 }
 // Только после установки защиты: ожидаемый отказ APPLY не меняет постоянный набор.
