@@ -117,6 +117,22 @@ enforcementRequestedAmount 'Сумма по документу' = DATA NUMERIC[1
 enforcementMaximumAmount 'Максимум удержаний' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
 enforcementWithheldAmount 'Удержано' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
 
+// Условия фиксируются вместе с суммой. NULL доли/долга допустим и не означает
+// отсутствие снимка. Старые расчёты не заполняем сегодняшними значениями.
+enforcementConditionsRecorded = DATA BOOLEAN (EnforcementCalculationLine);
+enforcementSavedOrderNumber 'Номер на дату расчёта' = DATA STRING[80] (EnforcementCalculationLine);
+enforcementSavedBasis 'Основание на дату расчёта' = DATA STRING[500] (EnforcementCalculationLine);
+enforcementSavedPriority 'Очередь на дату расчёта' = DATA INTEGER (EnforcementCalculationLine);
+enforcementSavedPercent 'Применённая доля, %' = DATA NUMERIC[18,6] (EnforcementCalculationLine);
+enforcementSavedGrossIncome 'Доход для взыскания' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
+enforcementSavedNetIncome 'Доход после налогов' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
+enforcementSavedKind 'Вид требования на дату расчёта' = DATA STRING[100] (EnforcementCalculationLine);
+enforcementSavedMethod 'Способ расчёта на дату расчёта' = DATA STRING[100] (EnforcementCalculationLine);
+enforcementSavedFixedAmount 'Фиксированная сумма по источнику' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
+enforcementSavedDebt 'Остаток долга по источнику' = DATA NUMERIC[18,2] (EnforcementCalculationLine);
+enforcementConditionsStatus 'Условия расчёта' (EnforcementCalculationLine l) =
+    IF enforcementConditionsRecorded(l) THEN 'Сохранены' ELSE 'Не сохранялись (старый расчёт)';
+
 // Снимок записывает только первое штатное выполнение расчёта.
 // Отмена сохраняет строки; исправления выполняются новым расчётом, не правкой снимка.
 enforcementSnapshotWriteAllowed(EnforcementCalculationDocument d) =
@@ -124,7 +140,18 @@ enforcementSnapshotWriteAllowed(EnforcementCalculationDocument d) =
     NOT PREV(enforcementCalculatedAt(d)) AND organizationActionAllowed(enforcementCalculationOrganization(d));
 CONSTRAINT (CHANGED(enforcementCalculationDocument(EnforcementCalculationLine l)) OR
             CHANGED(enforcementCalculationOrder(l)) OR CHANGED(enforcementRequestedAmount(l)) OR
-            CHANGED(enforcementMaximumAmount(l)) OR CHANGED(enforcementWithheldAmount(l))) AND
+            CHANGED(enforcementMaximumAmount(l)) OR CHANGED(enforcementWithheldAmount(l)) OR
+            CHANGED(enforcementSavedOrderNumber(l)) OR
+            CHANGED(enforcementSavedBasis(l)) OR
+            CHANGED(enforcementSavedPriority(l)) OR
+            CHANGED(enforcementSavedPercent(l)) OR
+            CHANGED(enforcementSavedGrossIncome(l)) OR
+            CHANGED(enforcementSavedNetIncome(l)) OR
+            CHANGED(enforcementSavedKind(l)) OR
+            CHANGED(enforcementSavedMethod(l)) OR
+            CHANGED(enforcementSavedFixedAmount(l)) OR
+            CHANGED(enforcementSavedDebt(l)) OR
+            CHANGED(enforcementConditionsRecorded(l))) AND
            (NOT enforcementSnapshotWriteAllowed(enforcementCalculationDocument(l)) OR
             PREV(enforcementCalculatedAt(enforcementCalculationDocument(l))))
     MESSAGE 'Строки исполнительных удержаний записываются только штатным расчётом';
@@ -264,6 +291,20 @@ closeEnforcementOrder 'Завершить' (EnforcementOrder o) {
     }
 }
 
+captureEnforcementConditions(EnforcementCalculationLine l) {
+    enforcementSavedOrderNumber(l) <- enforcementNumber(enforcementCalculationOrder(l));
+    enforcementSavedBasis(l) <- enforcementBasis(enforcementCalculationOrder(l));
+    enforcementSavedPriority(l) <- enforcementLinePriority(l);
+    enforcementSavedPercent(l) <- effectiveEnforcementPercent(l);
+    enforcementSavedGrossIncome(l) <- enforcementGrossIncome(l);
+    enforcementSavedNetIncome(l) <- enforcementIncomeAfterTaxes(l);
+    enforcementSavedKind(l) <- caption(enforcementKind(enforcementCalculationOrder(l)));
+    enforcementSavedMethod(l) <- caption(enforcementCalculationKind(enforcementCalculationOrder(l)));
+    enforcementSavedFixedAmount(l) <- enforcementFixedAmount(enforcementCalculationOrder(l));
+    enforcementSavedDebt(l) <- enforcementRemainingDebt(enforcementCalculationOrder(l));
+    enforcementConditionsRecorded(l) <- TRUE;
+}
+
 calculateEnforcement 'Рассчитать' (EnforcementCalculationDocument d) {
     IF enforcementCalculationStatus(d) AND
        enforcementCalculationStatus(d) != EnforcementCalculationStatus.draft THEN
@@ -279,8 +320,10 @@ calculateEnforcement 'Рассчитать' (EnforcementCalculationDocument d) {
                 enforcementCalculationOrder(l) <- o;
             }
         }
-        FOR enforcementCalculationDocument(EnforcementCalculationLine l) == d DO
+        FOR enforcementCalculationDocument(EnforcementCalculationLine l) == d DO {
+            captureEnforcementConditions(l);
             enforcementMaximumAmount(l) <- calculatedMaximumEnforcementWithholding(l);
+        }
         FOR enforcementCalculationDocument(EnforcementCalculationLine l) == d DO
             enforcementRequestedAmount(l) <- debtLimitedEnforcementRequest(l);
         FOR enforcementCalculationDocument(EnforcementCalculationLine l) == d DO
@@ -381,10 +424,11 @@ enforcementLineEmployeeName 'Сотрудник' (EnforcementCalculationLine l) 
 
 FORM enforcementCalculationLines 'Строки исполнительных удержаний'
     OBJECTS l = EnforcementCalculationLine
-    PROPERTIES(l) READONLY enforcementLineRunNumber, enforcementLineOrderNumber,
-                  enforcementLineEmployeeName, enforcementLinePriority,
-                  enforcementGrossIncome, enforcementIncomeAfterTaxes,
-                  effectiveEnforcementPercent, enforcementRequestedAmount,
+    PROPERTIES(l) READONLY enforcementLineRunNumber, enforcementSavedOrderNumber,
+                  enforcementLineEmployeeName, enforcementConditionsStatus, enforcementSavedPriority,
+                  enforcementSavedGrossIncome, enforcementSavedNetIncome,
+                  enforcementSavedPercent, enforcementSavedBasis, enforcementSavedKind,
+                  enforcementSavedMethod, enforcementSavedFixedAmount, enforcementSavedDebt, enforcementRequestedAmount,
                   enforcementMaximumAmount, enforcementWithheldAmount,
                   enforcementUnpaidAmount
 ;
