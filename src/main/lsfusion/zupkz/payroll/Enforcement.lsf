@@ -132,6 +132,17 @@ CONSTRAINT DROPPED(EnforcementCalculationLine l IS EnforcementCalculationLine) A
            PREV(enforcementCalculatedAt(enforcementCalculationDocument(l)))
     MESSAGE 'Нельзя удалять строки рассчитанных исполнительных удержаний';
 
+// Владелец входит в идентичность снимка: его смена переносила бы взыскание
+// другому сотруднику при закрытии зарплаты. Отмена расчёта сохраняет эту связь.
+enforcementOrderUsed(EnforcementOrder o) = GROUP SUM 1 IF
+    enforcementCalculationOrder(EnforcementCalculationLine l) == o AND
+    enforcementCalculatedAt(enforcementCalculationDocument(l));
+CONSTRAINT (CHANGED(enforcementEmployee(EnforcementOrder o)) OR CHANGED(enforcementOrganization(o))) AND
+           PREV(enforcementOrderUsed(o))
+    MESSAGE 'Нельзя менять сотрудника или организацию использованного исполнительного документа; создайте новый документ';
+CONSTRAINT DROPPED(EnforcementOrder o IS EnforcementOrder) AND PREV(enforcementOrderUsed(o))
+    MESSAGE 'Использованный исполнительный документ нельзя удалять; используйте завершение';
+
 enforcementLineEmployee(EnforcementCalculationLine l) =
     enforcementEmployee(enforcementCalculationOrder(l));
 enforcementLinePriority 'Очередь' (EnforcementCalculationLine l) =
@@ -317,9 +328,24 @@ payableAfterEnforcement 'К выплате после взысканий' (Enfor
     payableAfterTaxes(enforcementTaxCalculation(d)) -
     (IF totalEnforcementWithheld(d) THEN totalEnforcementWithheld(d) ELSE 0.00));
 
+enforcementOrganizationName 'Организация' (EnforcementOrder o) = name(enforcementOrganization(o));
+enforcementEmployeeName 'Сотрудник' (EnforcementOrder o) = employeeFullName(enforcementEmployee(o));
+changeEnforcementOrganization(EnforcementOrder o) {
+    IF enforcementOrderUsed(o) THEN MESSAGE 'Организация использованного исполнительного документа зафиксирована';
+    ELSE DIALOG organizations OBJECTS o = enforcementOrganization(o) NULL INPUT selected NULL
+        DO enforcementOrganization(o) <- selected;
+}
+changeEnforcementEmployee(EnforcementOrder o) {
+    IF enforcementOrderUsed(o) THEN MESSAGE 'Сотрудник использованного исполнительного документа зафиксирован';
+    ELSE DIALOG employees OBJECTS e = enforcementEmployee(o) NULL INPUT selected NULL
+        DO enforcementEmployee(o) <- selected;
+}
+
 FORM enforcementOrders 'Исполнительные документы'
     OBJECTS o = EnforcementOrder
-    PROPERTIES(o) enforcementOrganization, enforcementEmployee, enforcementKind,
+    PROPERTIES(o) enforcementOrganizationName ON CHANGE changeEnforcementOrganization(o) READONLYIF enforcementOrderUsed(o),
+                  enforcementEmployeeName ON CHANGE changeEnforcementEmployee(o) READONLYIF enforcementOrderUsed(o)
+    PROPERTIES(o) enforcementKind,
                   enforcementCalculationKind, enforcementNumber,
                   enforcementDate, enforcementValidFrom, enforcementValidTo,
                   enforcementPriority, enforcementPercent, enforcementFixedAmount,

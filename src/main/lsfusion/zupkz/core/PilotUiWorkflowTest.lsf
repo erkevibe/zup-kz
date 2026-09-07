@@ -536,6 +536,56 @@ pilotUiEnforcementCycleVerificationTest() {
             payrollRunStatus(pilotUiDeductionsRun()) == PayrollRunStatus.approved;
 }
 
+pilotUiUnusedEnforcementOrder() = GROUP LAST EnforcementOrder o IF
+    enforcementNumber(o) == 'UI-UNUSED-OWNER-001' AND enforcementOrganization(o) == pilotUiOrganization() ORDER o;
+// Один неактивированный документ для положительного UI-теста выбора владельца.
+pilotUiUnusedEnforcementSetupTest() {
+    IF login(currentUser() AS CustomUser) != 'ui-chief' OR NOT organizationAllowed(pilotUiOrganization()) THEN RETURN;
+    IF NOT pilotUiUnusedEnforcementOrder() THEN NEW o = EnforcementOrder {
+        enforcementNumber(o) <- 'UI-UNUSED-OWNER-001';
+        enforcementOrganization(o) <- pilotUiOrganization();
+        enforcementEmployee(o) <- pilotUiEmployee();
+        enforcementBasis(o) <- 'Синтетический неактивный документ: проверка выбора владельца до расчёта';
+        APPLY;
+    }
+    EXPORT JSON FROM exists = pilotUiUnusedEnforcementOrder() IS EnforcementOrder,
+        unused = NOT enforcementOrderUsed(pilotUiUnusedEnforcementOrder());
+}
+pilotUiUnusedEnforcementVerificationTest() {
+    EXPORT JSON FROM owner = enforcementEmployeeName(pilotUiUnusedEnforcementOrder()),
+        unused = NOT enforcementOrderUsed(pilotUiUnusedEnforcementOrder()),
+        inactive = NOT enforcementStatus(pilotUiUnusedEnforcementOrder()),
+        usedOwnerPreserved = enforcementEmployee(pilotUiEnforcementCycleOrder()) == pilotUiEmployee();
+}
+// Только после установки защиты: ожидаемый отказ APPLY не меняет постоянный набор.
+pilotUiSourceGuardTest(STRING[20] mode) {
+    IF login(currentUser() AS CustomUser) != 'ui-chief' OR NOT pilotUiEnforcementCycleOrder() OR
+       enforcementEmployee(pilotUiEnforcementCycleOrder()) != pilotUiEmployee() THEN
+        EXPORT JSON FROM fixtureError = TRUE;
+    ELSE {
+        IF mode == 'owner' THEN enforcementEmployee(pilotUiEnforcementCycleOrder()) <- pilotUiSecondEmployee();
+        ELSE IF mode == 'clear-owner' THEN enforcementEmployee(pilotUiEnforcementCycleOrder()) <- NULL;
+        ELSE IF mode == 'organization' THEN enforcementOrganization(pilotUiEnforcementCycleOrder()) <- organizationByBin('666666666666');
+        ELSE IF mode == 'delete-order' THEN DELETE EnforcementOrder o WHERE o == pilotUiEnforcementCycleOrder();
+        ELSE IF mode == 'tax-run' THEN taxCalculationPayrollRun(closingTaxes(pilotUiEnforcementCycleRun())) <- pilotUiPayrollRun();
+        ELSE IF mode == 'tax-social' THEN taxCalculationSocialPayments(closingTaxes(pilotUiEnforcementCycleRun())) <- pilotUiSocial();
+        ELSE IF mode == 'social-run' THEN socialPaymentPayrollRun(closingSocial(pilotUiEnforcementCycleRun())) <- pilotUiPayrollRun();
+        ELSE RETURN;
+        APPLY;
+        IF canceled() THEN {
+            CANCEL;
+            EXPORT JSON FROM blocked = TRUE,
+                ownerPreserved = enforcementEmployee(pilotUiEnforcementCycleOrder()) == pilotUiEmployee(),
+                organizationPreserved = enforcementOrganization(pilotUiEnforcementCycleOrder()) == pilotUiOrganization(),
+                taxRunPreserved = taxCalculationPayrollRun(closingTaxes(pilotUiEnforcementCycleRun())) == pilotUiEnforcementCycleRun(),
+                taxSocialPreserved = taxCalculationSocialPayments(closingTaxes(pilotUiEnforcementCycleRun())) == closingSocial(pilotUiEnforcementCycleRun()),
+                socialRunPreserved = socialPaymentPayrollRun(closingSocial(pilotUiEnforcementCycleRun())) == pilotUiEnforcementCycleRun(),
+                firstAmount = approvedEnforcementByEmployee(pilotUiEnforcementCycleRun(), pilotUiEmployee()),
+                secondAmount = approvedEnforcementByEmployee(pilotUiEnforcementCycleRun(), pilotUiSecondEmployee());
+        } ELSE EXPORT JSON FROM unexpectedWrite = TRUE;
+    }
+}
+
 pilotUiDataSetupTest() {
     IF pilotUiPayrollRun() THEN
         EXPORT JSON FROM
