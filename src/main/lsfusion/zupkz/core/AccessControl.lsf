@@ -199,11 +199,15 @@ applyZupRolePermissions() {
     permitBusinessFolders(userRoleSID('zup_auditor'));
     dataPermissionChange(userRoleSID('zup_auditor'), propertyGroup('System_root')) <- Permission.forbid;
     dataPermissionEditObjects(userRoleSID('zup_auditor'), propertyGroup('System_root')) <- Permission.forbid;
-    // Только два действия чтения. Право изменения данных аудитору не выдаётся.
+    // Только действия чтения. Право изменения данных аудитору не выдаётся.
     dataPermissionChange(userRoleSID('zup_auditor'),
         actionCanonicalName('ZUPKZ.openPayrollSettlement[ZUPKZ.PayrollSettlementLine]')) <- Permission.permit;
     dataPermissionChange(userRoleSID('zup_auditor'),
         actionCanonicalName('ZUPKZ.printPayrollSettlementPdf[ZUPKZ.PayrollSettlementLine]')) <- Permission.permit;
+    dataPermissionChange(userRoleSID('zup_auditor'),
+        actionCanonicalName('ZUPKZ.downloadEnforcementOrdersXlsx[]')) <- Permission.permit;
+    dataPermissionChange(userRoleSID('zup_auditor'),
+        actionCanonicalName('ZUPKZ.downloadEnforcementLinesXlsx[]')) <- Permission.permit;
 }
 
 loadZupRoles() {

@@ -578,3 +578,84 @@ DESIGN enforcementCalculationLines {
         }
     }
 }
+
+// Полный экспорт не зависит от видимых колонок и пользовательского фильтра
+// короткого списка. Охват явно указан на кнопке; организация проверяется здесь,
+// в том числе при прямом вызове Action API. Роли соответствуют доступу к реестрам.
+enforcementExportRoleAllowed() = has(currentUser() AS CustomUser, userRoleSID('admin')) OR
+    has(currentUser() AS CustomUser, userRoleSID('zup_chief_accountant')) OR
+    has(currentUser() AS CustomUser, userRoleSID('zup_auditor'));
+
+exportEnforcementOrdersXlsx() {
+    EXPORT XLSX HEADER FROM
+        'Организация' = enforcementOrganizationName(EnforcementOrder o),
+        'БИН' = bin(enforcementOrganization(o)),
+        'Сотрудник' = enforcementEmployeeName(o),
+        'ИИН сотрудника' = iin(enforcementEmployee(o)),
+        'Документ' = enforcementNumber(o),
+        'Дата документа' = enforcementDate(o),
+        'Статус' = enforcementOrderStatusName(o),
+        'Удерживать с' = enforcementValidFrom(o),
+        'Удерживать по' = enforcementValidTo(o),
+        'Вид требования' = enforcementKindName(o),
+        'Способ расчёта' = enforcementMethodName(o),
+        'Очередь' = enforcementPriority(o),
+        'Доля, %' = enforcementPercent(o),
+        'Фиксированная сумма, KZT' = enforcementFixedAmount(o),
+        'Количество детей' = enforcementChildCount(o),
+        'Остаток задолженности, KZT' = enforcementRemainingDebt(o),
+        'Основание' = enforcementBasis(o),
+        'Нормативное основание' = enforcementLegalSourceName(o),
+        'Получатель' = enforcementRecipient(o),
+        'ИИН получателя' = enforcementRecipientIin(o),
+        'IBAN получателя' = enforcementRecipientIban(o),
+        'Судебный исполнитель' = enforcementOfficer(o),
+        'Номер производства' = enforcementProceedingNumber(o)
+    WHERE o IS EnforcementOrder AND enforcementExportRoleAllowed() AND
+          organizationAllowed(enforcementOrganization(o))
+    ORDER enforcementNumber(o);
+}
+
+exportEnforcementLinesXlsx() {
+    EXPORT XLSX HEADER FROM
+        'Организация' = name(enforcementCalculationOrganization(enforcementCalculationDocument(EnforcementCalculationLine l))),
+        'БИН' = bin(enforcementCalculationOrganization(enforcementCalculationDocument(l))),
+        'Расчёт зарплаты' = enforcementLineRunNumber(l),
+        'Сотрудник' = enforcementLineEmployeeName(l),
+        'ИИН сотрудника' = iin(enforcementLineEmployee(l)),
+        'Статус расчёта' = enforcementLineStatusName(l),
+        'Рассчитан' = enforcementLineCalculatedAt(l),
+        'Условия расчёта' = enforcementConditionsStatus(l),
+        'Номер на дату расчёта' = enforcementSavedOrderNumber(l),
+        'Основание на дату расчёта' = enforcementSavedBasis(l),
+        'Вид требования на дату расчёта' = enforcementSavedKind(l),
+        'Способ расчёта на дату расчёта' = enforcementSavedMethod(l),
+        'Очередь на дату расчёта' = enforcementSavedPriority(l),
+        'Применённая доля, %' = enforcementSavedPercent(l),
+        'Фиксированная сумма по источнику, KZT' = enforcementSavedFixedAmount(l),
+        'Остаток долга по источнику, KZT' = enforcementSavedDebt(l),
+        'Доход для взыскания, KZT' = enforcementSavedGrossIncome(l),
+        'Доход после налогов, KZT' = enforcementSavedNetIncome(l),
+        'Сумма по документу, KZT' = enforcementRequestedAmount(l),
+        'Максимум удержаний, KZT' = enforcementMaximumAmount(l),
+        'Удержано, KZT' = enforcementWithheldAmount(l),
+        'Не удержано, KZT' = enforcementUnpaidAmount(l)
+    WHERE l IS EnforcementCalculationLine AND enforcementExportRoleAllowed() AND
+          organizationAllowed(enforcementCalculationOrganization(enforcementCalculationDocument(l)))
+    ORDER enforcementLineRunNumber(l), enforcementLineEmployeeName(l), enforcementLineCalculatedAt(l);
+}
+
+downloadEnforcementOrdersXlsx 'Excel: все доступные документы' () {
+    IF NOT enforcementExportRoleAllowed() THEN MESSAGE 'Нет доступа к выгрузке исполнительных документов';
+    ELSE { exportEnforcementOrdersXlsx(); open(exportFile()); }
+}
+downloadEnforcementLinesXlsx 'Excel: все доступные удержания' () {
+    IF NOT enforcementExportRoleAllowed() THEN MESSAGE 'Нет доступа к выгрузке исполнительных удержаний';
+    ELSE { exportEnforcementLinesXlsx(); open(exportFile()); }
+}
+EXTEND FORM enforcementOrders
+    PROPERTIES() downloadEnforcementOrdersXlsx TOOLBAR SHOWIF enforcementExportRoleAllowed()
+;
+EXTEND FORM enforcementCalculationLines
+    PROPERTIES() downloadEnforcementLinesXlsx TOOLBAR SHOWIF enforcementExportRoleAllowed()
+;
