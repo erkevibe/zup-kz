@@ -586,6 +586,8 @@ enforcementExportRoleAllowed() = has(currentUser() AS CustomUser, userRoleSID('a
     has(currentUser() AS CustomUser, userRoleSID('zup_chief_accountant')) OR
     has(currentUser() AS CustomUser, userRoleSID('zup_auditor'));
 
+formatEnforcementXlsx INTERNAL 'kz.zup.FormatEnforcementXlsxAction' (FILE);
+
 exportEnforcementOrdersXlsx() {
     EXPORT XLSX HEADER FROM
         'Организация' = enforcementOrganizationName(EnforcementOrder o),
@@ -614,6 +616,7 @@ exportEnforcementOrdersXlsx() {
     WHERE o IS EnforcementOrder AND enforcementExportRoleAllowed() AND
           organizationAllowed(enforcementOrganization(o))
     ORDER enforcementNumber(o);
+    formatEnforcementXlsx(exportFile());
 }
 
 exportEnforcementLinesXlsx() {
@@ -643,15 +646,16 @@ exportEnforcementLinesXlsx() {
     WHERE l IS EnforcementCalculationLine AND enforcementExportRoleAllowed() AND
           organizationAllowed(enforcementCalculationOrganization(enforcementCalculationDocument(l)))
     ORDER enforcementLineRunNumber(l), enforcementLineEmployeeName(l), enforcementLineCalculatedAt(l);
+    formatEnforcementXlsx(exportFile());
 }
 
 downloadEnforcementOrdersXlsx 'Excel: все доступные документы' () {
     IF NOT enforcementExportRoleAllowed() THEN MESSAGE 'Нет доступа к выгрузке исполнительных документов';
-    ELSE { exportEnforcementOrdersXlsx(); open(exportFile()); }
+    ELSE { exportEnforcementOrdersXlsx(); open(exportFile(), 'Ispolnitelnye_dokumenty'); }
 }
 downloadEnforcementLinesXlsx 'Excel: все доступные удержания' () {
     IF NOT enforcementExportRoleAllowed() THEN MESSAGE 'Нет доступа к выгрузке исполнительных удержаний';
-    ELSE { exportEnforcementLinesXlsx(); open(exportFile()); }
+    ELSE { exportEnforcementLinesXlsx(); open(exportFile(), 'Ispolnitelnye_uderzhaniya'); }
 }
 EXTEND FORM enforcementOrders
     PROPERTIES() downloadEnforcementOrdersXlsx TOOLBAR SHOWIF enforcementExportRoleAllowed()

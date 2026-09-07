@@ -1,6 +1,7 @@
 """Read-only XLSX checks on the persistent UI fixture; Python stdlib only.
 
-Usage: python3 tests/assert_pilot_ui_enforcement_export.py orders|lines full|empty file.xlsx
+Usage: python3 tests/assert_pilot_ui_enforcement_export.py orders|lines full|empty file.xlsx [before.xlsx]
+An optional baseline compares every exported value before/after formatting.
 Also accepts `native-orders full` for the original four-column UI export.
 """
 import sys
@@ -40,9 +41,11 @@ def read_rows(path):
                                    for row in rows[1:]]
 
 
-kind, scope, path = sys.argv[1:]
+kind, scope, path = sys.argv[1:4]
 assert kind in ('orders', 'lines', 'native-orders') and scope in ('full', 'empty')
 headers, rows = read_rows(path)
+if len(sys.argv) == 5:
+    assert (headers, rows) == read_rows(sys.argv[4]), 'Formatting changed exported values'
 assert len(headers) == {'orders': 23, 'lines': 22, 'native-orders': 4}[kind], headers
 if scope == 'empty':
     assert not rows, rows
