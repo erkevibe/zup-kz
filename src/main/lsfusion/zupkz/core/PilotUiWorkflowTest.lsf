@@ -820,3 +820,165 @@ pilotUiDataSetupTest() {
             bonusAmount = inputAmount(pilotUiBonus());
     }
 }
+
+// Одноразовый набор для сквозного ролевого UI-маршрута. Деловые переходы
+// выполняются в браузере; эти действия только готовят и сверяют fixture.
+pilotUiRoleEmployee() = GROUP LAST Employee e IF iin(e) == '940404350004' ORDER e;
+pilotUiRoleContract() = GROUP LAST Employment e IF
+    organization(e) == pilotUiOrganization() AND contractNumber(e) == 'UI-E2E-TD-2026' ORDER e;
+pilotUiRoleHire() = GROUP LAST PersonnelEvent e IF
+    eventEmployment(e) == pilotUiRoleContract() AND orderNumber(e) == 'UI-E2E-HIRE-2026' ORDER e;
+pilotUiRoleAssignment() = lastAssignment(pilotUiRoleContract());
+pilotUiRoleStaff() = GROUP LAST StaffPosition s IF
+    organization(s) == pilotUiOrganization() AND staffCode(s) == 'UI-ACC-001' ORDER s;
+pilotUiRoleSchedule() = GROUP LAST WorkSchedule s IF
+    scheduleOrganization(s) == pilotUiOrganization() AND scheduleCode(s) == 'UI-E2E-5-40' ORDER s;
+pilotUiRoleScheduleAssignment() = GROUP LAST EmployeeScheduleAssignment a IF
+    scheduleEmploymentAssignment(a) == pilotUiRoleAssignment() ORDER a;
+pilotUiRoleTimesheet() = GROUP LAST Timesheet t IF
+    timesheetOrganization(t) == pilotUiOrganization() AND
+    timesheetNumber(t) == 'UI-E2E-TS-2026-06' ORDER t;
+pilotUiRoleRun() = GROUP LAST PayrollRun r IF
+    payrollOrganization(r) == pilotUiOrganization() AND
+    payrollNumber(r) == 'UI-E2E-PAY-2026-06' ORDER r;
+
+pilotUiRoleJourneySetupTest() {
+    IF login(currentUser() AS CustomUser) != 'ui-chief' OR NOT organizationAllowed(pilotUiOrganization()) THEN
+        EXPORT JSON FROM denied = TRUE;
+    ELSE IF pilotUiRoleContract() THEN
+        EXPORT JSON FROM alreadyExists = TRUE,
+            eventStatus = caption(eventStatus(pilotUiRoleHire())),
+            assignmentCount = assignmentCount(pilotUiRoleContract());
+    ELSE IF pilotUiRoleEmployee() OR NOT pilotUiRoleStaff() THEN
+        MESSAGE 'Неполный UI-E2E fixture: проверьте сотрудника или штатную единицу';
+    ELSE NEW worker = Employee {
+        iin(worker) <- '940404350004';
+        lastName(worker) <- 'Маршрутова';
+        firstName(worker) <- 'Раяна';
+        middleName(worker) <- 'Проверочная';
+        birthDate(worker) <- 1994_04_04;
+        gender(worker) <- Gender.female;
+        citizenshipCode(worker) <- 'KAZ';
+        personalDataConsentDate(worker) <- 2026_05_25;
+        personalDataPurpose(worker) <- 'Синтетический сквозной ролевой UI-тест';
+        salaryBankName(worker) <- 'Тестовый банк';
+        salaryBankBic(worker) <- 'TESTKZKX';
+        salaryIban(worker) <- 'KZ000000000000000004';
+        NEW contract = Employment {
+            employee(contract) <- worker;
+            organization(contract) <- pilotUiOrganization();
+            contractNumber(contract) <- 'UI-E2E-TD-2026';
+            contractDate(contract) <- 2026_05_25;
+            employmentKind(contract) <- EmploymentKind.primary;
+            contractTermKind(contract) <- ContractTermKind.indefinite;
+            workPlace(contract) <- 'г. Алматы';
+            workConditions(contract) <- 'Нормальные условия труда';
+            salary(contract) <- 300000.00;
+            NEW event = PersonnelEvent {
+                eventKind(event) <- PersonnelEventKind.hire;
+                eventEmployment(event) <- contract;
+                eventStaffPosition(event) <- pilotUiRoleStaff();
+                eventFte(event) <- 1.0000;
+                eventSalary(event) <- 300000.00;
+                effectiveDate(event) <- 2026_06_01;
+                orderNumber(event) <- 'UI-E2E-HIRE-2026';
+                orderDate(event) <- 2026_05_25;
+                basis(event) <- 'Трудовой договор UI-E2E-TD-2026';
+                eventStatus(event) <- PersonnelEventStatus.draft;
+                esutdStatus(event) <- EsutdStatus.notSubmitted;
+            }
+        }
+        APPLY;
+        IF canceled() THEN {
+            CANCEL;
+            EXPORT JSON FROM rejected = TRUE;
+        } ELSE EXPORT JSON FROM created = TRUE,
+                employee = employeeFullName(pilotUiRoleEmployee()),
+                eventStatus = caption(eventStatus(pilotUiRoleHire())),
+                assignmentCount = assignmentCount(pilotUiRoleContract());
+    }
+}
+
+pilotUiRoleJourneyTimeSetupTest() {
+    IF login(currentUser() AS CustomUser) != 'ui-chief' OR NOT organizationAllowed(pilotUiOrganization()) THEN
+        EXPORT JSON FROM denied = TRUE;
+    ELSE IF eventStatus(pilotUiRoleHire()) != PersonnelEventStatus.posted OR NOT pilotUiRoleAssignment() THEN
+        MESSAGE 'Сначала кадровик должен провести приём UI-E2E-HIRE-2026';
+    ELSE IF pilotUiRoleTimesheet() OR pilotUiRoleRun() OR pilotUiRoleScheduleAssignment() THEN
+        EXPORT JSON FROM alreadyExists = TRUE,
+            timesheetStatus = caption(timesheetStatus(pilotUiRoleTimesheet())),
+            payrollStatus = caption(payrollRunStatus(pilotUiRoleRun()));
+    ELSE {
+        IF NOT pilotUiRoleSchedule() THEN NEW schedule = WorkSchedule {
+            scheduleOrganization(schedule) <- pilotUiOrganization();
+            scheduleCode(schedule) <- 'UI-E2E-5-40';
+            scheduleName(schedule) <- 'UI E2E — пятидневка 40 часов';
+            scheduleType(schedule) <- WorkScheduleType.fiveDay;
+            weeklyHours(schedule) <- 40.00;
+            accountingPeriodKind(schedule) <- AccountingPeriodKind.month;
+            scheduleValidFrom(schedule) <- 2026_01_01;
+            APPLY;
+        }
+        NEW scheduleAssignment = EmployeeScheduleAssignment {
+            scheduleEmploymentAssignment(scheduleAssignment) <- pilotUiRoleAssignment();
+            employeeWorkSchedule(scheduleAssignment) <- pilotUiRoleSchedule();
+            employeeScheduleFrom(scheduleAssignment) <- 2026_06_01;
+            cycleStartDate(scheduleAssignment) <- 2026_06_01;
+        }
+        IF NOT employeeTaxProfileOn(pilotUiOrganization(), pilotUiRoleEmployee(), 2026_06_30) THEN
+            NEW profile = EmployeeTaxProfile {
+                taxProfileOrganization(profile) <- pilotUiOrganization();
+                taxProfileEmployee(profile) <- pilotUiRoleEmployee();
+                taxProfileValidFrom(profile) <- 2026_06_01;
+                taxProfileResident(profile) <- TRUE;
+                taxProfileIncomeStatus(profile) <- TaxIncomeStatus.employee;
+                taxProfileBasicDeduction(profile) <- TRUE;
+                taxProfileSocialDeduction(profile) <- IpnSocialDeductionKind.none;
+                taxProfileBasis(profile) <- 'Синтетический профиль UI-E2E';
+            }
+        NEW timesheet = Timesheet {
+            timesheetOrganization(timesheet) <- pilotUiOrganization();
+            timesheetNumber(timesheet) <- 'UI-E2E-TS-2026-06';
+            timesheetPeriodFrom(timesheet) <- 2026_06_01;
+            timesheetPeriodTo(timesheet) <- 2026_06_30;
+            timesheetStatus(timesheet) <- TimesheetStatus.draft;
+        }
+        NEW run = PayrollRun {
+            payrollOrganization(run) <- pilotUiOrganization();
+            payrollNumber(run) <- 'UI-E2E-PAY-2026-06';
+            payrollPeriodFrom(run) <- 2026_06_01;
+            payrollPeriodTo(run) <- 2026_06_30;
+            payrollPaymentDueDate(run) <- 2026_07_10;
+            payrollRunStatus(run) <- PayrollRunStatus.draft;
+        }
+        APPLY;
+        IF canceled() THEN {
+            CANCEL;
+            EXPORT JSON FROM rejected = TRUE;
+        } ELSE EXPORT JSON FROM created = TRUE,
+                timesheetStatus = caption(timesheetStatus(pilotUiRoleTimesheet())),
+                payrollStatus = caption(payrollRunStatus(pilotUiRoleRun()));
+    }
+}
+
+pilotUiRoleJourneyVerificationTest() {
+    EXPORT JSON FROM
+        employee = employeeFullName(pilotUiRoleEmployee()),
+        hirePosted = eventStatus(pilotUiRoleHire()) == PersonnelEventStatus.posted,
+        hireDate = hireDate(pilotUiRoleContract()),
+        assignmentCount = assignmentCount(pilotUiRoleContract()),
+        assignmentSalary = assignmentSalary(pilotUiRoleAssignment()),
+        timesheetApproved = timesheetStatus(pilotUiRoleTimesheet()) == TimesheetStatus.approved,
+        timesheetApprover = login(approvedBy(pilotUiRoleTimesheet())),
+        timesheetLines = timesheetLineCount(pilotUiRoleTimesheet()),
+        payrollStatus = caption(payrollRunStatus(pilotUiRoleRun())),
+        gross = totalAccrued(pilotUiRoleRun()),
+        socialApproved = socialPaymentStatus(closingSocial(pilotUiRoleRun())) == SocialPaymentStatus.approved,
+        taxesApproved = taxCalculationStatus(closingTaxes(pilotUiRoleRun())) == TaxCalculationStatus.approved,
+        enforcementApproved = enforcementCalculationStatus(closingEnforcement(pilotUiRoleRun())) ==
+            EnforcementCalculationStatus.approved,
+        statementStatus = caption(paymentStatementStatus(closingStatement(pilotUiRoleRun()))),
+        statementAmount = totalPaymentStatementAmount(closingStatement(pilotUiRoleRun())),
+        remaining = remainingPayrollAmount(pilotUiRoleRun()),
+        nextStep = payrollWorkplaceNextStep(pilotUiRoleRun());
+}
