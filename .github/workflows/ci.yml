@@ -229,6 +229,31 @@ jobs:
                 'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationStatusAttackTest' \
                 --output cross-organization-attack-result.json
 
+              command curl --fail --silent --show-error \
+                --user zup-access-hr:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationMasterDataAttackTest' \
+                --output cross-organization-master-data-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-time:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationDraftAttackTest' \
+                --output cross-organization-draft-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-payroll:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationPayrollAttackTest' \
+                --output cross-organization-payroll-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-chief:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationOwnershipAttackTest' \
+                --output cross-organization-ownership-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-hr:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationDeleteAttackTest' \
+                --output cross-organization-delete-attack-result.json
+
               curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationVerificationTest' \
                 --output cross-organization-verification-result.json

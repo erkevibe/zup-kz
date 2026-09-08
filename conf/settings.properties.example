@@ -7,3 +7,5 @@ user.setLanguage=ru
 user.setCountry=KZ
 user.setTimezone=Asia/Almaty
 
+# В production API должен быть выключен. CI включает его только для тестов.
+settings.enableAPI=0
