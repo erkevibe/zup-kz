@@ -26,6 +26,11 @@ journalctl -u zup-kz.service -n 100 --no-pager
 curl --fail --head http://127.0.0.1:8080/main
 ```
 
+В production не включайте `settings.enableAPI=1`: произвольный `/eval` не нужен
+пользователям ЗУП. Порт application server `7651` оставляйте доступным только
+локально/в служебной сети; наружу публикуется web-клиент. Матрица ролей и
+организационной области описана в [ACCESS_CONTROL.md](ACCESS_CONTROL.md).
+
 ## Резервное копирование
 
 `zup-kz-backup.timer` ежедневно запускает логический дамп PostgreSQL от

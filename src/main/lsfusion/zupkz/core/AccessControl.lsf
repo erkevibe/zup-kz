@@ -14,6 +14,274 @@ NAMESPACE ZUPKZ;
 employeeAllowed(Employee worker) = GROUP MAX organizationAllowed(organization(Employment contract))
     IF employee(contract) == worker;
 
+// Единый серверный предикат для изменений организационных данных. Проверяем
+// и новое, и предыдущее владение: это не позволяет "перетащить" чужой объект
+// в доступную организацию, изменить его реквизиты или удалить его через API.
+organizationChangeDenied(Organization org) = org AND NOT organizationChangeAllowed(org);
+
+organizationContentChanged(Organization org) =
+    CHANGED(name(org)) OR CHANGED(shortName(org)) OR CHANGED(bin(org));
+CONSTRAINT organizationContentChanged(Organization org) AND
+           NOT organizationChangeAllowed(org)
+    MESSAGE 'Нет доступа к изменению этой организации';
+CONSTRAINT DROPPED(Organization org IS Organization) AND
+           NOT PREV(organizationChangeAllowed(org))
+    MESSAGE 'Нет доступа к удалению этой организации';
+
+departmentContentChanged(Department d) =
+    CHANGED(organization(d)) OR CHANGED(code(d)) OR CHANGED(name(d));
+CONSTRAINT departmentContentChanged(Department d) AND
+           (organizationChangeDenied(organization(d)) OR
+            organizationChangeDenied(PREV(organization(d))))
+    MESSAGE 'Нет доступа к изменению подразделения этой организации';
+CONSTRAINT DROPPED(Department d IS Department) AND
+           organizationChangeDenied(PREV(organization(d)))
+    MESSAGE 'Нет доступа к удалению подразделения этой организации';
+
+positionContentChanged(Position p) =
+    CHANGED(organization(p)) OR CHANGED(code(p)) OR CHANGED(name(p));
+CONSTRAINT positionContentChanged(Position p) AND
+           (organizationChangeDenied(organization(p)) OR
+            organizationChangeDenied(PREV(organization(p))))
+    MESSAGE 'Нет доступа к изменению должности этой организации';
+CONSTRAINT DROPPED(Position p IS Position) AND
+           organizationChangeDenied(PREV(organization(p)))
+    MESSAGE 'Нет доступа к удалению должности этой организации';
+
+staffPositionContentChanged(StaffPosition s) =
+    CHANGED(organization(s)) OR CHANGED(department(s)) OR CHANGED(position(s)) OR
+    CHANGED(staffCode(s)) OR CHANGED(validFrom(s)) OR CHANGED(validTo(s)) OR
+    CHANGED(plannedFTE(s)) OR CHANGED(salaryMin(s)) OR CHANGED(salaryMax(s));
+CONSTRAINT staffPositionContentChanged(StaffPosition s) AND
+           (organizationChangeDenied(organization(s)) OR
+            organizationChangeDenied(PREV(organization(s))))
+    MESSAGE 'Нет доступа к изменению штатной единицы этой организации';
+CONSTRAINT DROPPED(StaffPosition s IS StaffPosition) AND
+           organizationChangeDenied(PREV(organization(s)))
+    MESSAGE 'Нет доступа к удалению штатной единицы этой организации';
+
+employmentContentChanged(Employment e) =
+    CHANGED(employee(e)) OR CHANGED(organization(e)) OR CHANGED(department(e)) OR
+    CHANGED(position(e)) OR CHANGED(hireDate(e)) OR CHANGED(contractNumber(e)) OR
+    CHANGED(contractDate(e)) OR CHANGED(employmentKind(e)) OR
+    CHANGED(contractTermKind(e)) OR CHANGED(contractEndDate(e)) OR
+    CHANGED(workPlace(e)) OR CHANGED(workConditions(e)) OR CHANGED(salary(e));
+CONSTRAINT employmentContentChanged(Employment e) AND
+           (organizationChangeDenied(organization(e)) OR
+            organizationChangeDenied(PREV(organization(e))))
+    MESSAGE 'Нет доступа к изменению трудового договора этой организации';
+CONSTRAINT DROPPED(Employment e IS Employment) AND
+           organizationChangeDenied(PREV(organization(e)))
+    MESSAGE 'Нет доступа к удалению трудового договора этой организации';
+
+assignmentContentChanged(EmploymentAssignment a) =
+    CHANGED(employment(a)) OR CHANGED(staffPosition(a)) OR CHANGED(assignmentFrom(a)) OR
+    CHANGED(assignmentTo(a)) OR CHANGED(fte(a)) OR CHANGED(assignmentSalary(a));
+CONSTRAINT assignmentContentChanged(EmploymentAssignment a) AND
+           (organizationChangeDenied(organization(employment(a))) OR
+            organizationChangeDenied(PREV(organization(employment(a)))))
+    MESSAGE 'Нет доступа к изменению назначения этой организации';
+CONSTRAINT DROPPED(EmploymentAssignment a IS EmploymentAssignment) AND
+           organizationChangeDenied(PREV(organization(employment(a))))
+    MESSAGE 'Нет доступа к удалению назначения этой организации';
+
+personnelEventContentChanged(PersonnelEvent e) =
+    CHANGED(eventKind(e)) OR CHANGED(eventEmployment(e)) OR CHANGED(eventAssignment(e)) OR
+    CHANGED(eventStaffPosition(e)) OR CHANGED(eventFte(e)) OR CHANGED(eventSalary(e)) OR
+    CHANGED(effectiveDate(e)) OR CHANGED(orderNumber(e)) OR CHANGED(orderDate(e)) OR
+    CHANGED(basis(e)) OR CHANGED(esutdStatus(e)) OR CHANGED(esutdSubmittedAt(e)) OR
+    CHANGED(esutdRespondedAt(e)) OR CHANGED(esutdExternalId(e)) OR
+    CHANGED(esutdRejectionReason(e)) OR CHANGED(eventStatus(e)) OR
+    CHANGED(eventPostedAt(e)) OR CHANGED(eventCancelledAt(e)) OR
+    CHANGED(eventPreviousAssignment(e)) OR CHANGED(eventPreviousAssignmentTo(e)) OR
+    CHANGED(eventPreviousHireDate(e)) OR CHANGED(eventPreviousContractEndDate(e));
+CONSTRAINT personnelEventContentChanged(PersonnelEvent e) AND
+           (organizationChangeDenied(organization(eventEmployment(e))) OR
+            organizationChangeDenied(PREV(organization(eventEmployment(e)))))
+    MESSAGE 'Нет доступа к изменению кадрового события этой организации';
+CONSTRAINT DROPPED(PersonnelEvent e IS PersonnelEvent) AND
+           organizationChangeDenied(PREV(organization(eventEmployment(e))))
+    MESSAGE 'Нет доступа к удалению кадрового события этой организации';
+
+employeeCardContentChanged(EmployeeCard c) =
+    CHANGED(cardEmployee(c)) OR CHANGED(cardOrganization(c)) OR CHANGED(cardNumber(c)) OR
+    CHANGED(cardDate(c)) OR CHANGED(personnelNumber(c)) OR CHANGED(birthPlace(c)) OR
+    CHANGED(nationality(c)) OR CHANGED(maritalStatus(c)) OR CHANGED(phone(c)) OR
+    CHANGED(email(c)) OR CHANGED(registeredAddress(c)) OR CHANGED(residentialAddress(c)) OR
+    CHANGED(consentDate(c)) OR CHANGED(consentValidUntil(c)) OR CHANGED(consentPurpose(c)) OR
+    CHANGED(consentDataScope(c)) OR CHANGED(consentThirdPartyTransfer(c)) OR
+    CHANGED(consentCrossBorderTransfer(c)) OR CHANGED(consentPublicDistribution(c)) OR
+    CHANGED(consentWithdrawnAt(c));
+CONSTRAINT employeeCardContentChanged(EmployeeCard c) AND
+           (organizationChangeDenied(cardOrganization(c)) OR
+            organizationChangeDenied(PREV(cardOrganization(c))))
+    MESSAGE 'Нет доступа к изменению личной карточки этой организации';
+CONSTRAINT DROPPED(EmployeeCard c IS EmployeeCard) AND
+           organizationChangeDenied(PREV(cardOrganization(c)))
+    MESSAGE 'Нет доступа к удалению личной карточки этой организации';
+
+identityDocumentContentChanged(EmployeeIdentityDocument d) =
+    CHANGED(identityCard(d)) OR CHANGED(identityType(d)) OR CHANGED(identityNumber(d)) OR
+    CHANGED(identityIssuedDate(d)) OR CHANGED(identityValidUntil(d)) OR CHANGED(identityIssuer(d));
+CONSTRAINT identityDocumentContentChanged(EmployeeIdentityDocument d) AND
+           (organizationChangeDenied(cardOrganization(identityCard(d))) OR
+            organizationChangeDenied(PREV(cardOrganization(identityCard(d)))))
+    MESSAGE 'Нет доступа к изменению удостоверяющего документа этой организации';
+CONSTRAINT DROPPED(EmployeeIdentityDocument d IS EmployeeIdentityDocument) AND
+           organizationChangeDenied(PREV(cardOrganization(identityCard(d))))
+    MESSAGE 'Нет доступа к удалению удостоверяющего документа этой организации';
+
+educationContentChanged(EmployeeEducation e) =
+    CHANGED(educationCard(e)) OR CHANGED(educationLevel(e)) OR
+    CHANGED(educationInstitution(e)) OR CHANGED(educationGraduationYear(e)) OR
+    CHANGED(educationDiplomaNumber(e)) OR CHANGED(educationSpeciality(e)) OR
+    CHANGED(educationQualification(e));
+CONSTRAINT educationContentChanged(EmployeeEducation e) AND
+           (organizationChangeDenied(cardOrganization(educationCard(e))) OR
+            organizationChangeDenied(PREV(cardOrganization(educationCard(e)))))
+    MESSAGE 'Нет доступа к изменению сведений об образовании этой организации';
+CONSTRAINT DROPPED(EmployeeEducation e IS EmployeeEducation) AND
+           organizationChangeDenied(PREV(cardOrganization(educationCard(e))))
+    MESSAGE 'Нет доступа к удалению сведений об образовании этой организации';
+
+familyMemberContentChanged(EmployeeFamilyMember m) =
+    CHANGED(familyCard(m)) OR CHANGED(familyRelation(m)) OR CHANGED(familyLastName(m)) OR
+    CHANGED(familyFirstName(m)) OR CHANGED(familyMiddleName(m)) OR
+    CHANGED(familyBirthDate(m)) OR CHANGED(familyIin(m));
+CONSTRAINT familyMemberContentChanged(EmployeeFamilyMember m) AND
+           (organizationChangeDenied(cardOrganization(familyCard(m))) OR
+            organizationChangeDenied(PREV(cardOrganization(familyCard(m)))))
+    MESSAGE 'Нет доступа к изменению сведений о семье этой организации';
+CONSTRAINT DROPPED(EmployeeFamilyMember m IS EmployeeFamilyMember) AND
+           organizationChangeDenied(PREV(cardOrganization(familyCard(m))))
+    MESSAGE 'Нет доступа к удалению сведений о семье этой организации';
+
+militaryRecordContentChanged(EmployeeMilitaryRecord r) =
+    CHANGED(militaryCard(r)) OR CHANGED(militaryStatus(r)) OR CHANGED(militaryCategory(r)) OR
+    CHANGED(militaryRank(r)) OR CHANGED(militaryProfile(r)) OR
+    CHANGED(militarySpeciality(r)) OR CHANGED(militaryFitness(r)) OR
+    CHANGED(militaryAuthority(r)) OR CHANGED(militaryDocument(r)) OR
+    CHANGED(militarySpecialRegister(r));
+CONSTRAINT militaryRecordContentChanged(EmployeeMilitaryRecord r) AND
+           (organizationChangeDenied(cardOrganization(militaryCard(r))) OR
+            organizationChangeDenied(PREV(cardOrganization(militaryCard(r)))))
+    MESSAGE 'Нет доступа к изменению воинского учёта этой организации';
+CONSTRAINT DROPPED(EmployeeMilitaryRecord r IS EmployeeMilitaryRecord) AND
+           organizationChangeDenied(PREV(cardOrganization(militaryCard(r))))
+    MESSAGE 'Нет доступа к удалению воинского учёта этой организации';
+
+previousEmploymentContentChanged(EmployeePreviousEmployment h) =
+    CHANGED(previousEmploymentCard(h)) OR CHANGED(previousEmployer(h)) OR
+    CHANGED(previousPosition(h)) OR CHANGED(previousDateFrom(h)) OR
+    CHANGED(previousDateTo(h)) OR CHANGED(previousEmploymentBasis(h));
+CONSTRAINT previousEmploymentContentChanged(EmployeePreviousEmployment h) AND
+           (organizationChangeDenied(cardOrganization(previousEmploymentCard(h))) OR
+            organizationChangeDenied(PREV(cardOrganization(previousEmploymentCard(h)))))
+    MESSAGE 'Нет доступа к изменению трудовой истории этой организации';
+CONSTRAINT DROPPED(EmployeePreviousEmployment h IS EmployeePreviousEmployment) AND
+           organizationChangeDenied(PREV(cardOrganization(previousEmploymentCard(h))))
+    MESSAGE 'Нет доступа к удалению трудовой истории этой организации';
+
+workScheduleContentChanged(WorkSchedule s) =
+    CHANGED(scheduleOrganization(s)) OR CHANGED(scheduleCode(s)) OR CHANGED(scheduleName(s)) OR
+    CHANGED(scheduleType(s)) OR CHANGED(weeklyHours(s)) OR CHANGED(accountingPeriodKind(s)) OR
+    CHANGED(scheduleValidFrom(s)) OR CHANGED(scheduleValidTo(s));
+CONSTRAINT workScheduleContentChanged(WorkSchedule s) AND
+           (organizationChangeDenied(scheduleOrganization(s)) OR
+            organizationChangeDenied(PREV(scheduleOrganization(s))))
+    MESSAGE 'Нет доступа к изменению графика работы этой организации';
+CONSTRAINT DROPPED(WorkSchedule s IS WorkSchedule) AND
+           organizationChangeDenied(PREV(scheduleOrganization(s)))
+    MESSAGE 'Нет доступа к удалению графика работы этой организации';
+
+shiftTemplateContentChanged(ShiftTemplate s) =
+    CHANGED(shiftSchedule(s)) OR CHANGED(shiftCode(s)) OR CHANGED(shiftName(s)) OR
+    CHANGED(shiftStartTime(s)) OR CHANGED(shiftEndTime(s)) OR CHANGED(breakMinutes(s)) OR
+    CHANGED(plannedHours(s)) OR CHANGED(plannedNightHours(s));
+CONSTRAINT shiftTemplateContentChanged(ShiftTemplate s) AND
+           (organizationChangeDenied(scheduleOrganization(shiftSchedule(s))) OR
+            organizationChangeDenied(PREV(scheduleOrganization(shiftSchedule(s)))))
+    MESSAGE 'Нет доступа к изменению смены этой организации';
+CONSTRAINT DROPPED(ShiftTemplate s IS ShiftTemplate) AND
+           organizationChangeDenied(PREV(scheduleOrganization(shiftSchedule(s))))
+    MESSAGE 'Нет доступа к удалению смены этой организации';
+
+scheduleCycleDayContentChanged(ScheduleCycleDay d) =
+    CHANGED(cycleSchedule(d)) OR CHANGED(cycleDayNumber(d)) OR
+    CHANGED(cycleShift(d)) OR CHANGED(cycleDayOff(d));
+CONSTRAINT scheduleCycleDayContentChanged(ScheduleCycleDay d) AND
+           (organizationChangeDenied(scheduleOrganization(cycleSchedule(d))) OR
+            organizationChangeDenied(PREV(scheduleOrganization(cycleSchedule(d)))))
+    MESSAGE 'Нет доступа к изменению цикла графика этой организации';
+CONSTRAINT DROPPED(ScheduleCycleDay d IS ScheduleCycleDay) AND
+           organizationChangeDenied(PREV(scheduleOrganization(cycleSchedule(d))))
+    MESSAGE 'Нет доступа к удалению цикла графика этой организации';
+
+employeeScheduleContentChanged(EmployeeScheduleAssignment a) =
+    CHANGED(scheduleEmploymentAssignment(a)) OR CHANGED(employeeWorkSchedule(a)) OR
+    CHANGED(employeeScheduleFrom(a)) OR CHANGED(employeeScheduleTo(a)) OR
+    CHANGED(cycleStartDate(a));
+CONSTRAINT employeeScheduleContentChanged(EmployeeScheduleAssignment a) AND
+           (organizationChangeDenied(organization(employment(scheduleEmploymentAssignment(a)))) OR
+            organizationChangeDenied(PREV(organization(employment(scheduleEmploymentAssignment(a))))))
+    MESSAGE 'Нет доступа к изменению графика сотрудника этой организации';
+CONSTRAINT DROPPED(EmployeeScheduleAssignment a IS EmployeeScheduleAssignment) AND
+           organizationChangeDenied(PREV(organization(employment(scheduleEmploymentAssignment(a)))))
+    MESSAGE 'Нет доступа к удалению графика сотрудника этой организации';
+
+timesheetContentChanged(Timesheet t) =
+    CHANGED(timesheetOrganization(t)) OR CHANGED(timesheetNumber(t)) OR
+    CHANGED(timesheetPeriodFrom(t)) OR CHANGED(timesheetPeriodTo(t)) OR
+    CHANGED(timesheetStatus(t)) OR CHANGED(approvedAt(t)) OR CHANGED(approvedBy(t)) OR
+    CHANGED(cancelledAt(t)) OR CHANGED(cancelledBy(t));
+CONSTRAINT timesheetContentChanged(Timesheet t) AND
+           (organizationChangeDenied(timesheetOrganization(t)) OR
+            organizationChangeDenied(PREV(timesheetOrganization(t))))
+    MESSAGE 'Нет доступа к изменению табеля этой организации';
+CONSTRAINT DROPPED(Timesheet t IS Timesheet) AND
+           organizationChangeDenied(PREV(timesheetOrganization(t)))
+    MESSAGE 'Нет доступа к удалению табеля этой организации';
+
+timesheetLineContentChanged(TimesheetLine l) =
+    CHANGED(lineTimesheet(l)) OR CHANGED(lineEmploymentAssignment(l)) OR CHANGED(lineDate(l)) OR
+    CHANGED(attendanceKind(l)) OR CHANGED(actualStartTime(l)) OR CHANGED(actualEndTime(l)) OR
+    CHANGED(plannedHoursLine(l)) OR CHANGED(workedHours(l)) OR CHANGED(nightHours(l)) OR
+    CHANGED(overtimeHours(l)) OR CHANGED(holidayHours(l)) OR CHANGED(weekendHours(l)) OR
+    CHANGED(businessTripHours(l)) OR CHANGED(absenceHours(l)) OR
+    CHANGED(overtimeConsentDocument(l)) OR CHANGED(employerAct(l)) OR
+    CHANGED(lineComment(l)) OR CHANGED(generatedLine(l));
+CONSTRAINT timesheetLineContentChanged(TimesheetLine l) AND
+           (organizationChangeDenied(timesheetOrganization(lineTimesheet(l))) OR
+            organizationChangeDenied(PREV(timesheetOrganization(lineTimesheet(l)))))
+    MESSAGE 'Нет доступа к изменению строки табеля этой организации';
+CONSTRAINT DROPPED(TimesheetLine l IS TimesheetLine) AND
+           organizationChangeDenied(PREV(timesheetOrganization(lineTimesheet(l))))
+    MESSAGE 'Нет доступа к удалению строки табеля этой организации';
+
+payrollRunContentChanged(PayrollRun r) =
+    CHANGED(payrollOrganization(r)) OR CHANGED(payrollNumber(r)) OR
+    CHANGED(payrollPeriodFrom(r)) OR CHANGED(payrollPeriodTo(r)) OR
+    CHANGED(payrollRunStatus(r)) OR CHANGED(payrollCalculatedAt(r));
+CONSTRAINT payrollRunContentChanged(PayrollRun r) AND
+           (organizationChangeDenied(payrollOrganization(r)) OR
+            organizationChangeDenied(PREV(payrollOrganization(r))))
+    MESSAGE 'Нет доступа к изменению расчёта зарплаты этой организации';
+CONSTRAINT DROPPED(PayrollRun r IS PayrollRun) AND
+           organizationChangeDenied(PREV(payrollOrganization(r)))
+    MESSAGE 'Нет доступа к удалению расчёта зарплаты этой организации';
+
+payrollInputContentChanged(PayrollInput i) =
+    CHANGED(inputPayrollRun(i)) OR CHANGED(inputAssignment(i)) OR
+    CHANGED(inputCalculationType(i)) OR CHANGED(inputBase(i)) OR CHANGED(inputPercent(i)) OR
+    CHANGED(inputManualAmount(i)) OR CHANGED(inputBasis(i));
+CONSTRAINT payrollInputContentChanged(PayrollInput i) AND
+           (organizationChangeDenied(payrollOrganization(inputPayrollRun(i))) OR
+            organizationChangeDenied(PREV(payrollOrganization(inputPayrollRun(i)))))
+    MESSAGE 'Нет доступа к изменению начисления этой организации';
+CONSTRAINT DROPPED(PayrollInput i IS PayrollInput) AND
+           organizationChangeDenied(PREV(payrollOrganization(inputPayrollRun(i))))
+    MESSAGE 'Нет доступа к удалению начисления этой организации';
+
 // UI-фильтры не являются границей безопасности. Эти constraints запрещают
 // любой workflow-переход чужой организации, включая Action API и прямой APPLY.
 CONSTRAINT CHANGED(archiveCaseStatus(ArchiveCase c)) AND

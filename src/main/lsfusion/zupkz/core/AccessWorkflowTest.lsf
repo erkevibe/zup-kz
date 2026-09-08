@@ -7,6 +7,11 @@ accessAssignedOrganization() = organizationByBin('333333333333');
 accessHiddenOrganization() = organizationByBin('222222222222');
 accessHiddenTimesheet() = GROUP LAST Timesheet t IF
     timesheetNumber(t) == 'ACCESS-HIDDEN-1' ORDER t;
+accessHiddenDepartment() = GROUP LAST Department d IF code(d) == 'ACCESS-HIDDEN-DEPT' ORDER d;
+accessHiddenDeleteDepartment() = GROUP LAST Department d IF
+    code(d) == 'ACCESS-HIDDEN-DELETE' ORDER d;
+accessHiddenPayrollRun() = GROUP LAST PayrollRun r IF
+    payrollNumber(r) == 'ACCESS-HIDDEN-PAYROLL' ORDER r;
 uiRoleTestUser(STRING[100] value) = GROUP LAST CustomUser u IF login(u) == value ORDER u;
 
 createUiRoleTestUser(STRING[100] loginValue, STRING[50] roleSid, Organization org) {
@@ -88,6 +93,29 @@ accessWorkflowTest() {
                     accessOrganization(access) <- assignedOrg;
                     accessActive(access) <- TRUE;
 
+                    createUiRoleTestUser('zup-access-hr', 'zup_hr', assignedOrg);
+                    createUiRoleTestUser('zup-access-time', 'zup_timekeeper', assignedOrg);
+                    createUiRoleTestUser('zup-access-payroll', 'zup_payroll', assignedOrg);
+                    createUiRoleTestUser('zup-access-chief', 'zup_chief_accountant', assignedOrg);
+
+                    NEW hiddenDepartment = Department {
+                        organization(hiddenDepartment) <- hiddenOrg;
+                        code(hiddenDepartment) <- 'ACCESS-HIDDEN-DEPT';
+                        name(hiddenDepartment) <- 'Скрытое подразделение';
+                    }
+                    NEW hiddenDeleteDepartment = Department {
+                        organization(hiddenDeleteDepartment) <- hiddenOrg;
+                        code(hiddenDeleteDepartment) <- 'ACCESS-HIDDEN-DELETE';
+                        name(hiddenDeleteDepartment) <- 'Скрытое подразделение для удаления';
+                    }
+                    NEW hiddenPayroll = PayrollRun {
+                        payrollOrganization(hiddenPayroll) <- hiddenOrg;
+                        payrollNumber(hiddenPayroll) <- 'ACCESS-HIDDEN-PAYROLL';
+                        payrollPeriodFrom(hiddenPayroll) <- 2026_01_01;
+                        payrollPeriodTo(hiddenPayroll) <- 2026_01_31;
+                        payrollRunStatus(hiddenPayroll) <- PayrollRunStatus.draft;
+                    }
+
                     NEW hiddenTimesheet = Timesheet {
                         timesheetOrganization(hiddenTimesheet) <- hiddenOrg;
                         timesheetNumber(hiddenTimesheet) <- 'ACCESS-HIDDEN-1';
@@ -150,10 +178,43 @@ crossOrganizationStatusAttackTest() {
     APPLY;
 }
 
+crossOrganizationMasterDataAttackTest() {
+    name(accessHiddenDepartment()) <- 'УТЕЧКА HR';
+    APPLY;
+}
+
+crossOrganizationDraftAttackTest() {
+    timesheetNumber(accessHiddenTimesheet()) <- 'ACCESS-ATTACK-TIME';
+    APPLY;
+}
+
+crossOrganizationPayrollAttackTest() {
+    payrollNumber(accessHiddenPayrollRun()) <- 'ACCESS-ATTACK-PAYROLL';
+    APPLY;
+}
+
+crossOrganizationOwnershipAttackTest() {
+    organization(accessHiddenDepartment()) <- accessAssignedOrganization();
+    APPLY;
+}
+
+crossOrganizationDeleteAttackTest() {
+    DELETE Department d WHERE d == accessHiddenDeleteDepartment();
+    APPLY;
+}
+
 crossOrganizationVerificationTest() {
     EXPORT JSON FROM
         hiddenStatusPreserved = timesheetStatus(accessHiddenTimesheet()) == TimesheetStatus.draft,
-        hiddenNamePreserved = name(accessHiddenOrganization()) == 'Доступ B';
+        hiddenNamePreserved = name(accessHiddenOrganization()) == 'Доступ B',
+        hiddenDepartmentPreserved = name(accessHiddenDepartment()) == 'Скрытое подразделение',
+        hiddenDepartmentOwnerPreserved = organization(accessHiddenDepartment()) ==
+            accessHiddenOrganization(),
+        hiddenDraftPreserved = timesheetNumber(accessHiddenTimesheet()) == 'ACCESS-HIDDEN-1',
+        hiddenPayrollPreserved = payrollNumber(accessHiddenPayrollRun()) ==
+            'ACCESS-HIDDEN-PAYROLL',
+        hiddenDeletePreserved = name(accessHiddenDeleteDepartment()) ==
+            'Скрытое подразделение для удаления';
 }
 
 employeeIinFormatGuardTest() {
