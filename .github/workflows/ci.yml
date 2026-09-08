@@ -36,6 +36,10 @@ jobs:
         working-directory: zup-kz
         run: python3 tests/assert_lifecycle_token_scope.py
 
+      - name: Check operations scripts
+        working-directory: zup-kz
+        run: sh -n scripts/backup-db.sh scripts/restore-drill.sh
+
       - name: Checkout platform fork
         uses: actions/checkout@v5
         with:
