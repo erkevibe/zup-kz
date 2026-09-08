@@ -351,7 +351,7 @@ cancelTimesheet 'Отменить табель' (Timesheet t) {
         cancelledBy(t) <- currentUser() AS CustomUser;
         APPLY;
     }
-}
+} CONFIRM;
 
 EXTEND FORM timesheets
     PROPERTIES(t) cancelTimesheet

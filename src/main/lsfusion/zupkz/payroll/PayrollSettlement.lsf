@@ -172,7 +172,7 @@ closePayroll 'Закрыть расчёт' (PayrollRun r) {
         payrollRunStatus(r) <- PayrollRunStatus.approved;
         APPLY;
     }
-}
+} CONFIRM;
 
 CLASS PaymentMethod 'Способ выплаты' {
     bankTransfer 'Банк',
@@ -346,7 +346,7 @@ reopenPayroll 'Переоткрыть расчёт' (PayrollRun r) {
         payrollReopenReason(r) <- NULL;
         APPLY;
     }
-}
+} CONFIRM;
 
 payrollSettlementLineCountForRun(PayrollRun run) = GROUP SUM 1 IF
     settlementPayrollRun(PayrollSettlementLine l) == run;
@@ -383,7 +383,7 @@ resetPayrollForRecalculation 'Сбросить для пересчёта' (Payro
         payrollResetReason(r) <- NULL;
         APPLY;
     }
-}
+} CONFIRM;
 
 settlementRunNumber 'Расчёт зарплаты' (PayrollSettlementLine l) = payrollNumber(settlementPayrollRun(l));
 settlementEmployeeName 'Сотрудник' (PayrollSettlementLine l) = employeeFullName(settlementEmployee(l));

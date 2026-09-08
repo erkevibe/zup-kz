@@ -440,7 +440,7 @@ cancelTaxes 'Отменить и сторнировать' (TaxCalculationDocume
         cancelTaxesSnapshot(d);
         APPLY;
     }
-}
+} CONFIRM;
 
 totalIpn 'ИПН' (TaxCalculationDocument d) = GROUP SUM ipnAmount(TaxCalculationLine l)
     IF taxCalculationDocument(l) == d;

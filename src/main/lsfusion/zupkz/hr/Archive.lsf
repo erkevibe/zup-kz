@@ -68,7 +68,7 @@ archiveCaseClosedDate 'Закрыто' = DATA DATE (ArchiveCase);
 archiveCaseTransferDate 'Передано в архив' = DATA DATE (ArchiveCase);
 archiveCaseTransferAct 'Акт передачи' = DATA STRING[100] (ArchiveCase);
 archiveCaseStatus 'Статус' = DATA ArchiveCaseStatus (ArchiveCase);
-archiveLifecycleTransition = DATA LOCAL BOOLEAN ();
+archiveCaseLifecycleTransition = DATA LOCAL BOOLEAN (ArchiveCase);
 
 archiveCaseKeyCount(Organization org, INTEGER year, STRING[50] index) = GROUP SUM 1 IF
     archiveCaseOrganization(ArchiveCase c) == org AND archiveCaseYear(c) == year AND
@@ -91,7 +91,7 @@ CONSTRAINT (CHANGED(archiveCaseTransferDate(ArchiveCase c)) OR
            PREV(archiveCaseStatus(c)) == ArchiveCaseStatus.stored
     MESSAGE 'Нельзя изменить реквизиты переданного архивного дела';
 CONSTRAINT CHANGED(archiveCaseStatus(ArchiveCase c)) AND PREV(archiveCaseStatus(c)) AND
-           NOT archiveLifecycleTransition()
+           NOT archiveCaseLifecycleTransition(c)
     MESSAGE 'Статус архивного дела изменяется только штатными действиями';
 
 CLASS ArchiveCarrier 'Носитель документа' {
@@ -134,6 +134,7 @@ archiveDocumentDestructionAct 'Акт уничтожения' = DATA STRING[100]
 archiveDocumentDestructionDate 'Дата акта уничтожения' = DATA DATE (ArchiveDocument);
 archiveDocumentDestructionReason 'Основание уничтожения' = DATA STRING[500] (ArchiveDocument);
 archiveDocumentDestroyedAt 'Уничтожен' = DATA DATETIME (ArchiveDocument);
+archiveDocumentLifecycleTransition = DATA LOCAL BOOLEAN (ArchiveDocument);
 
 archiveSourceEmployment 'Трудовой договор' = DATA Employment (ArchiveDocument);
 archiveSourcePersonnelEvent 'Кадровое событие' = DATA PersonnelEvent (ArchiveDocument);
@@ -144,15 +145,15 @@ archiveSourceBusinessTrip 'Командировка' = DATA BusinessTripDocument
 archiveSourcePersonnelNotice 'Уведомление работника' = DATA PersonnelNotice (ArchiveDocument);
 
 CONSTRAINT CHANGED(archiveDocumentStatus(ArchiveDocument d)) AND
-           PREV(archiveDocumentStatus(d)) AND NOT archiveLifecycleTransition()
+           PREV(archiveDocumentStatus(d)) AND NOT archiveDocumentLifecycleTransition(d)
     MESSAGE 'Статус архивного документа изменяется только штатными действиями';
 CONSTRAINT (CHANGED(archiveDocumentRegisteredAt(ArchiveDocument d)) OR
             CHANGED(archiveDocumentStoredAt(d)) OR CHANGED(archiveDocumentDestroyedAt(d)) OR
             CHANGED(archiveDocumentRetentionRule(d)) OR
             CHANGED(archiveDocumentRetentionYears(d)) OR
-            CHANGED(archiveDocumentPermanent(d)) OR
+           CHANGED(archiveDocumentPermanent(d)) OR
             CHANGED(archiveDocumentRetentionUntil(d))) AND
-           PREV(archiveDocumentStatus(d)) AND NOT archiveLifecycleTransition()
+           PREV(archiveDocumentStatus(d)) AND NOT archiveDocumentLifecycleTransition(d)
     MESSAGE 'Служебные реквизиты архива изменяются только штатными действиями';
 
 archiveSourceCount(ArchiveDocument d) =
@@ -289,7 +290,7 @@ registerArchiveDocument 'Зарегистрировать' (ArchiveDocument d) {
     ELSE IF NOT retentionRuleOn(archiveDocumentKind(d), archiveDocumentDate(d)) THEN
         MESSAGE 'Для вида и даты документа не найдено правило хранения';
     ELSE {
-        archiveLifecycleTransition() <- TRUE;
+        archiveDocumentLifecycleTransition(d) <- TRUE;
         archiveDocumentRetentionRule(d) <-
             retentionRuleOn(archiveDocumentKind(d), archiveDocumentDate(d));
         archiveDocumentRetentionYears(d) <-
@@ -316,12 +317,12 @@ closeArchiveCase 'Закрыть дело' (ArchiveCase c) {
     ELSE IF archiveDraftDocumentCount(c) THEN
         MESSAGE 'Зарегистрируйте все документы дела';
     ELSE {
-        archiveLifecycleTransition() <- TRUE;
+        archiveCaseLifecycleTransition(c) <- TRUE;
         IF NOT archiveCaseClosedDate(c) THEN archiveCaseClosedDate(c) <- currentDate();
         archiveCaseStatus(c) <- ArchiveCaseStatus.closed;
         APPLY;
     }
-}
+} CONFIRM;
 
 transferArchiveCase 'Передать в архив' (ArchiveCase c) {
     IF archiveCaseStatus(c) != ArchiveCaseStatus.closed THEN
@@ -329,9 +330,10 @@ transferArchiveCase 'Передать в архив' (ArchiveCase c) {
     ELSE IF NOT archiveCaseTransferDate(c) OR NOT archiveCaseTransferAct(c) THEN
         MESSAGE 'Укажите дату и акт передачи';
     ELSE {
-        archiveLifecycleTransition() <- TRUE;
+        archiveCaseLifecycleTransition(c) <- TRUE;
         FOR archiveDocumentCase(ArchiveDocument d) == c AND
             archiveDocumentStatus(d) == ArchiveDocumentStatus.registered DO {
+            archiveDocumentLifecycleTransition(d) <- TRUE;
             archiveDocumentStatus(d) <- ArchiveDocumentStatus.stored;
             archiveDocumentStoredAt(d) <- currentDateTime();
         }
@@ -348,7 +350,7 @@ prepareArchiveDestruction 'Подготовить к уничтожению' (Ar
     ELSE IF NOT archiveDocumentRetentionDue(d) THEN
         MESSAGE 'Срок хранения документа ещё не истёк';
     ELSE {
-        archiveLifecycleTransition() <- TRUE;
+        archiveDocumentLifecycleTransition(d) <- TRUE;
         archiveDocumentStatus(d) <- ArchiveDocumentStatus.destructionReady;
         APPLY;
     }
@@ -361,13 +363,13 @@ destroyArchiveDocument 'Зарегистрировать уничтожение'
             NOT archiveDocumentDestructionReason(d) THEN
         MESSAGE 'Заполните акт, дату и основание уничтожения';
     ELSE {
-        archiveLifecycleTransition() <- TRUE;
+        archiveDocumentLifecycleTransition(d) <- TRUE;
         archiveDocumentFile(d) <- NULL;
         archiveDocumentStatus(d) <- ArchiveDocumentStatus.destroyed;
         archiveDocumentDestroyedAt(d) <- currentDateTime();
         APPLY;
     }
-}
+} CONFIRM;
 
 FORM archiveDocumentKinds 'Виды архивных документов'
     OBJECTS k = ArchiveDocumentKind

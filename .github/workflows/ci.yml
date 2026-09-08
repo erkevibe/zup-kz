@@ -32,6 +32,10 @@ jobs:
         with:
           path: zup-kz
 
+      - name: Check object-scoped lifecycle guards
+        working-directory: zup-kz
+        run: python3 tests/assert_lifecycle_token_scope.py
+
       - name: Checkout platform fork
         uses: actions/checkout@v5
         with:
@@ -137,7 +141,18 @@ jobs:
                 'http://localhost:7651/exec?action=ZUPKZ.hrWorkflowTest' \
                 --output hr-workflow-result.json
 
-              python3 tests/assert_hr_workflow.py hr-workflow-result.json
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.employmentLegacyFieldsGuardTest' \
+                --output employment-legacy-guard-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.employmentSourceOfTruthVerificationTest' \
+                --output employment-source-verification-result.json
+
+              python3 tests/assert_hr_workflow.py \
+                hr-workflow-result.json \
+                employment-legacy-guard-result.json \
+                employment-source-verification-result.json
 
               curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.timeWorkflowTest' \
@@ -157,7 +172,12 @@ jobs:
                 scheduleCycleDuplicateDayGuardTest \
                 scheduleOrganizationGuardTest \
                 scheduleEmploymentPeriodGuardTest \
-                scheduleValidityPeriodGuardTest; do
+                scheduleValidityPeriodGuardTest \
+                scheduleCycleGapGuardTest \
+                scheduleCycleStartRequiredGuardTest \
+                scheduleCycleStartAfterAssignmentGuardTest \
+                shiftPlannedHoursGuardTest \
+                overnightShiftDurationTest; do
                 curl --fail --silent --show-error \
                   "http://localhost:7651/exec?action=ZUPKZ.${action}" \
                   --output "${action}-result.json"
@@ -172,7 +192,12 @@ jobs:
                 scheduleCycleDuplicateDayGuardTest-result.json \
                 scheduleOrganizationGuardTest-result.json \
                 scheduleEmploymentPeriodGuardTest-result.json \
-                scheduleValidityPeriodGuardTest-result.json
+                scheduleValidityPeriodGuardTest-result.json \
+                scheduleCycleGapGuardTest-result.json \
+                scheduleCycleStartRequiredGuardTest-result.json \
+                scheduleCycleStartAfterAssignmentGuardTest-result.json \
+                shiftPlannedHoursGuardTest-result.json \
+                overnightShiftDurationTest-result.json
 
               curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.leaveWorkflowTest' \

@@ -141,7 +141,7 @@ cancelVacationSchedule 'Отменить график' (VacationSchedule s) {
         vacationScheduleCancelledBy(s) <- currentUser() AS CustomUser;
         APPLY;
     }
-}
+} CONFIRM;
 
 createLeaveFromSchedule 'Создать отпуск' (VacationScheduleLine l) {
     IF vacationScheduleStatus(vacationLineSchedule(l)) != VacationScheduleStatus.approved THEN

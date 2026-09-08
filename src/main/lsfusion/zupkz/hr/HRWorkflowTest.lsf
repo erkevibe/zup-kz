@@ -27,6 +27,7 @@ hrWorkflowTest() {
                     NEW contract = Employment {
                         employee(contract) <- worker;
                         organization(contract) <- org;
+                        contractNumber(contract) <- 'HR-WORKFLOW-GUARD';
                         NEW hire = PersonnelEvent {
                             eventKind(hire) <- PersonnelEventKind.hire;
                             eventEmployment(hire) <- contract;
@@ -119,4 +120,22 @@ hrWorkflowTest() {
             }
         }
     }
+}
+
+hrWorkflowContract() = GROUP LAST Employment e
+    IF contractNumber(e) == 'HR-WORKFLOW-GUARD' ORDER e;
+
+employmentLegacyFieldsGuardTest() {
+    salary(hrWorkflowContract()) <- 1.00;
+    APPLY;
+    EXPORT JSON FROM employmentLegacyFieldsRejected = canceled();
+}
+
+employmentSourceOfTruthVerificationTest() {
+    EXPORT JSON FROM
+        employmentLegacySalaryPreserved = NOT salary(hrWorkflowContract()),
+        employmentCurrentSalaryResult = employmentSalary(hrWorkflowContract()),
+        employmentCurrentPositionFromAssignment =
+            employmentPositionName(hrWorkflowContract()) ==
+                name(position(staffPosition(lastAssignment(hrWorkflowContract()))));
 }

@@ -231,7 +231,7 @@ cancelBusinessTrip 'Отменить командировку' (BusinessTripDocu
         tripCancelledBy(d) <- currentUser() AS CustomUser;
         APPLY;
     }
-}
+} CONFIRM;
 
 FORM businessTrips 'Командировки'
     OBJECTS d = BusinessTripDocument

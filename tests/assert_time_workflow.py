@@ -24,3 +24,9 @@ assert actual["scheduleCycleDuplicateDayRejected"] is True
 assert actual["scheduleOrganizationRejected"] is True
 assert actual["scheduleEmploymentPeriodRejected"] is True
 assert actual["scheduleValidityPeriodRejected"] is True
+assert actual["scheduleCycleGapRejected"] is True
+assert actual["scheduleCycleStartRequiredRejected"] is True
+assert actual["scheduleCycleStartAfterAssignmentRejected"] is True
+assert actual["shiftPlannedHoursRejected"] is True
+assert actual["overnightShiftAccepted"] is True
+assert Decimal(str(actual["overnightAvailableMinutes"])) == Decimal("420.00")

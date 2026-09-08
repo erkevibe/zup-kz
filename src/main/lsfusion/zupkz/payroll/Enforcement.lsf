@@ -301,7 +301,7 @@ closeEnforcementOrder 'Завершить' (EnforcementOrder o) {
         enforcementStatus(o) <- EnforcementOrderStatus.closed;
         APPLY;
     }
-}
+} CONFIRM;
 
 captureEnforcementConditions(EnforcementCalculationLine l) {
     enforcementSavedOrderNumber(l) <- enforcementNumber(enforcementCalculationOrder(l));
@@ -371,7 +371,7 @@ cancelEnforcement 'Отменить' (EnforcementCalculationDocument d) {
         cancelEnforcementSnapshot(d);
         APPLY;
     }
-}
+} CONFIRM;
 
 totalEnforcementWithheld 'Исполнительные удержания' (EnforcementCalculationDocument d) =
     GROUP SUM enforcementWithheldAmount(EnforcementCalculationLine l)
