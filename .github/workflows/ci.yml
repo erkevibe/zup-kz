@@ -59,8 +59,15 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: Build pinned platform artifacts
+        run: >-
+          mvn --batch-mode --file platform/pom.xml
+          -pl :server,:web-compile-maven-plugin -am install -DskipTests
+
       - name: Build runnable server
-        run: mvn --batch-mode --file zup-kz/pom.xml clean package -Passemble,embed-server
+        run: >-
+          mvn --batch-mode --no-snapshot-updates --file zup-kz/pom.xml
+          clean package -Passemble,embed-server
 
       - name: Prepare CI settings
         working-directory: zup-kz
