@@ -36,6 +36,10 @@ jobs:
         working-directory: zup-kz
         run: python3 tests/assert_lifecycle_token_scope.py
 
+      - name: Check organization mutation guard coverage
+        working-directory: zup-kz
+        run: python3 tests/assert_organization_guard_coverage.py
+
       - name: Check operations scripts
         working-directory: zup-kz
         run: sh -n scripts/backup-db.sh scripts/restore-drill.sh
@@ -253,6 +257,31 @@ jobs:
                 --user zup-access-hr:zup-ui-test-only \
                 'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationDeleteAttackTest' \
                 --output cross-organization-delete-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-hr:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryHrAttackTest' \
+                --output cross-organization-secondary-hr-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-payroll:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryPayrollAttackTest' \
+                --output cross-organization-secondary-payroll-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-chief:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryReportAttackTest' \
+                --output cross-organization-secondary-report-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-chief:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryOwnershipAttackTest' \
+                --output cross-organization-secondary-ownership-attack-result.json
+
+              command curl --fail --silent --show-error \
+                --user zup-access-hr:zup-ui-test-only \
+                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryDeleteAttackTest' \
+                --output cross-organization-secondary-delete-attack-result.json
 
               curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationVerificationTest' \
