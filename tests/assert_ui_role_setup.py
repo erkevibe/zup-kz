@@ -13,6 +13,11 @@ expected_key_sets = [
         "timeWorkingTimePermitted",
         "payrollPayrollPermitted",
         "chiefReportsPermitted",
+        "hrUiTestForbidden",
+        "chiefUiTestForbidden",
+        "chiefAdministrationForbidden",
+        "auditorAdministrationForbidden",
+        "chiefDesignForbidden",
         "auditorReadOnly",
     },
 ]

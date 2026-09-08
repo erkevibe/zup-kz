@@ -132,6 +132,10 @@ denyBusinessFolders(UserRole role) {
     dataPermission(role, navigatorElementCanonicalName('ZUPKZ.taxesKz')) <- Permission.forbid;
     dataPermission(role, navigatorElementCanonicalName('ZUPKZ.reportsKz')) <- Permission.forbid;
     dataPermission(role, navigatorElementCanonicalName('ZUPKZ.accessAdministration')) <- Permission.forbid;
+    // QA-формы и системное администрирование не входят ни в одну бизнес-роль.
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.uiTestInternalForms')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('System.administration')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('SystemEvents.showDesign')) <- Permission.forbid;
 }
 
 permitBusinessFolders(UserRole role) {

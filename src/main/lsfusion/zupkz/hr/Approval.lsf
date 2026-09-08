@@ -17,6 +17,7 @@ noticeKindLeadDays 'Минимальный срок, дней' = DATA INTEGER (P
 noticeKindWorkingDays 'Срок в рабочих днях' = DATA BOOLEAN (PersonnelNoticeKind);
 noticeKindLegalBasis 'Правовое основание' = DATA STRING[250] (PersonnelNoticeKind);
 noticeKindActive 'Используется' = DATA BOOLEAN (PersonnelNoticeKind);
+noticeKindNameRu 'Наименование' (PersonnelNoticeKind k) = caption(k);
 
 loadPersonnelNoticeKinds() {
     IF NOT noticeKindCode(PersonnelNoticeKind.workConditions) THEN {
@@ -187,8 +188,10 @@ cancelPersonnelNotice 'Отменить' (PersonnelNotice n) {
 
 FORM personnelNoticeKinds 'Виды уведомлений работников'
     OBJECTS k = PersonnelNoticeKind
-    PROPERTIES(k) noticeKindCode, noticeKindNameKz, noticeKindLeadDays,
+    PROPERTIES(k) READONLY noticeKindNameRu
+    PROPERTIES(k) noticeKindNameKz, noticeKindLeadDays,
                   noticeKindWorkingDays, noticeKindLegalBasis, noticeKindActive
+    PROPERTIES(k) READONLY noticeKindCode
 ;
 
 FORM personnelNotices 'Уведомления работников'

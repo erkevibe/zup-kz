@@ -61,6 +61,16 @@ cycleDayOff 'Выходной' = DATA BOOLEAN (ScheduleCycleDay);
 
 CONSTRAINT cycleDayNumber(ScheduleCycleDay d) <= 0
     MESSAGE 'Номер дня цикла должен быть больше нуля';
+cycleDayKeyCount(WorkSchedule schedule, INTEGER dayNumber) = GROUP SUM 1 IF
+    cycleSchedule(ScheduleCycleDay d) == schedule AND cycleDayNumber(d) == dayNumber;
+CONSTRAINT cycleSchedule(ScheduleCycleDay d) AND cycleDayNumber(d) AND
+           cycleDayKeyCount(cycleSchedule(d), cycleDayNumber(d)) > 1
+    MESSAGE 'Номер дня должен быть уникальным внутри цикла графика';
+CONSTRAINT cycleShift(ScheduleCycleDay d) AND cycleSchedule(d) AND
+           shiftSchedule(cycleShift(d)) != cycleSchedule(d)
+    MESSAGE 'Смена должна принадлежать тому же графику, что и день цикла';
+CONSTRAINT cycleShift(ScheduleCycleDay d) AND cycleDayOff(d)
+    MESSAGE 'День цикла не может одновременно быть сменой и выходным';
 
 CLASS EmployeeScheduleAssignment 'Назначение графика сотруднику';
 
@@ -82,6 +92,29 @@ overlappingEmployeeScheduleCount(EmployeeScheduleAssignment a) = GROUP SUM 1 IF
 CONSTRAINT scheduleEmploymentAssignment(EmployeeScheduleAssignment a) AND
            employeeScheduleFrom(a) AND overlappingEmployeeScheduleCount(a) > 1
     MESSAGE 'Периоды графиков одного назначения сотрудника не должны пересекаться';
+CONSTRAINT scheduleEmploymentAssignment(EmployeeScheduleAssignment a) AND
+           employeeWorkSchedule(a) AND
+           organization(employment(scheduleEmploymentAssignment(a))) !=
+               scheduleOrganization(employeeWorkSchedule(a))
+    MESSAGE 'График и назначение сотрудника должны принадлежать одной организации';
+CONSTRAINT scheduleEmploymentAssignment(EmployeeScheduleAssignment a) AND
+           employeeScheduleFrom(a) AND
+           employeeScheduleFrom(a) < assignmentFrom(scheduleEmploymentAssignment(a))
+    MESSAGE 'График сотрудника не может начинаться раньше назначения';
+CONSTRAINT scheduleEmploymentAssignment(EmployeeScheduleAssignment a) AND
+           assignmentTo(scheduleEmploymentAssignment(a)) AND
+           (NOT employeeScheduleTo(a) OR
+            employeeScheduleTo(a) > assignmentTo(scheduleEmploymentAssignment(a)))
+    MESSAGE 'График сотрудника не может продолжаться после окончания назначения';
+CONSTRAINT employeeWorkSchedule(EmployeeScheduleAssignment a) AND
+           employeeScheduleFrom(a) AND scheduleValidFrom(employeeWorkSchedule(a)) AND
+           employeeScheduleFrom(a) < scheduleValidFrom(employeeWorkSchedule(a))
+    MESSAGE 'Назначение графика не может начинаться раньше срока действия графика';
+CONSTRAINT employeeWorkSchedule(EmployeeScheduleAssignment a) AND
+           scheduleValidTo(employeeWorkSchedule(a)) AND
+           (NOT employeeScheduleTo(a) OR
+            employeeScheduleTo(a) > scheduleValidTo(employeeWorkSchedule(a)))
+    MESSAGE 'Назначение графика не может продолжаться после срока действия графика';
 
 FORM workSchedules 'Графики работы'
     OBJECTS s = WorkSchedule
