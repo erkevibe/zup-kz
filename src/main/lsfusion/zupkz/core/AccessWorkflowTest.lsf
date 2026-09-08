@@ -12,6 +12,18 @@ accessHiddenDeleteDepartment() = GROUP LAST Department d IF
     code(d) == 'ACCESS-HIDDEN-DELETE' ORDER d;
 accessHiddenPayrollRun() = GROUP LAST PayrollRun r IF
     payrollNumber(r) == 'ACCESS-HIDDEN-PAYROLL' ORDER r;
+accessHiddenArchiveCase() = GROUP LAST ArchiveCase c IF
+    archiveCaseIndex(c) == 'ACCESS-HIDDEN-ARCHIVE' ORDER c;
+accessHiddenArchiveDocument() = GROUP LAST ArchiveDocument d IF
+    archiveDocumentNumber(d) == 'ACCESS-HIDDEN-FILE' ORDER d;
+accessHiddenNotice() = GROUP LAST PersonnelNotice n IF
+    personnelNoticeNumber(n) == 'ACCESS-HIDDEN-NOTICE' ORDER n;
+accessHiddenEnforcement() = GROUP LAST EnforcementOrder o IF
+    enforcementNumber(o) == 'ACCESS-HIDDEN-ENFORCEMENT' ORDER o;
+accessHiddenPaymentStatement() = GROUP LAST PaymentStatement d IF
+    paymentStatementNumber(d) == 'ACCESS-HIDDEN-PAYMENT' ORDER d;
+accessHiddenForm200() = GROUP LAST Form200Declaration d IF
+    form200Version(d) == 'ACCESS-HIDDEN-FORM-200' ORDER d;
 uiRoleTestUser(STRING[100] value) = GROUP LAST CustomUser u IF login(u) == value ORDER u;
 
 createUiRoleTestUser(STRING[100] loginValue, STRING[50] roleSid, Organization org) {
@@ -114,6 +126,46 @@ accessWorkflowTest() {
                         payrollPeriodFrom(hiddenPayroll) <- 2026_01_01;
                         payrollPeriodTo(hiddenPayroll) <- 2026_01_31;
                         payrollRunStatus(hiddenPayroll) <- PayrollRunStatus.draft;
+
+                        NEW hiddenArchive = ArchiveCase {
+                            archiveCaseOrganization(hiddenArchive) <- hiddenOrg;
+                            archiveCaseIndex(hiddenArchive) <- 'ACCESS-HIDDEN-ARCHIVE';
+                            archiveCaseYear(hiddenArchive) <- 2026;
+                            archiveCaseTitle(hiddenArchive) <- 'Скрытое архивное дело';
+                            archiveCaseStatus(hiddenArchive) <- ArchiveCaseStatus.open;
+
+                            NEW hiddenArchiveDocument = ArchiveDocument {
+                                archiveDocumentCase(hiddenArchiveDocument) <- hiddenArchive;
+                                archiveDocumentNumber(hiddenArchiveDocument) <- 'ACCESS-HIDDEN-FILE';
+                                archiveDocumentTitle(hiddenArchiveDocument) <- 'Скрытый архивный документ';
+                            }
+                        }
+
+                        NEW hiddenNotice = PersonnelNotice {
+                            personnelNoticeOrganization(hiddenNotice) <- hiddenOrg;
+                            personnelNoticeNumber(hiddenNotice) <- 'ACCESS-HIDDEN-NOTICE';
+                            personnelNoticeStatus(hiddenNotice) <- PersonnelNoticeStatus.draft;
+                        }
+
+                        NEW hiddenEnforcement = EnforcementOrder {
+                            enforcementOrganization(hiddenEnforcement) <- hiddenOrg;
+                            enforcementNumber(hiddenEnforcement) <- 'ACCESS-HIDDEN-ENFORCEMENT';
+                            enforcementStatus(hiddenEnforcement) <- EnforcementOrderStatus.active;
+                        }
+
+                        NEW hiddenPayment = PaymentStatement {
+                            paymentStatementPayrollRun(hiddenPayment) <- hiddenPayroll;
+                            paymentStatementNumber(hiddenPayment) <- 'ACCESS-HIDDEN-PAYMENT';
+                            paymentStatementStatus(hiddenPayment) <- PaymentStatementStatus.draft;
+                        }
+
+                        NEW hiddenDeclaration = Form200Declaration {
+                            form200Organization(hiddenDeclaration) <- hiddenOrg;
+                            form200PeriodStart(hiddenDeclaration) <- 2026_01_01;
+                            form200Kind(hiddenDeclaration) <- Form200Kind.initial;
+                            form200Version(hiddenDeclaration) <- 'ACCESS-HIDDEN-FORM-200';
+                            form200Status(hiddenDeclaration) <- Form200Status.draft;
+                        }
                     }
 
                     NEW hiddenTimesheet = Timesheet {
@@ -203,6 +255,32 @@ crossOrganizationDeleteAttackTest() {
     APPLY;
 }
 
+crossOrganizationSecondaryHrAttackTest() {
+    archiveDocumentTitle(accessHiddenArchiveDocument()) <- 'УТЕЧКА АРХИВА';
+    APPLY;
+}
+
+crossOrganizationSecondaryPayrollAttackTest() {
+    enforcementNumber(accessHiddenEnforcement()) <- 'ACCESS-ATTACK-ENFORCEMENT';
+    paymentStatementNumber(accessHiddenPaymentStatement()) <- 'ACCESS-ATTACK-PAYMENT';
+    APPLY;
+}
+
+crossOrganizationSecondaryReportAttackTest() {
+    form200CorrectionNumber(accessHiddenForm200()) <- 99;
+    APPLY;
+}
+
+crossOrganizationSecondaryOwnershipAttackTest() {
+    archiveCaseOrganization(accessHiddenArchiveCase()) <- accessAssignedOrganization();
+    APPLY;
+}
+
+crossOrganizationSecondaryDeleteAttackTest() {
+    DELETE PersonnelNotice n WHERE n == accessHiddenNotice();
+    APPLY;
+}
+
 crossOrganizationVerificationTest() {
     EXPORT JSON FROM
         hiddenStatusPreserved = timesheetStatus(accessHiddenTimesheet()) == TimesheetStatus.draft,
@@ -214,7 +292,18 @@ crossOrganizationVerificationTest() {
         hiddenPayrollPreserved = payrollNumber(accessHiddenPayrollRun()) ==
             'ACCESS-HIDDEN-PAYROLL',
         hiddenDeletePreserved = name(accessHiddenDeleteDepartment()) ==
-            'Скрытое подразделение для удаления';
+            'Скрытое подразделение для удаления',
+        hiddenArchiveDocumentPreserved = archiveDocumentTitle(accessHiddenArchiveDocument()) ==
+            'Скрытый архивный документ',
+        hiddenArchiveOwnerPreserved = archiveCaseOrganization(accessHiddenArchiveCase()) ==
+            accessHiddenOrganization(),
+        hiddenNoticeDeletePreserved = personnelNoticeNumber(accessHiddenNotice()) ==
+            'ACCESS-HIDDEN-NOTICE',
+        hiddenEnforcementPreserved = enforcementNumber(accessHiddenEnforcement()) ==
+            'ACCESS-HIDDEN-ENFORCEMENT',
+        hiddenPaymentPreserved = paymentStatementNumber(accessHiddenPaymentStatement()) ==
+            'ACCESS-HIDDEN-PAYMENT',
+        hiddenReportPreserved = NOT form200CorrectionNumber(accessHiddenForm200());
 }
 
 employeeIinFormatGuardTest() {

@@ -20,7 +20,9 @@ employeeAllowed(Employee worker) = GROUP MAX organizationAllowed(organization(Em
 organizationChangeDenied(Organization org) = org AND NOT organizationChangeAllowed(org);
 
 organizationContentChanged(Organization org) =
-    CHANGED(name(org)) OR CHANGED(shortName(org)) OR CHANGED(bin(org));
+    CHANGED(name(org)) OR CHANGED(shortName(org)) OR CHANGED(bin(org)) OR
+    CHANGED(payrollBankName(org)) OR CHANGED(payrollBankBic(org)) OR
+    CHANGED(payrollIban(org));
 CONSTRAINT organizationContentChanged(Organization org) AND
            NOT organizationChangeAllowed(org)
     MESSAGE 'Нет доступа к изменению этой организации';
@@ -249,7 +251,8 @@ timesheetLineContentChanged(TimesheetLine l) =
     CHANGED(overtimeHours(l)) OR CHANGED(holidayHours(l)) OR CHANGED(weekendHours(l)) OR
     CHANGED(businessTripHours(l)) OR CHANGED(absenceHours(l)) OR
     CHANGED(overtimeConsentDocument(l)) OR CHANGED(employerAct(l)) OR
-    CHANGED(lineComment(l)) OR CHANGED(generatedLine(l));
+    CHANGED(lineComment(l)) OR CHANGED(generatedLine(l)) OR
+    CHANGED(lineBusinessTrip(l)) OR CHANGED(businessTripCreatedLine(l));
 CONSTRAINT timesheetLineContentChanged(TimesheetLine l) AND
            (organizationChangeDenied(timesheetOrganization(lineTimesheet(l))) OR
             organizationChangeDenied(PREV(timesheetOrganization(lineTimesheet(l)))))
@@ -261,7 +264,9 @@ CONSTRAINT DROPPED(TimesheetLine l IS TimesheetLine) AND
 payrollRunContentChanged(PayrollRun r) =
     CHANGED(payrollOrganization(r)) OR CHANGED(payrollNumber(r)) OR
     CHANGED(payrollPeriodFrom(r)) OR CHANGED(payrollPeriodTo(r)) OR
-    CHANGED(payrollRunStatus(r)) OR CHANGED(payrollCalculatedAt(r));
+    CHANGED(payrollRunStatus(r)) OR CHANGED(payrollCalculatedAt(r)) OR
+    CHANGED(payrollPaymentDueDate(r)) OR CHANGED(payrollReopenReason(r)) OR
+    CHANGED(payrollResetReason(r));
 CONSTRAINT payrollRunContentChanged(PayrollRun r) AND
            (organizationChangeDenied(payrollOrganization(r)) OR
             organizationChangeDenied(PREV(payrollOrganization(r))))

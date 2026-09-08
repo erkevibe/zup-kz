@@ -1,0 +1,853 @@
+MODULE KZOrganizationAccessSecondary;
+
+REQUIRE KZAccessControl;
+NAMESPACE ZUPKZ;
+
+// Серверная граница для вторичных документов и строк. UI-фильтры отвечают
+// только за удобство: эти constraints также действуют для Action API и APPLY.
+META protectSecondaryOrganizationObject(code, objectClass, organizationProperty)
+    CONSTRAINT code##SecondaryContentChanged(objectClass o) AND
+               (organizationChangeDenied(organizationProperty(o)) OR
+                organizationChangeDenied(PREV(organizationProperty(o))))
+        MESSAGE 'Нет доступа к изменению данных этой организации';
+    CONSTRAINT DROPPED(objectClass o IS objectClass) AND
+               organizationChangeDenied(PREV(organizationProperty(o)))
+        MESSAGE 'Нет доступа к удалению данных этой организации';
+END
+
+leaveEntitlementAccessOrganization(LeaveEntitlement o) = organization(employment(entitlementAssignment(o)));
+leaveEntitlementSecondaryContentChanged(LeaveEntitlement o) =
+    CHANGED(entitlementAssignment(o)) OR
+    CHANGED(entitlementWorkYearFrom(o)) OR
+    CHANGED(entitlementWorkYearTo(o)) OR
+    CHANGED(entitlementBasicDays(o)) OR
+    CHANGED(entitlementAdditionalDays(o)) OR
+    CHANGED(entitlementNote(o));
+@protectSecondaryOrganizationObject(leaveEntitlement, LeaveEntitlement, leaveEntitlementAccessOrganization);
+
+leaveDocumentAccessOrganization(LeaveDocument o) = organization(employment(leaveAssignment(o)));
+leaveDocumentSecondaryContentChanged(LeaveDocument o) =
+    CHANGED(leaveNumber(o)) OR
+    CHANGED(leaveOrderDate(o)) OR
+    CHANGED(leaveAssignment(o)) OR
+    CHANGED(leaveKind(o)) OR
+    CHANGED(leaveDateFrom(o)) OR
+    CHANGED(leaveDateTo(o)) OR
+    CHANGED(leaveEntitlement(o)) OR
+    CHANGED(leaveCalendar(o)) OR
+    CHANGED(leaveWorkWeek(o)) OR
+    CHANGED(leaveOutsideSchedule(o)) OR
+    CHANGED(leaveAverageEarnings(o)) OR
+    CHANGED(leaveBasis(o)) OR
+    CHANGED(leaveStatus(o)) OR
+    CHANGED(leaveApprovedAt(o)) OR
+    CHANGED(leaveApprovedBy(o)) OR
+    CHANGED(leaveCancelledAt(o)) OR
+    CHANGED(leaveCancelledBy(o));
+@protectSecondaryOrganizationObject(leaveDocument, LeaveDocument, leaveDocumentAccessOrganization);
+
+vacationScheduleAccessOrganization(VacationSchedule o) = vacationScheduleOrganization(o);
+vacationScheduleSecondaryContentChanged(VacationSchedule o) =
+    CHANGED(vacationScheduleOrganization(o)) OR
+    CHANGED(vacationScheduleNumber(o)) OR
+    CHANGED(vacationScheduleDate(o)) OR
+    CHANGED(vacationScheduleYear(o)) OR
+    CHANGED(vacationScheduleCalendar(o)) OR
+    CHANGED(vacationScheduleStatus(o)) OR
+    CHANGED(vacationScheduleApprovedAt(o)) OR
+    CHANGED(vacationScheduleApprovedBy(o)) OR
+    CHANGED(vacationScheduleCancelledAt(o)) OR
+    CHANGED(vacationScheduleCancelledBy(o));
+@protectSecondaryOrganizationObject(vacationSchedule, VacationSchedule, vacationScheduleAccessOrganization);
+
+vacationScheduleLineAccessOrganization(VacationScheduleLine o) = vacationScheduleOrganization(vacationLineSchedule(o));
+vacationScheduleLineSecondaryContentChanged(VacationScheduleLine o) =
+    CHANGED(vacationLineSchedule(o)) OR
+    CHANGED(vacationLineAssignment(o)) OR
+    CHANGED(vacationLineKind(o)) OR
+    CHANGED(vacationLineDateFrom(o)) OR
+    CHANGED(vacationLineDateTo(o)) OR
+    CHANGED(vacationLineEntitlement(o)) OR
+    CHANGED(vacationLineWorkWeek(o)) OR
+    CHANGED(vacationLineAgreement(o)) OR
+    CHANGED(vacationLineOpinionDate(o)) OR
+    CHANGED(vacationLineNote(o)) OR
+    CHANGED(vacationLineLeave(o));
+@protectSecondaryOrganizationObject(vacationScheduleLine, VacationScheduleLine, vacationScheduleLineAccessOrganization);
+
+businessTripDocumentAccessOrganization(BusinessTripDocument o) = tripOrganization(o);
+businessTripDocumentSecondaryContentChanged(BusinessTripDocument o) =
+    CHANGED(tripNumber(o)) OR
+    CHANGED(tripOrderDate(o)) OR
+    CHANGED(tripAssignment(o)) OR
+    CHANGED(tripKind(o)) OR
+    CHANGED(tripDateFrom(o)) OR
+    CHANGED(tripDateTo(o)) OR
+    CHANGED(tripDeparturePlace(o)) OR
+    CHANGED(tripDestination(o)) OR
+    CHANGED(tripHostOrganization(o)) OR
+    CHANGED(tripPurpose(o)) OR
+    CHANGED(tripBasis(o)) OR
+    CHANGED(tripCalendar(o)) OR
+    CHANGED(tripWorkWeek(o)) OR
+    CHANGED(tripAverageEarnings(o)) OR
+    CHANGED(tripTimesheet(o)) OR
+    CHANGED(tripDailyAllowanceRate(o)) OR
+    CHANGED(tripTravelAdvance(o)) OR
+    CHANGED(tripAccommodationAdvance(o)) OR
+    CHANGED(tripOtherAdvance(o)) OR
+    CHANGED(tripStatus(o)) OR
+    CHANGED(tripApprovedAt(o)) OR
+    CHANGED(tripApprovedBy(o)) OR
+    CHANGED(tripCancelledAt(o)) OR
+    CHANGED(tripCancelledBy(o));
+@protectSecondaryOrganizationObject(businessTripDocument, BusinessTripDocument, businessTripDocumentAccessOrganization);
+
+personnelNoticeAccessOrganization(PersonnelNotice o) = personnelNoticeOrganization(o);
+personnelNoticeSecondaryContentChanged(PersonnelNotice o) =
+    CHANGED(personnelNoticeOrganization(o)) OR
+    CHANGED(personnelNoticeEmployee(o)) OR
+    CHANGED(personnelNoticeKind(o)) OR
+    CHANGED(personnelNoticeNumber(o)) OR
+    CHANGED(personnelNoticeDate(o)) OR
+    CHANGED(personnelNoticeEffectiveDate(o)) OR
+    CHANGED(personnelNoticeCalendar(o)) OR
+    CHANGED(personnelNoticeWorkWeek(o)) OR
+    CHANGED(personnelNoticeDelivery(o)) OR
+    CHANGED(personnelNoticeDeliveredDate(o)) OR
+    CHANGED(personnelNoticeResponse(o)) OR
+    CHANGED(personnelNoticeResponseDate(o)) OR
+    CHANGED(personnelNoticeText(o)) OR
+    CHANGED(personnelNoticeStatus(o)) OR
+    CHANGED(personnelNoticeIssuedAt(o)) OR
+    CHANGED(personnelNoticeCancelledAt(o)) OR
+    CHANGED(personnelNoticeEvent(o)) OR
+    CHANGED(personnelNoticeVacationLine(o));
+@protectSecondaryOrganizationObject(personnelNotice, PersonnelNotice, personnelNoticeAccessOrganization);
+
+approvalRequestAccessOrganization(ApprovalRequest o) = approvalOrganization(o);
+approvalRequestSecondaryContentChanged(ApprovalRequest o) =
+    CHANGED(approvalOrganization(o)) OR
+    CHANGED(approvalTitle(o)) OR
+    CHANGED(approvalPersonnelEvent(o)) OR
+    CHANGED(approvalLeave(o)) OR
+    CHANGED(approvalVacationSchedule(o)) OR
+    CHANGED(approvalBusinessTrip(o)) OR
+    CHANGED(approvalStatus(o)) OR
+    CHANGED(approvalSubmittedBy(o)) OR
+    CHANGED(approvalSubmittedAt(o)) OR
+    CHANGED(approvalCompletedAt(o)) OR
+    CHANGED(approvalComment(o));
+@protectSecondaryOrganizationObject(approvalRequest, ApprovalRequest, approvalRequestAccessOrganization);
+
+approvalStepAccessOrganization(ApprovalStep o) = approvalOrganization(approvalStepRequest(o));
+approvalStepSecondaryContentChanged(ApprovalStep o) =
+    CHANGED(approvalStepRequest(o)) OR
+    CHANGED(approvalStepSequence(o)) OR
+    CHANGED(approvalStepApprover(o)) OR
+    CHANGED(approvalStepDueDate(o)) OR
+    CHANGED(approvalStepStatus(o)) OR
+    CHANGED(approvalStepDecidedBy(o)) OR
+    CHANGED(approvalStepDecidedAt(o)) OR
+    CHANGED(approvalStepComment(o));
+@protectSecondaryOrganizationObject(approvalStep, ApprovalStep, approvalStepAccessOrganization);
+
+personnelNotificationAccessOrganization(PersonnelNotification o) = notificationOrganization(o);
+personnelNotificationSecondaryContentChanged(PersonnelNotification o) =
+    CHANGED(notificationUser(o)) OR
+    CHANGED(notificationOrganization(o)) OR
+    CHANGED(notificationApproval(o)) OR
+    CHANGED(notificationStep(o)) OR
+    CHANGED(notificationSubject(o)) OR
+    CHANGED(notificationText(o)) OR
+    CHANGED(notificationCreatedAt(o)) OR
+    CHANGED(notificationReadAt(o));
+@protectSecondaryOrganizationObject(personnelNotification, PersonnelNotification, personnelNotificationAccessOrganization);
+
+archiveCaseAccessOrganization(ArchiveCase o) = archiveCaseOrganization(o);
+archiveCaseSecondaryContentChanged(ArchiveCase o) =
+    CHANGED(archiveCaseOrganization(o)) OR
+    CHANGED(archiveCaseIndex(o)) OR
+    CHANGED(archiveCaseYear(o)) OR
+    CHANGED(archiveCaseTitle(o)) OR
+    CHANGED(archiveCaseResponsible(o)) OR
+    CHANGED(archiveCaseOpenedDate(o)) OR
+    CHANGED(archiveCaseClosedDate(o)) OR
+    CHANGED(archiveCaseTransferDate(o)) OR
+    CHANGED(archiveCaseTransferAct(o)) OR
+    CHANGED(archiveCaseStatus(o));
+@protectSecondaryOrganizationObject(archiveCase, ArchiveCase, archiveCaseAccessOrganization);
+
+archiveDocumentAccessOrganization(ArchiveDocument o) = archiveCaseOrganization(archiveDocumentCase(o));
+archiveDocumentSecondaryContentChanged(ArchiveDocument o) =
+    CHANGED(archiveDocumentCase(o)) OR
+    CHANGED(archiveDocumentKind(o)) OR
+    CHANGED(archiveDocumentEmployee(o)) OR
+    CHANGED(archiveDocumentNumber(o)) OR
+    CHANGED(archiveDocumentDate(o)) OR
+    CHANGED(archiveDocumentTitle(o)) OR
+    CHANGED(archiveDocumentPages(o)) OR
+    CHANGED(archiveDocumentCarrier(o)) OR
+    CHANGED(archiveDocumentFile(o)) OR
+    CHANGED(archiveDocumentPhysicalLocation(o)) OR
+    CHANGED(archiveDocumentSignatureInfo(o)) OR
+    CHANGED(archiveDocumentChecksum(o)) OR
+    CHANGED(archiveDocumentRetentionStart(o)) OR
+    CHANGED(archiveDocumentRetentionRule(o)) OR
+    CHANGED(archiveDocumentRetentionYears(o)) OR
+    CHANGED(archiveDocumentPermanent(o)) OR
+    CHANGED(archiveDocumentRetentionUntil(o)) OR
+    CHANGED(archiveDocumentRegisteredAt(o)) OR
+    CHANGED(archiveDocumentStoredAt(o)) OR
+    CHANGED(archiveDocumentStatus(o)) OR
+    CHANGED(archiveDocumentDestructionAct(o)) OR
+    CHANGED(archiveDocumentDestructionDate(o)) OR
+    CHANGED(archiveDocumentDestructionReason(o)) OR
+    CHANGED(archiveDocumentDestroyedAt(o)) OR
+    CHANGED(archiveSourceEmployment(o)) OR
+    CHANGED(archiveSourcePersonnelEvent(o)) OR
+    CHANGED(archiveSourceEmployeeCard(o)) OR
+    CHANGED(archiveSourceLeave(o)) OR
+    CHANGED(archiveSourceVacationSchedule(o)) OR
+    CHANGED(archiveSourceBusinessTrip(o)) OR
+    CHANGED(archiveSourcePersonnelNotice(o));
+@protectSecondaryOrganizationObject(archiveDocument, ArchiveDocument, archiveDocumentAccessOrganization);
+
+accidentInsurancePolicyAccessOrganization(AccidentInsurancePolicy o) = insurancePolicyOrganization(o);
+accidentInsurancePolicySecondaryContentChanged(AccidentInsurancePolicy o) =
+    CHANGED(insurancePolicyOrganization(o)) OR
+    CHANGED(insurancePolicyInsurer(o)) OR
+    CHANGED(insurancePolicyInsurerBin(o)) OR
+    CHANGED(insurancePolicyNumber(o)) OR
+    CHANGED(insurancePolicyDate(o)) OR
+    CHANGED(insurancePolicyValidFrom(o)) OR
+    CHANGED(insurancePolicyValidTo(o)) OR
+    CHANGED(insurancePolicyRiskClass(o)) OR
+    CHANGED(insurancePolicyPayrollBase(o)) OR
+    CHANGED(insurancePolicyRateRule(o)) OR
+    CHANGED(insurancePolicyRatePercent(o)) OR
+    CHANGED(insurancePolicyPremium(o)) OR
+    CHANGED(insurancePolicyStatus(o)) OR
+    CHANGED(insurancePolicyActivatedAt(o)) OR
+    CHANGED(insurancePolicyCancelledAt(o)) OR
+    CHANGED(insurancePolicyTerminationDate(o)) OR
+    CHANGED(insurancePolicyTerminationReason(o));
+@protectSecondaryOrganizationObject(accidentInsurancePolicy, AccidentInsurancePolicy, accidentInsurancePolicyAccessOrganization);
+
+workAccidentAccessOrganization(WorkAccident o) = workAccidentOrganization(o);
+workAccidentSecondaryContentChanged(WorkAccident o) =
+    CHANGED(workAccidentOrganization(o)) OR
+    CHANGED(workAccidentEmployee(o)) OR
+    CHANGED(workAccidentAssignment(o)) OR
+    CHANGED(workAccidentNumber(o)) OR
+    CHANGED(workAccidentDate(o)) OR
+    CHANGED(workAccidentTime(o)) OR
+    CHANGED(workAccidentPlace(o)) OR
+    CHANGED(workAccidentDescription(o)) OR
+    CHANGED(workAccidentSeverity(o)) OR
+    CHANGED(workAccidentPolicy(o)) OR
+    CHANGED(workAccidentRegisteredAt(o)) OR
+    CHANGED(workAccidentInsurerNotifiedDate(o)) OR
+    CHANGED(workAccidentInvestigationDueDate(o)) OR
+    CHANGED(workAccidentCommissionOrder(o)) OR
+    CHANGED(workAccidentCommissionChair(o)) OR
+    CHANGED(workAccidentOutcome(o)) OR
+    CHANGED(workAccidentConclusion(o)) OR
+    CHANGED(workAccidentActNumber(o)) OR
+    CHANGED(workAccidentActDate(o)) OR
+    CHANGED(workAccidentLostWorkDays(o)) OR
+    CHANGED(workAccidentStatus(o)) OR
+    CHANGED(workAccidentClosedAt(o));
+@protectSecondaryOrganizationObject(workAccident, WorkAccident, workAccidentAccessOrganization);
+
+accidentInsuranceClaimAccessOrganization(AccidentInsuranceClaim o) = workAccidentOrganization(insuranceClaimAccident(o));
+accidentInsuranceClaimSecondaryContentChanged(AccidentInsuranceClaim o) =
+    CHANGED(insuranceClaimAccident(o)) OR
+    CHANGED(insuranceClaimPolicy(o)) OR
+    CHANGED(insuranceClaimNumber(o)) OR
+    CHANGED(insuranceClaimDate(o)) OR
+    CHANGED(insuranceClaimAmount(o)) OR
+    CHANGED(insuranceClaimAcceptedAmount(o)) OR
+    CHANGED(insuranceClaimPaidAmount(o)) OR
+    CHANGED(insuranceClaimInsurerReference(o)) OR
+    CHANGED(insuranceClaimRejectionReason(o)) OR
+    CHANGED(insuranceClaimStatus(o)) OR
+    CHANGED(insuranceClaimSubmittedAt(o)) OR
+    CHANGED(insuranceClaimDecidedAt(o)) OR
+    CHANGED(insuranceClaimPaidDate(o));
+@protectSecondaryOrganizationObject(accidentInsuranceClaim, AccidentInsuranceClaim, accidentInsuranceClaimAccessOrganization);
+
+payrollTimeSummaryAccessOrganization(PayrollTimeSummary o) = payrollOrganization(summaryPayrollRun(o));
+payrollTimeSummarySecondaryContentChanged(PayrollTimeSummary o) =
+    CHANGED(summaryPayrollRun(o)) OR
+    CHANGED(summaryAssignment(o)) OR
+    CHANGED(summaryPlannedHours(o)) OR
+    CHANGED(summaryWorkedHours(o)) OR
+    CHANGED(summaryWorkedDays(o)) OR
+    CHANGED(summaryNightHours(o)) OR
+    CHANGED(summaryOvertimeHours(o)) OR
+    CHANGED(summaryHolidayHours(o)) OR
+    CHANGED(summaryWeekendHours(o)) OR
+    CHANGED(summaryBusinessTripHours(o)) OR
+    CHANGED(summaryAbsenceHours(o));
+@protectSecondaryOrganizationObject(payrollTimeSummary, PayrollTimeSummary, payrollTimeSummaryAccessOrganization);
+
+payrollLineAccessOrganization(PayrollLine o) = payrollOrganization(linePayrollRun(o));
+payrollLineSecondaryContentChanged(PayrollLine o) =
+    CHANGED(linePayrollRun(o)) OR
+    CHANGED(linePayrollAssignment(o)) OR
+    CHANGED(lineCalculationType(o)) OR
+    CHANGED(lineTimeSummary(o)) OR
+    CHANGED(linePayrollInput(o)) OR
+    CHANGED(calculationBase(o)) OR
+    CHANGED(calculationQuantity(o)) OR
+    CHANGED(calculationRate(o)) OR
+    CHANGED(calculationCoefficient(o)) OR
+    CHANGED(calculationAmount(o)) OR
+    CHANGED(calculationNote(o));
+@protectSecondaryOrganizationObject(payrollLine, PayrollLine, payrollLineAccessOrganization);
+
+averageEarningsDocumentAccessOrganization(AverageEarningsDocument o) = organization(employment(averageAssignment(o)));
+averageEarningsDocumentSecondaryContentChanged(AverageEarningsDocument o) =
+    CHANGED(averageNumber(o)) OR
+    CHANGED(averageAssignment(o)) OR
+    CHANGED(averageEventKind(o)) OR
+    CHANGED(averageMode(o)) OR
+    CHANGED(averageEventFrom(o)) OR
+    CHANGED(averageEventTo(o)) OR
+    CHANGED(averagePeriodFrom(o)) OR
+    CHANGED(averagePeriodTo(o)) OR
+    CHANGED(averageEventWorkDays(o)) OR
+    CHANGED(averageEventWorkHours(o)) OR
+    CHANGED(averageEventCalendarDays(o)) OR
+    CHANGED(averageDailyHours(o)) OR
+    CHANGED(averageStatus(o)) OR
+    CHANGED(averageCalculatedAt(o));
+@protectSecondaryOrganizationObject(averageEarningsDocument, AverageEarningsDocument, averageEarningsDocumentAccessOrganization);
+
+averageEarningsBaseLineAccessOrganization(AverageEarningsBaseLine o) = organization(employment(averageAssignment(baseAverageDocument(o))));
+averageEarningsBaseLineSecondaryContentChanged(AverageEarningsBaseLine o) =
+    CHANGED(baseAverageDocument(o)) OR
+    CHANGED(basePayrollRun(o)) OR
+    CHANGED(baseEarnings(o)) OR
+    CHANGED(baseWorkedDays(o)) OR
+    CHANGED(baseWorkedHours(o)) OR
+    CHANGED(baseIncreaseCoefficient(o)) OR
+    CHANGED(baseIncluded(o)) OR
+    CHANGED(baseNote(o));
+@protectSecondaryOrganizationObject(averageEarningsBaseLine, AverageEarningsBaseLine, averageEarningsBaseLineAccessOrganization);
+
+payrollRecalculationAccessOrganization(PayrollRecalculation o) = payrollOrganization(recalculationTargetRun(o));
+payrollRecalculationSecondaryContentChanged(PayrollRecalculation o) =
+    CHANGED(recalculationNumber(o)) OR
+    CHANGED(recalculationDate(o)) OR
+    CHANGED(recalculationOriginalRun(o)) OR
+    CHANGED(recalculationTargetRun(o)) OR
+    CHANGED(recalculationReason(o)) OR
+    CHANGED(recalculationStatus(o)) OR
+    CHANGED(recalculationCalculatedAt(o));
+@protectSecondaryOrganizationObject(payrollRecalculation, PayrollRecalculation, payrollRecalculationAccessOrganization);
+
+payrollRecalculationLineAccessOrganization(PayrollRecalculationLine o) = payrollOrganization(recalculationTargetRun(lineRecalculation(o)));
+payrollRecalculationLineSecondaryContentChanged(PayrollRecalculationLine o) =
+    CHANGED(lineRecalculation(o)) OR
+    CHANGED(lineOriginalPayrollLine(o)) OR
+    CHANGED(lineOriginalAmount(o)) OR
+    CHANGED(lineCorrectedAmount(o)) OR
+    CHANGED(lineRecalculationNote(o)) OR
+    CHANGED(lineRecalculationInput(o));
+@protectSecondaryOrganizationObject(payrollRecalculationLine, PayrollRecalculationLine, payrollRecalculationLineAccessOrganization);
+
+interimPaymentAccessOrganization(InterimPayment o) = organization(employment(interimPaymentAssignment(o)));
+interimPaymentSecondaryContentChanged(InterimPayment o) =
+    CHANGED(interimPaymentNumber(o)) OR
+    CHANGED(interimPaymentDate(o)) OR
+    CHANGED(interimPaymentAssignment(o)) OR
+    CHANGED(interimPaymentKind(o)) OR
+    CHANGED(interimPaymentLeave(o)) OR
+    CHANGED(interimPaymentSickLeave(o)) OR
+    CHANGED(interimPaymentManualAmount(o)) OR
+    CHANGED(interimPaymentManualDueDate(o)) OR
+    CHANGED(interimPaymentPaidDate(o)) OR
+    CHANGED(interimPaymentReason(o)) OR
+    CHANGED(interimPaymentStatus(o));
+@protectSecondaryOrganizationObject(interimPayment, InterimPayment, interimPaymentAccessOrganization);
+
+sickLeaveDocumentAccessOrganization(SickLeaveDocument o) = organization(employment(sickLeaveAssignment(o)));
+sickLeaveDocumentSecondaryContentChanged(SickLeaveDocument o) =
+    CHANGED(sickLeaveNumber(o)) OR
+    CHANGED(sickLeaveIssueDate(o)) OR
+    CHANGED(sickLeaveMedicalOrganization(o)) OR
+    CHANGED(sickLeaveAssignment(o)) OR
+    CHANGED(sickLeaveFrom(o)) OR
+    CHANGED(sickLeaveTo(o)) OR
+    CHANGED(sickLeaveReason(o)) OR
+    CHANGED(sickLeaveAverage(o)) OR
+    CHANGED(sickLeaveDuplicate(o)) OR
+    CHANGED(sickLeaveProductionActNumber(o)) OR
+    CHANGED(sickLeaveVeteranExemption(o)) OR
+    CHANGED(sickLeaveDiplomaticAbroad(o)) OR
+    CHANGED(sickLeaveExclusionReason(o)) OR
+    CHANGED(sickLeaveStatus(o)) OR
+    CHANGED(sickLeaveCalculatedAt(o)) OR
+    CHANGED(sickLeaveApprovedAt(o)) OR
+    CHANGED(sickLeaveApprovedBy(o)) OR
+    CHANGED(sickLeaveCancelledAt(o)) OR
+    CHANGED(sickLeaveCancelledBy(o));
+@protectSecondaryOrganizationObject(sickLeaveDocument, SickLeaveDocument, sickLeaveDocumentAccessOrganization);
+
+sickLeaveBenefitLineAccessOrganization(SickLeaveBenefitLine o) = organization(employment(sickLeaveAssignment(sickBenefitDocument(o))));
+sickLeaveBenefitLineSecondaryContentChanged(SickLeaveBenefitLine o) =
+    CHANGED(sickBenefitDocument(o)) OR
+    CHANGED(sickBenefitMonth(o)) OR
+    CHANGED(sickBenefitWorkDays(o)) OR
+    CHANGED(sickBenefitMissedHours(o)) OR
+    CHANGED(sickBenefitNote(o));
+@protectSecondaryOrganizationObject(sickLeaveBenefitLine, SickLeaveBenefitLine, sickLeaveBenefitLineAccessOrganization);
+
+enforcementOrderAccessOrganization(EnforcementOrder o) = enforcementOrganization(o);
+enforcementOrderSecondaryContentChanged(EnforcementOrder o) =
+    CHANGED(enforcementOrganization(o)) OR
+    CHANGED(enforcementEmployee(o)) OR
+    CHANGED(enforcementKind(o)) OR
+    CHANGED(enforcementCalculationKind(o)) OR
+    CHANGED(enforcementStatus(o)) OR
+    CHANGED(enforcementNumber(o)) OR
+    CHANGED(enforcementDate(o)) OR
+    CHANGED(enforcementValidFrom(o)) OR
+    CHANGED(enforcementValidTo(o)) OR
+    CHANGED(enforcementPriority(o)) OR
+    CHANGED(enforcementPercent(o)) OR
+    CHANGED(enforcementFixedAmount(o)) OR
+    CHANGED(enforcementChildCount(o)) OR
+    CHANGED(enforcementRemainingDebt(o)) OR
+    CHANGED(enforcementRecipient(o)) OR
+    CHANGED(enforcementRecipientIin(o)) OR
+    CHANGED(enforcementRecipientIban(o)) OR
+    CHANGED(enforcementOfficer(o)) OR
+    CHANGED(enforcementProceedingNumber(o)) OR
+    CHANGED(enforcementBasis(o)) OR
+    CHANGED(enforcementLegalSource(o));
+@protectSecondaryOrganizationObject(enforcementOrder, EnforcementOrder, enforcementOrderAccessOrganization);
+
+enforcementCalculationDocumentAccessOrganization(EnforcementCalculationDocument o) = payrollOrganization(enforcementPayrollRun(o));
+enforcementCalculationDocumentSecondaryContentChanged(EnforcementCalculationDocument o) =
+    CHANGED(enforcementTaxCalculation(o)) OR
+    CHANGED(enforcementCalculationStatus(o)) OR
+    CHANGED(enforcementCalculatedAt(o));
+@protectSecondaryOrganizationObject(enforcementCalculationDocument, EnforcementCalculationDocument, enforcementCalculationDocumentAccessOrganization);
+
+enforcementCalculationLineAccessOrganization(EnforcementCalculationLine o) = payrollOrganization(enforcementPayrollRun(enforcementCalculationDocument(o)));
+enforcementCalculationLineSecondaryContentChanged(EnforcementCalculationLine o) =
+    CHANGED(enforcementCalculationDocument(o)) OR
+    CHANGED(enforcementCalculationOrder(o)) OR
+    CHANGED(enforcementRequestedAmount(o)) OR
+    CHANGED(enforcementMaximumAmount(o)) OR
+    CHANGED(enforcementWithheldAmount(o)) OR
+    CHANGED(enforcementConditionsRecorded(o)) OR
+    CHANGED(enforcementSavedOrderNumber(o)) OR
+    CHANGED(enforcementSavedBasis(o)) OR
+    CHANGED(enforcementSavedPriority(o)) OR
+    CHANGED(enforcementSavedPercent(o)) OR
+    CHANGED(enforcementSavedGrossIncome(o)) OR
+    CHANGED(enforcementSavedNetIncome(o)) OR
+    CHANGED(enforcementSavedKind(o)) OR
+    CHANGED(enforcementSavedMethod(o)) OR
+    CHANGED(enforcementSavedFixedAmount(o)) OR
+    CHANGED(enforcementSavedDebt(o));
+@protectSecondaryOrganizationObject(enforcementCalculationLine, EnforcementCalculationLine, enforcementCalculationLineAccessOrganization);
+
+civilContractAccessOrganization(CivilContract o) = civilContractOrganization(o);
+civilContractSecondaryContentChanged(CivilContract o) =
+    CHANGED(civilContractOrganization(o)) OR
+    CHANGED(civilContractContractor(o)) OR
+    CHANGED(civilContractNumber(o)) OR
+    CHANGED(civilContractDate(o)) OR
+    CHANGED(civilContractFrom(o)) OR
+    CHANGED(civilContractTo(o)) OR
+    CHANGED(civilContractSubject(o)) OR
+    CHANGED(civilContractAmount(o)) OR
+    CHANGED(civilContractStatus(o));
+@protectSecondaryOrganizationObject(civilContract, CivilContract, civilContractAccessOrganization);
+
+civilContractActAccessOrganization(CivilContractAct o) = civilContractOrganization(civilActContract(o));
+civilContractActSecondaryContentChanged(CivilContractAct o) =
+    CHANGED(civilActContract(o)) OR
+    CHANGED(civilActNumber(o)) OR
+    CHANGED(civilActDate(o)) OR
+    CHANGED(civilActGrossIncome(o)) OR
+    CHANGED(civilActStatus(o)) OR
+    CHANGED(civilActCalculatedAt(o)) OR
+    CHANGED(civilActApprovedAt(o)) OR
+    CHANGED(civilActPaymentDate(o)) OR
+    CHANGED(civilActPaymentReference(o)) OR
+    CHANGED(civilActPaidAt(o)) OR
+    CHANGED(civilActResident(o)) OR
+    CHANGED(civilActCategoryCodes(o)) OR
+    CHANGED(civilActAifc(o)) OR
+    CHANGED(civilActUnregisteredDivision(o)) OR
+    CHANGED(civilActOpvBase(o)) OR
+    CHANGED(civilActOpv(o)) OR
+    CHANGED(civilActVosmsBase(o)) OR
+    CHANGED(civilActVosms(o)) OR
+    CHANGED(civilActSoBase(o)) OR
+    CHANGED(civilActSo(o)) OR
+    CHANGED(civilActBasicDeduction(o)) OR
+    CHANGED(civilActSocialDeduction(o)) OR
+    CHANGED(civilActDeductionCodes(o)) OR
+    CHANGED(civilActTaxableIncome(o)) OR
+    CHANGED(civilActIpnThreshold(o)) OR
+    CHANGED(civilActIpnBaseRate(o)) OR
+    CHANGED(civilActIpnHighRate(o)) OR
+    CHANGED(civilActIpn(o)) OR
+    CHANGED(civilActPayable(o)) OR
+    CHANGED(civilActTaxLedgerEntry(o)) OR
+    CHANGED(civilActTaxReversalLedgerEntry(o));
+@protectSecondaryOrganizationObject(civilContractAct, CivilContractAct, civilContractActAccessOrganization);
+
+civilLiabilityDocumentAccessOrganization(CivilLiabilityDocument o) = civilContractOrganization(civilActContract(civilLiabilityAct(o)));
+civilLiabilityDocumentSecondaryContentChanged(CivilLiabilityDocument o) =
+    CHANGED(civilLiabilityAct(o)) OR
+    CHANGED(civilLiabilityNumber(o)) OR
+    CHANGED(civilLiabilityStatus(o)) OR
+    CHANGED(civilLiabilityGeneratedAt(o)) OR
+    CHANGED(civilLiabilityPaymentDate(o)) OR
+    CHANGED(civilLiabilityBankReference(o)) OR
+    CHANGED(civilLiabilityPaidAt(o));
+@protectSecondaryOrganizationObject(civilLiabilityDocument, CivilLiabilityDocument, civilLiabilityDocumentAccessOrganization);
+
+civilLiabilityLineAccessOrganization(CivilLiabilityLine o) = civilContractOrganization(civilActContract(civilLiabilityAct(civilLiabilityLineDocument(o))));
+civilLiabilityLineSecondaryContentChanged(CivilLiabilityLine o) =
+    CHANGED(civilLiabilityLineDocument(o)) OR
+    CHANGED(civilLiabilityLineKind(o)) OR
+    CHANGED(civilLiabilityLineEmployee(o)) OR
+    CHANGED(civilLiabilityLineIin(o)) OR
+    CHANGED(civilLiabilityLineLastName(o)) OR
+    CHANGED(civilLiabilityLineFirstName(o)) OR
+    CHANGED(civilLiabilityLineMiddleName(o)) OR
+    CHANGED(civilLiabilityLineBirthDate(o)) OR
+    CHANGED(civilLiabilityLinePeriod(o)) OR
+    CHANGED(civilLiabilityLineAmount(o)) OR
+    CHANGED(civilLiabilityLineDueDate(o)) OR
+    CHANGED(civilLiabilityLineLegalSource(o));
+@protectSecondaryOrganizationObject(civilLiabilityLine, CivilLiabilityLine, civilLiabilityLineAccessOrganization);
+
+payrollSettlementLineAccessOrganization(PayrollSettlementLine o) = payrollOrganization(settlementPayrollRun(o));
+payrollSettlementLineSecondaryContentChanged(PayrollSettlementLine o) =
+    CHANGED(settlementPayrollRun(o)) OR
+    CHANGED(settlementEmployee(o)) OR
+    CHANGED(settlementAccrued(o)) OR
+    CHANGED(settlementPayrollDeducted(o)) OR
+    CHANGED(settlementOpv(o)) OR
+    CHANGED(settlementOpvr(o)) OR
+    CHANGED(settlementSo(o)) OR
+    CHANGED(settlementVosms(o)) OR
+    CHANGED(settlementOosms(o)) OR
+    CHANGED(settlementIpn(o)) OR
+    CHANGED(settlementSocialTax(o)) OR
+    CHANGED(settlementEnforcement(o)) OR
+    CHANGED(settlementPayable(o)) OR
+    CHANGED(settlementClosedAt(o));
+@protectSecondaryOrganizationObject(payrollSettlementLine, PayrollSettlementLine, payrollSettlementLineAccessOrganization);
+
+paymentStatementAccessOrganization(PaymentStatement o) = payrollOrganization(paymentStatementPayrollRun(o));
+paymentStatementSecondaryContentChanged(PaymentStatement o) =
+    CHANGED(paymentStatementPayrollRun(o)) OR
+    CHANGED(paymentStatementNumber(o)) OR
+    CHANGED(paymentStatementDate(o)) OR
+    CHANGED(paymentStatementMethod(o)) OR
+    CHANGED(paymentStatementBankAccount(o)) OR
+    CHANGED(paymentStatementStatus(o)) OR
+    CHANGED(paymentStatementCalculatedAt(o)) OR
+    CHANGED(paymentStatementApprovedAt(o)) OR
+    CHANGED(paymentStatementPaidAt(o));
+@protectSecondaryOrganizationObject(paymentStatement, PaymentStatement, paymentStatementAccessOrganization);
+
+paymentStatementLineAccessOrganization(PaymentStatementLine o) = payrollOrganization(paymentStatementPayrollRun(paymentLineStatement(o)));
+paymentStatementLineSecondaryContentChanged(PaymentStatementLine o) =
+    CHANGED(paymentLineStatement(o)) OR
+    CHANGED(paymentLineSettlement(o)) OR
+    CHANGED(paymentLineAmountDue(o)) OR
+    CHANGED(paymentLineAmount(o));
+@protectSecondaryOrganizationObject(paymentStatementLine, PaymentStatementLine, paymentStatementLineAccessOrganization);
+
+salaryBankRegisterAccessOrganization(SalaryBankRegister o) = bankRegisterOrganization(o);
+salaryBankRegisterSecondaryContentChanged(SalaryBankRegister o) =
+    CHANGED(bankRegisterStatement(o)) OR
+    CHANGED(bankRegisterNumber(o)) OR
+    CHANGED(bankRegisterStatus(o)) OR
+    CHANGED(bankRegisterGeneratedAt(o)) OR
+    CHANGED(bankRegisterSentAt(o)) OR
+    CHANGED(bankRegisterAcceptedAt(o)) OR
+    CHANGED(bankRegisterExternalId(o)) OR
+    CHANGED(bankRegisterRejectionReason(o));
+@protectSecondaryOrganizationObject(salaryBankRegister, SalaryBankRegister, salaryBankRegisterAccessOrganization);
+
+salaryBankRegisterLineAccessOrganization(SalaryBankRegisterLine o) = bankRegisterOrganization(bankRegisterLineRegister(o));
+salaryBankRegisterLineSecondaryContentChanged(SalaryBankRegisterLine o) =
+    CHANGED(bankRegisterLineRegister(o)) OR
+    CHANGED(bankRegisterLinePayment(o)) OR
+    CHANGED(bankRegisterLineEmployee(o)) OR
+    CHANGED(bankRegisterLineIin(o)) OR
+    CHANGED(bankRegisterLineBankName(o)) OR
+    CHANGED(bankRegisterLineBic(o)) OR
+    CHANGED(bankRegisterLineIban(o)) OR
+    CHANGED(bankRegisterLineAmount(o)) OR
+    CHANGED(bankRegisterLinePurpose(o));
+@protectSecondaryOrganizationObject(salaryBankRegisterLine, SalaryBankRegisterLine, salaryBankRegisterLineAccessOrganization);
+
+payrollLiabilityDocumentAccessOrganization(PayrollLiabilityDocument o) = payrollOrganization(liabilityPayrollRun(o));
+payrollLiabilityDocumentSecondaryContentChanged(PayrollLiabilityDocument o) =
+    CHANGED(liabilityPayrollRun(o)) OR
+    CHANGED(liabilityNumber(o)) OR
+    CHANGED(liabilityStatus(o)) OR
+    CHANGED(liabilityCalculatedAt(o)) OR
+    CHANGED(liabilityPaymentDate(o)) OR
+    CHANGED(liabilityBankReference(o)) OR
+    CHANGED(liabilityPaidAt(o));
+@protectSecondaryOrganizationObject(payrollLiabilityDocument, PayrollLiabilityDocument, payrollLiabilityDocumentAccessOrganization);
+
+payrollLiabilityLineAccessOrganization(PayrollLiabilityLine o) = payrollOrganization(liabilityPayrollRun(liabilityLineDocument(o)));
+payrollLiabilityLineSecondaryContentChanged(PayrollLiabilityLine o) =
+    CHANGED(liabilityLineDocument(o)) OR
+    CHANGED(liabilityLineKind(o)) OR
+    CHANGED(liabilityLineAmount(o)) OR
+    CHANGED(liabilityLineDueDate(o)) OR
+    CHANGED(liabilityLineLegalSource(o));
+@protectSecondaryOrganizationObject(payrollLiabilityLine, PayrollLiabilityLine, payrollLiabilityLineAccessOrganization);
+
+socialPaymentProfileAccessOrganization(SocialPaymentProfile o) = socialProfileOrganization(o);
+socialPaymentProfileSecondaryContentChanged(SocialPaymentProfile o) =
+    CHANGED(socialProfileOrganization(o)) OR
+    CHANGED(socialProfileEmployee(o)) OR
+    CHANGED(socialProfileValidFrom(o)) OR
+    CHANGED(socialProfileValidTo(o)) OR
+    CHANGED(socialProfileOpvExempt(o)) OR
+    CHANGED(socialProfileOpvrExempt(o)) OR
+    CHANGED(socialProfileSoExempt(o)) OR
+    CHANGED(socialProfileVosmsExempt(o)) OR
+    CHANGED(socialProfileOosmsExempt(o)) OR
+    CHANGED(socialProfileBasis(o)) OR
+    CHANGED(socialProfileLegalSource(o));
+@protectSecondaryOrganizationObject(socialPaymentProfile, SocialPaymentProfile, socialPaymentProfileAccessOrganization);
+
+socialPaymentDocumentAccessOrganization(SocialPaymentDocument o) = payrollOrganization(socialPaymentPayrollRun(o));
+socialPaymentDocumentSecondaryContentChanged(SocialPaymentDocument o) =
+    CHANGED(socialPaymentPayrollRun(o)) OR
+    CHANGED(socialPaymentStatus(o)) OR
+    CHANGED(socialPaymentCalculatedAt(o)) OR
+    CHANGED(socialPaymentRegulatoryPack(o));
+@protectSecondaryOrganizationObject(socialPaymentDocument, SocialPaymentDocument, socialPaymentDocumentAccessOrganization);
+
+socialPaymentLineAccessOrganization(SocialPaymentLine o) = payrollOrganization(socialPaymentPayrollRun(socialPaymentDocument(o)));
+socialPaymentLineSecondaryContentChanged(SocialPaymentLine o) =
+    CHANGED(socialPaymentDocument(o)) OR
+    CHANGED(socialPaymentEmployee(o)) OR
+    CHANGED(socialPaymentMZP(o)) OR
+    CHANGED(opvGrossBase(o)) OR
+    CHANGED(opvMaximum(o)) OR
+    CHANGED(opvRate(o)) OR
+    CHANGED(opvExempt(o)) OR
+    CHANGED(opvBase(o)) OR
+    CHANGED(opvAmount(o)) OR
+    CHANGED(opvrGrossBase(o)) OR
+    CHANGED(opvrMinimum(o)) OR
+    CHANGED(opvrMaximum(o)) OR
+    CHANGED(opvrRate(o)) OR
+    CHANGED(opvrExempt(o)) OR
+    CHANGED(opvrBase(o)) OR
+    CHANGED(opvrAmount(o)) OR
+    CHANGED(soGrossBase(o)) OR
+    CHANGED(soIncomeAfterOpv(o)) OR
+    CHANGED(soMinimum(o)) OR
+    CHANGED(soMaximum(o)) OR
+    CHANGED(soRate(o)) OR
+    CHANGED(soExempt(o)) OR
+    CHANGED(soBase(o)) OR
+    CHANGED(soAmount(o)) OR
+    CHANGED(vosmsGrossBase(o)) OR
+    CHANGED(vosmsMaximum(o)) OR
+    CHANGED(vosmsRate(o)) OR
+    CHANGED(vosmsExempt(o)) OR
+    CHANGED(vosmsBase(o)) OR
+    CHANGED(vosmsAmount(o)) OR
+    CHANGED(oosmsGrossBase(o)) OR
+    CHANGED(oosmsMaximum(o)) OR
+    CHANGED(oosmsRate(o)) OR
+    CHANGED(oosmsExempt(o)) OR
+    CHANGED(oosmsBase(o)) OR
+    CHANGED(oosmsAmount(o));
+@protectSecondaryOrganizationObject(socialPaymentLine, SocialPaymentLine, socialPaymentLineAccessOrganization);
+
+employeeTaxProfileAccessOrganization(EmployeeTaxProfile o) = taxProfileOrganization(o);
+employeeTaxProfileSecondaryContentChanged(EmployeeTaxProfile o) =
+    CHANGED(taxProfileOrganization(o)) OR
+    CHANGED(taxProfileEmployee(o)) OR
+    CHANGED(taxProfileValidFrom(o)) OR
+    CHANGED(taxProfileValidTo(o)) OR
+    CHANGED(taxProfileResident(o)) OR
+    CHANGED(taxProfileIncomeStatus(o)) OR
+    CHANGED(taxProfileCategoryCodes(o)) OR
+    CHANGED(taxProfileAifc(o)) OR
+    CHANGED(taxProfileUnregisteredDivision(o)) OR
+    CHANGED(taxProfileBasicDeduction(o)) OR
+    CHANGED(taxProfileSocialDeduction(o)) OR
+    CHANGED(taxProfileBasis(o)) OR
+    CHANGED(taxProfileLegalSource(o));
+@protectSecondaryOrganizationObject(employeeTaxProfile, EmployeeTaxProfile, employeeTaxProfileAccessOrganization);
+
+organizationTaxProfileAccessOrganization(OrganizationTaxProfile o) = organizationTaxProfileOrganization(o);
+organizationTaxProfileSecondaryContentChanged(OrganizationTaxProfile o) =
+    CHANGED(organizationTaxProfileOrganization(o)) OR
+    CHANGED(organizationTaxProfileValidFrom(o)) OR
+    CHANGED(organizationTaxProfileValidTo(o)) OR
+    CHANGED(organizationTaxProfileSocialTaxExempt(o)) OR
+    CHANGED(organizationTaxProfileSocialTaxRate(o)) OR
+    CHANGED(organizationTaxProfileBasis(o)) OR
+    CHANGED(organizationTaxProfileLegalSource(o));
+@protectSecondaryOrganizationObject(organizationTaxProfile, OrganizationTaxProfile, organizationTaxProfileAccessOrganization);
+
+taxCalculationDocumentAccessOrganization(TaxCalculationDocument o) = payrollOrganization(taxCalculationPayrollRun(o));
+taxCalculationDocumentSecondaryContentChanged(TaxCalculationDocument o) =
+    CHANGED(taxCalculationPayrollRun(o)) OR
+    CHANGED(taxCalculationSocialPayments(o)) OR
+    CHANGED(taxCalculationStatus(o)) OR
+    CHANGED(taxCalculationCalculatedAt(o)) OR
+    CHANGED(taxCalculationRegulatoryPack(o));
+@protectSecondaryOrganizationObject(taxCalculationDocument, TaxCalculationDocument, taxCalculationDocumentAccessOrganization);
+
+taxCalculationLineAccessOrganization(TaxCalculationLine o) = payrollOrganization(taxCalculationPayrollRun(taxCalculationDocument(o)));
+taxCalculationLineSecondaryContentChanged(TaxCalculationLine o) =
+    CHANGED(taxCalculationLedgerEntry(o)) OR
+    CHANGED(taxCalculationReversalLedgerEntry(o)) OR
+    CHANGED(taxCalculationDocument(o)) OR
+    CHANGED(taxCalculationEmployee(o)) OR
+    CHANGED(taxCalculationResident(o)) OR
+    CHANGED(taxCalculationIncomeStatus(o)) OR
+    CHANGED(taxCalculationCategoryCodes(o)) OR
+    CHANGED(taxCalculationAifc(o)) OR
+    CHANGED(taxCalculationUnregisteredDivision(o)) OR
+    CHANGED(taxCalculationDeductionCodes(o)) OR
+    CHANGED(ipnBasicDeduction(o)) OR
+    CHANGED(ipnSocialDeduction(o)) OR
+    CHANGED(ipnTaxableIncome(o)) OR
+    CHANGED(ipnAmount(o)) OR
+    CHANGED(socialTaxAmount(o));
+@protectSecondaryOrganizationObject(taxCalculationLine, TaxCalculationLine, taxCalculationLineAccessOrganization);
+
+personalTaxLedgerEntryAccessOrganization(PersonalTaxLedgerEntry o) = taxLedgerOrganization(o);
+personalTaxLedgerEntrySecondaryContentChanged(PersonalTaxLedgerEntry o) =
+    CHANGED(taxLedgerOrganization(o)) OR
+    CHANGED(taxLedgerEmployee(o)) OR
+    CHANGED(taxLedgerDate(o)) OR
+    CHANGED(taxLedgerBasicDeduction(o)) OR
+    CHANGED(taxLedgerSocialDeduction(o)) OR
+    CHANGED(taxLedgerTaxableIncome(o)) OR
+    CHANGED(taxLedgerIpn(o)) OR
+    CHANGED(taxLedgerReversalOf(o));
+@protectSecondaryOrganizationObject(personalTaxLedgerEntry, PersonalTaxLedgerEntry, personalTaxLedgerEntryAccessOrganization);
+
+socialTransferRegisterAccessOrganization(SocialTransferRegister o) = socialTransferOrganization(o);
+socialTransferRegisterSecondaryContentChanged(SocialTransferRegister o) =
+    CHANGED(socialTransferLiabilityDocument(o)) OR
+    CHANGED(socialTransferKind(o)) OR
+    CHANGED(socialTransferNumber(o)) OR
+    CHANGED(socialTransferPeriod(o)) OR
+    CHANGED(socialTransferStatus(o)) OR
+    CHANGED(socialTransferGeneratedAt(o)) OR
+    CHANGED(socialTransferApprovedAt(o)) OR
+    CHANGED(socialTransferSentAt(o)) OR
+    CHANGED(socialTransferAcceptedAt(o)) OR
+    CHANGED(socialTransferExternalId(o)) OR
+    CHANGED(socialTransferRejectionReason(o));
+@protectSecondaryOrganizationObject(socialTransferRegister, SocialTransferRegister, socialTransferRegisterAccessOrganization);
+
+socialTransferRegisterLineAccessOrganization(SocialTransferRegisterLine o) = socialTransferOrganization(socialTransferLineRegister(o));
+socialTransferRegisterLineSecondaryContentChanged(SocialTransferRegisterLine o) =
+    CHANGED(socialTransferLineRegister(o)) OR
+    CHANGED(socialTransferLineSettlement(o)) OR
+    CHANGED(socialTransferLineEmployee(o)) OR
+    CHANGED(socialTransferLineIin(o)) OR
+    CHANGED(socialTransferLineLastName(o)) OR
+    CHANGED(socialTransferLineFirstName(o)) OR
+    CHANGED(socialTransferLineMiddleName(o)) OR
+    CHANGED(socialTransferLineBirthDate(o)) OR
+    CHANGED(socialTransferLinePeriod(o)) OR
+    CHANGED(socialTransferLineAmount(o));
+@protectSecondaryOrganizationObject(socialTransferRegisterLine, SocialTransferRegisterLine, socialTransferRegisterLineAccessOrganization);
+
+form200DeclarationAccessOrganization(Form200Declaration o) = form200Organization(o);
+form200DeclarationSecondaryContentChanged(Form200Declaration o) =
+    CHANGED(form200Organization(o)) OR
+    CHANGED(form200PeriodStart(o)) OR
+    CHANGED(form200Kind(o)) OR
+    CHANGED(form200CorrectionNumber(o)) OR
+    CHANGED(form200Version(o)) OR
+    CHANGED(form200Status(o)) OR
+    CHANGED(form200CalculatedAt(o)) OR
+    CHANGED(form200ApprovedAt(o)) OR
+    CHANGED(form200SubmittedAt(o)) OR
+    CHANGED(form200AcceptedAt(o)) OR
+    CHANGED(form200ExternalId(o)) OR
+    CHANGED(form200ReceiptNumber(o)) OR
+    CHANGED(form200RejectionReason(o)) OR
+    CHANGED(form20005GeneratedAt(o));
+@protectSecondaryOrganizationObject(form200Declaration, Form200Declaration, form200DeclarationAccessOrganization);
+
+form200MonthLineAccessOrganization(Form200MonthLine o) = form200Organization(form200LineDeclaration(o));
+form200MonthLineSecondaryContentChanged(Form200MonthLine o) =
+    CHANGED(form200LineDeclaration(o)) OR
+    CHANGED(form200LineQuarterMonth(o)) OR
+    CHANGED(form200LineMonth(o)) OR
+    CHANGED(form200LineEmployeeCount(o)) OR
+    CHANGED(form200LineAccruedIncome(o)) OR
+    CHANGED(form200LineCalculatedIpn(o)) OR
+    CHANGED(form200LinePaidIncome(o)) OR
+    CHANGED(form200LineTaxableIncome(o)) OR
+    CHANGED(form200LineOpvBase(o)) OR
+    CHANGED(form200LineOpvrBase(o)) OR
+    CHANGED(form200LineSocialTaxBase(o)) OR
+    CHANGED(form200LineSoBase(o)) OR
+    CHANGED(form200LineOosmsBase(o)) OR
+    CHANGED(form200LineVosmsBase(o)) OR
+    CHANGED(form200LineIpn(o)) OR
+    CHANGED(form200LineOpv(o)) OR
+    CHANGED(form200LineSocialTax(o)) OR
+    CHANGED(form200LineSo(o)) OR
+    CHANGED(form200LineOosms(o)) OR
+    CHANGED(form200LineVosms(o)) OR
+    CHANGED(form200LineOpvr(o));
+@protectSecondaryOrganizationObject(form200MonthLine, Form200MonthLine, form200MonthLineAccessOrganization);
+
+form20005LineAccessOrganization(Form20005Line o) = form200Organization(form20005LineDeclaration(o));
+form20005LineSecondaryContentChanged(Form20005Line o) =
+    CHANGED(form20005LineDeclaration(o)) OR
+    CHANGED(form20005LineEmployee(o)) OR
+    CHANGED(form20005LineNumber(o)) OR
+    CHANGED(form20005LineName(o)) OR
+    CHANGED(form20005LineIin(o)) OR
+    CHANGED(form20005LineIncomeStatus(o)) OR
+    CHANGED(form20005LineCategory(o)) OR
+    CHANGED(form20005LineAifc(o)) OR
+    CHANGED(form20005LineUnregisteredDivision(o)) OR
+    CHANGED(form20005LineAccruedIncome(o)) OR
+    CHANGED(form20005LineIncomeReduction(o)) OR
+    CHANGED(form20005LineOpvCalculated(o)) OR
+    CHANGED(form20005LineVosmsCalculated(o)) OR
+    CHANGED(form20005LineTaxDeductionCodes(o)) OR
+    CHANGED(form20005LineTaxDeduction(o)) OR
+    CHANGED(form20005LineIpnCalculated(o)) OR
+    CHANGED(form20005LineUnpaidIncome(o)) OR
+    CHANGED(form20005LinePaidIncome(o)) OR
+    CHANGED(form20005LineIpnPayable(o)) OR
+    CHANGED(form20005LineOpvPayable(o)) OR
+    CHANGED(form20005LineVosmsPayable(o)) OR
+    CHANGED(form20005LineSocialTaxIncome(o)) OR
+    CHANGED(form20005LineSocialTaxCalculated(o)) OR
+    CHANGED(form20005LineSo(o)) OR
+    CHANGED(form20005LineSocialTaxPayable(o)) OR
+    CHANGED(form20005LineOppv(o)) OR
+    CHANGED(form20005LineOosms(o)) OR
+    CHANGED(form20005LineOpvr(o)) OR
+    CHANGED(form20005LineCountryCode(o));
+@protectSecondaryOrganizationObject(form20005Line, Form20005Line, form20005LineAccessOrganization);

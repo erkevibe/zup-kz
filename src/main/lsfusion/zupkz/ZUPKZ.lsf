@@ -11,7 +11,7 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         PayrollEnforcement, PayrollSettlement, PayrollPayments,
         PayrollCivilContractPayments,
         TaxesKZSocialTransferRegisters, ReportsKZForm200, ReportsKZForm20005,
-        KZAccessControl;
+        KZAccessControl, KZOrganizationAccessSecondary;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {

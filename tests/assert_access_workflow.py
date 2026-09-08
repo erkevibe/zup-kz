@@ -34,6 +34,12 @@ assert actual["hiddenDepartmentOwnerPreserved"] is True
 assert actual["hiddenDraftPreserved"] is True
 assert actual["hiddenPayrollPreserved"] is True
 assert actual["hiddenDeletePreserved"] is True
+assert actual["hiddenArchiveDocumentPreserved"] is True
+assert actual["hiddenArchiveOwnerPreserved"] is True
+assert actual["hiddenNoticeDeletePreserved"] is True
+assert actual["hiddenEnforcementPreserved"] is True
+assert actual["hiddenPaymentPreserved"] is True
+assert actual["hiddenReportPreserved"] is True
 assert actual["employeeIinFormatRejected"] is True
 assert actual["organizationBinFormatRejected"] is True
 assert actual["bankDetailsFormatRejected"] is True
