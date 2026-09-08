@@ -1,6 +1,6 @@
 MODULE PayrollClosureWorkflowTest;
 
-REQUIRE PayrollFormulaTest;
+REQUIRE PayrollFormulaTest, PayrollMonthWorkplace;
 NAMESPACE ZUPKZ;
 
 payrollLifecycleEntryCount(PayrollRun run) = GROUP SUM 1 IF
@@ -90,7 +90,8 @@ payrollClosureWorkflowTest() {
                                                             PayrollRunStatus.approved AND
                                                             payrollLifecycleEntryCount(run) == 3,
                                                         blockedReasonPreserved = payrollReopenReason(run) ==
-                                                            'Недопустимая отмена после ведомости';
+                                                            'Недопустимая отмена после ведомости',
+                                                        workplaceNextStep = payrollWorkplaceNextStep(run);
                                                 }
                                             }
                                         }

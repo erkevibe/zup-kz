@@ -12,4 +12,5 @@ assert actual == {
     "lifecycleEntryCount": 3,
     "paymentBlocksReopen": True,
     "blockedReasonPreserved": True,
+    "workplaceNextStep": "Утвердите ведомость выплаты",
 }

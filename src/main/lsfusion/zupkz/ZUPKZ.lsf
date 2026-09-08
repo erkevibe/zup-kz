@@ -11,7 +11,7 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         PayrollEnforcement, PayrollSettlement, PayrollPayments,
         PayrollCivilContractPayments,
         TaxesKZSocialTransferRegisters, ReportsKZForm200, ReportsKZForm20005,
-        KZAccessControl, KZOrganizationAccessSecondary;
+        KZAccessControl, KZOrganizationAccessSecondary, PayrollMonthWorkplace;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -83,10 +83,7 @@ NAVIGATOR {
             NEW calculationBaseRules;
         }
         NEW FOLDER payrollPeriod 'Расчёт за период' {
-            NEW payrollRuns;
-            NEW payrollTimeSummaries;
-            NEW payrollInputs;
-            NEW payrollLines;
+            NEW payrollMonthWorkplace;
         }
         NEW FOLDER payrollAverage 'Средний заработок и перерасчёты' {
             NEW averageEarningsDocuments;
