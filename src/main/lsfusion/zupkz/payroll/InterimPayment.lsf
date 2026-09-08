@@ -84,7 +84,7 @@ cancelLeave 'Отменить отпуск' (LeaveDocument l) {
         leaveCancelledBy(l) <- currentUser() AS CustomUser;
         APPLY;
     }
-}
+} CONFIRM;
 
 EXTEND FORM leaveDocuments
     PROPERTIES(l) cancelLeave
@@ -113,7 +113,7 @@ cancelSickLeave 'Отменить больничный' (SickLeaveDocument d) {
         sickLeaveCancelledBy(d) <- currentUser() AS CustomUser;
         APPLY;
     }
-}
+} CONFIRM;
 
 EXTEND FORM sickLeaveDocuments
     PROPERTIES(d) cancelSickLeave

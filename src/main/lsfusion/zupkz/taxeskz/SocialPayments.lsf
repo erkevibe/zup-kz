@@ -308,7 +308,7 @@ cancelSocialPayments 'Отменить' (SocialPaymentDocument d) {
         cancelSocialPaymentsSnapshot(d);
         APPLY;
     }
-}
+} CONFIRM;
 
 approveSocialPayments 'Утвердить' (SocialPaymentDocument d) {
     IF socialPaymentStatus(d) == SocialPaymentStatus.calculated THEN {

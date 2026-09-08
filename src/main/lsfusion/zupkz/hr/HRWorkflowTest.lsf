@@ -9,6 +9,12 @@ hrWorkflowTest() {
         NEW firstStaff = StaffPosition {
             staffCode(firstStaff) <- 'HR-TEST-1';
             organization(firstStaff) <- org;
+            NEW firstPosition = Position {
+                code(firstPosition) <- 'HR-POSITION-1';
+                name(firstPosition) <- 'Исходная должность';
+                organization(firstPosition) <- org;
+                position(firstStaff) <- firstPosition;
+            }
             validFrom(firstStaff) <- 2026_01_01;
             plannedFTE(firstStaff) <- 1.0000;
             salaryMin(firstStaff) <- 100000.00;
@@ -16,6 +22,12 @@ hrWorkflowTest() {
             NEW secondStaff = StaffPosition {
                 staffCode(secondStaff) <- 'HR-TEST-2';
                 organization(secondStaff) <- org;
+                NEW secondPosition = Position {
+                    code(secondPosition) <- 'HR-POSITION-2';
+                    name(secondPosition) <- 'Должность после перевода';
+                    organization(secondPosition) <- org;
+                    position(secondStaff) <- secondPosition;
+                }
                 validFrom(secondStaff) <- 2026_01_01;
                 plannedFTE(secondStaff) <- 1.0000;
                 salaryMin(secondStaff) <- 150000.00;
@@ -27,6 +39,7 @@ hrWorkflowTest() {
                     NEW contract = Employment {
                         employee(contract) <- worker;
                         organization(contract) <- org;
+                        contractNumber(contract) <- 'HR-WORKFLOW-GUARD';
                         NEW hire = PersonnelEvent {
                             eventKind(hire) <- PersonnelEventKind.hire;
                             eventEmployment(hire) <- contract;
@@ -119,4 +132,22 @@ hrWorkflowTest() {
             }
         }
     }
+}
+
+hrWorkflowContract() = GROUP LAST Employment e
+    IF contractNumber(e) == 'HR-WORKFLOW-GUARD' ORDER e;
+
+employmentLegacyFieldsGuardTest() {
+    salary(hrWorkflowContract()) <- 1.00;
+    APPLY;
+    EXPORT JSON FROM employmentLegacyFieldsRejected = canceled();
+}
+
+employmentSourceOfTruthVerificationTest() {
+    EXPORT JSON FROM
+        employmentLegacySalaryPreserved = NOT salary(hrWorkflowContract()),
+        employmentCurrentSalaryResult = employmentSalary(hrWorkflowContract()),
+        employmentCurrentPositionFromAssignment =
+            employmentPositionName(hrWorkflowContract()) ==
+                name(position(staffPosition(lastAssignment(hrWorkflowContract()))));
 }

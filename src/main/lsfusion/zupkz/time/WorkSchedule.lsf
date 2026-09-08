@@ -52,6 +52,21 @@ CONSTRAINT breakMinutes(ShiftTemplate s) < 0 OR plannedHours(s) < 0 OR
 CONSTRAINT plannedNightHours(ShiftTemplate s) > plannedHours(s)
     MESSAGE 'Ночные часы не могут превышать продолжительность смены';
 
+shiftDurationSeconds(ShiftTemplate s) =
+    IF shiftEndTime(s) >= shiftStartTime(s) THEN
+        subtractSeconds(shiftStartTime(s), shiftEndTime(s))
+    ELSE
+        86400 + subtractSeconds(shiftStartTime(s), shiftEndTime(s));
+shiftAvailableMinutes(ShiftTemplate s) =
+    shiftDurationSeconds(s) / 60.00 - (IF breakMinutes(s) THEN breakMinutes(s) ELSE 0);
+shiftPlannedMinutesDifference(ShiftTemplate s) =
+    plannedHours(s) * 60.00 - shiftAvailableMinutes(s);
+
+CONSTRAINT shiftStartTime(ShiftTemplate s) AND shiftEndTime(s) AND plannedHours(s) AND
+           (shiftPlannedMinutesDifference(s) > 1.00 OR
+            shiftPlannedMinutesDifference(s) < -1.00)
+    MESSAGE 'Плановые часы не совпадают с длительностью смены за вычетом перерыва';
+
 CLASS ScheduleCycleDay 'День цикла графика';
 
 cycleSchedule 'График' = DATA WorkSchedule (ScheduleCycleDay);
@@ -71,6 +86,20 @@ CONSTRAINT cycleShift(ScheduleCycleDay d) AND cycleSchedule(d) AND
     MESSAGE 'Смена должна принадлежать тому же графику, что и день цикла';
 CONSTRAINT cycleShift(ScheduleCycleDay d) AND cycleDayOff(d)
     MESSAGE 'День цикла не может одновременно быть сменой и выходным';
+CONSTRAINT cycleSchedule(ScheduleCycleDay d) AND cycleDayNumber(d) AND
+           NOT cycleShift(d) AND NOT cycleDayOff(d)
+    MESSAGE 'Для дня цикла выберите смену или отметьте выходной';
+CONSTRAINT cycleShift(ScheduleCycleDay d) AND
+           (NOT shiftStartTime(cycleShift(d)) OR NOT shiftEndTime(cycleShift(d)) OR
+            NOT plannedHours(cycleShift(d)))
+    MESSAGE 'В смене дня цикла заполните начало, окончание и плановые часы';
+
+cycleLength(WorkSchedule schedule) =
+    GROUP MAX cycleDayNumber(ScheduleCycleDay d) BY cycleSchedule(d);
+cycleDayCount(WorkSchedule schedule) = GROUP SUM 1 IF
+    cycleSchedule(ScheduleCycleDay d) == schedule AND cycleDayNumber(d);
+CONSTRAINT cycleLength(WorkSchedule s) AND cycleDayCount(s) != cycleLength(s)
+    MESSAGE 'Номера дней цикла должны идти подряд, начиная с 1';
 
 CLASS EmployeeScheduleAssignment 'Назначение графика сотруднику';
 
@@ -82,6 +111,14 @@ cycleStartDate 'Начало цикла' = DATA DATE (EmployeeScheduleAssignment
 
 CONSTRAINT employeeScheduleTo(EmployeeScheduleAssignment a) < employeeScheduleFrom(a)
     MESSAGE 'Дата окончания назначения графика не может быть раньше даты начала';
+CONSTRAINT (scheduleEmploymentAssignment(EmployeeScheduleAssignment a) OR
+            employeeWorkSchedule(a) OR employeeScheduleFrom(a) OR
+            employeeScheduleTo(a) OR cycleStartDate(a)) AND
+           (NOT scheduleEmploymentAssignment(a) OR NOT employeeWorkSchedule(a) OR
+            NOT employeeScheduleFrom(a) OR NOT cycleStartDate(a))
+    MESSAGE 'В назначении графика заполните назначение сотрудника, график, дату начала и начало цикла';
+CONSTRAINT cycleStartDate(EmployeeScheduleAssignment a) > employeeScheduleFrom(a)
+    MESSAGE 'Начало цикла не может быть позже начала назначения графика';
 overlappingEmployeeScheduleCount(EmployeeScheduleAssignment a) = GROUP SUM 1 IF
     scheduleEmploymentAssignment(EmployeeScheduleAssignment other) ==
         scheduleEmploymentAssignment(a) AND
@@ -148,9 +185,6 @@ employeeScheduleAssignmentOn(EmploymentAssignment assignment, DATE date) =
 
 workScheduleOn(EmploymentAssignment assignment, DATE date) =
     employeeWorkSchedule(employeeScheduleAssignmentOn(assignment, date));
-
-cycleLength(WorkSchedule schedule) =
-    GROUP MAX cycleDayNumber(ScheduleCycleDay d) BY cycleSchedule(d);
 
 cycleDayByNumber(WorkSchedule schedule, INTEGER number) =
     GROUP AGGR ScheduleCycleDay d BY cycleSchedule(d), cycleDayNumber(d);

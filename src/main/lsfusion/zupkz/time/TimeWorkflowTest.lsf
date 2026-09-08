@@ -114,6 +114,7 @@ scheduleOverlapGuardTest() {
                             employeeWorkSchedule(original) <- schedule;
                             employeeScheduleFrom(original) <- 2026_01_01;
                             employeeScheduleTo(original) <- 2026_06_30;
+                            cycleStartDate(original) <- 2026_01_01;
                         }
                         APPLY;
                         NEW overlap = EmployeeScheduleAssignment {
@@ -121,6 +122,7 @@ scheduleOverlapGuardTest() {
                             employeeWorkSchedule(overlap) <- schedule;
                             employeeScheduleFrom(overlap) <- 2026_06_30;
                             employeeScheduleTo(overlap) <- 2026_12_31;
+                            cycleStartDate(overlap) <- 2026_01_01;
                         }
                         APPLY;
                         EXPORT JSON FROM scheduleOverlapRejected = canceled();
@@ -147,6 +149,9 @@ scheduleCycleOwnershipGuardTest() {
                 NEW shift = ShiftTemplate {
                     shiftSchedule(shift) <- secondSchedule;
                     shiftCode(shift) <- 'FOREIGN-SHIFT';
+                    shiftStartTime(shift) <- 09:00;
+                    shiftEndTime(shift) <- 17:00;
+                    plannedHours(shift) <- 8.00;
                     NEW day = ScheduleCycleDay {
                         cycleSchedule(day) <- firstSchedule;
                         cycleDayNumber(day) <- 1;
@@ -169,6 +174,9 @@ scheduleCycleDayOffGuardTest() {
             NEW shift = ShiftTemplate {
                 shiftSchedule(shift) <- schedule;
                 shiftCode(shift) <- 'DAY-SHIFT';
+                shiftStartTime(shift) <- 09:00;
+                shiftEndTime(shift) <- 17:00;
+                plannedHours(shift) <- 8.00;
                 NEW day = ScheduleCycleDay {
                     cycleSchedule(day) <- schedule;
                     cycleDayNumber(day) <- 1;
@@ -191,10 +199,12 @@ scheduleCycleDuplicateDayGuardTest() {
             NEW firstDay = ScheduleCycleDay {
                 cycleSchedule(firstDay) <- schedule;
                 cycleDayNumber(firstDay) <- 1;
+                cycleDayOff(firstDay) <- TRUE;
             }
             NEW secondDay = ScheduleCycleDay {
                 cycleSchedule(secondDay) <- schedule;
                 cycleDayNumber(secondDay) <- 1;
+                cycleDayOff(secondDay) <- TRUE;
             }
         }
     }
@@ -225,6 +235,7 @@ scheduleOrganizationGuardTest() {
                                 scheduleEmploymentAssignment(scheduleAssignment) <- assignment;
                                 employeeWorkSchedule(scheduleAssignment) <- schedule;
                                 employeeScheduleFrom(scheduleAssignment) <- 2026_01_01;
+                                cycleStartDate(scheduleAssignment) <- 2026_01_01;
                             }
                         }
                     }
@@ -259,6 +270,7 @@ scheduleEmploymentPeriodGuardTest() {
                             employeeWorkSchedule(scheduleAssignment) <- schedule;
                             employeeScheduleFrom(scheduleAssignment) <- 2026_01_01;
                             employeeScheduleTo(scheduleAssignment) <- 2026_12_31;
+                            cycleStartDate(scheduleAssignment) <- 2026_01_01;
                         }
                     }
                 }
@@ -294,6 +306,7 @@ scheduleValidityPeriodGuardTest() {
                             employeeWorkSchedule(scheduleAssignment) <- schedule;
                             employeeScheduleFrom(scheduleAssignment) <- 2026_01_01;
                             employeeScheduleTo(scheduleAssignment) <- 2026_12_31;
+                            cycleStartDate(scheduleAssignment) <- 2026_01_01;
                         }
                     }
                 }
@@ -302,4 +315,119 @@ scheduleValidityPeriodGuardTest() {
     }
     APPLY;
     EXPORT JSON FROM scheduleValidityPeriodRejected = canceled();
+}
+
+scheduleCycleGapGuardTest() {
+    NEW org = Organization {
+        bin(org) <- '666666666675';
+        NEW schedule = WorkSchedule {
+            scheduleOrganization(schedule) <- org;
+            scheduleCode(schedule) <- 'CYCLE-GAP';
+            NEW firstDay = ScheduleCycleDay {
+                cycleSchedule(firstDay) <- schedule;
+                cycleDayNumber(firstDay) <- 1;
+                cycleDayOff(firstDay) <- TRUE;
+            }
+            NEW thirdDay = ScheduleCycleDay {
+                cycleSchedule(thirdDay) <- schedule;
+                cycleDayNumber(thirdDay) <- 3;
+                cycleDayOff(thirdDay) <- TRUE;
+            }
+        }
+    }
+    APPLY;
+    EXPORT JSON FROM scheduleCycleGapRejected = canceled();
+}
+
+scheduleCycleStartRequiredGuardTest() {
+    NEW org = Organization {
+        bin(org) <- '666666666676';
+        NEW worker = Employee {
+            iin(worker) <- '940404300009';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    NEW schedule = WorkSchedule {
+                        scheduleOrganization(schedule) <- org;
+                        NEW scheduleAssignment = EmployeeScheduleAssignment {
+                            scheduleEmploymentAssignment(scheduleAssignment) <- assignment;
+                            employeeWorkSchedule(scheduleAssignment) <- schedule;
+                            employeeScheduleFrom(scheduleAssignment) <- 2026_01_01;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    APPLY;
+    EXPORT JSON FROM scheduleCycleStartRequiredRejected = canceled();
+}
+
+scheduleCycleStartAfterAssignmentGuardTest() {
+    NEW org = Organization {
+        bin(org) <- '666666666677';
+        NEW worker = Employee {
+            iin(worker) <- '940404300010';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    NEW schedule = WorkSchedule {
+                        scheduleOrganization(schedule) <- org;
+                        NEW scheduleAssignment = EmployeeScheduleAssignment {
+                            scheduleEmploymentAssignment(scheduleAssignment) <- assignment;
+                            employeeWorkSchedule(scheduleAssignment) <- schedule;
+                            employeeScheduleFrom(scheduleAssignment) <- 2026_01_01;
+                            cycleStartDate(scheduleAssignment) <- 2026_01_02;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    APPLY;
+    EXPORT JSON FROM scheduleCycleStartAfterAssignmentRejected = canceled();
+}
+
+shiftPlannedHoursGuardTest() {
+    NEW org = Organization {
+        bin(org) <- '666666666678';
+        NEW schedule = WorkSchedule {
+            scheduleOrganization(schedule) <- org;
+            NEW shift = ShiftTemplate {
+                shiftSchedule(shift) <- schedule;
+                shiftStartTime(shift) <- 09:00;
+                shiftEndTime(shift) <- 17:00;
+                breakMinutes(shift) <- 60;
+                plannedHours(shift) <- 8.00;
+            }
+        }
+    }
+    APPLY;
+    EXPORT JSON FROM shiftPlannedHoursRejected = canceled();
+}
+
+overnightShiftDurationTest() {
+    NEW org = Organization {
+        bin(org) <- '666666666679';
+        NEW schedule = WorkSchedule {
+            scheduleOrganization(schedule) <- org;
+            NEW shift = ShiftTemplate {
+                shiftSchedule(shift) <- schedule;
+                shiftStartTime(shift) <- 22:00;
+                shiftEndTime(shift) <- 06:00;
+                breakMinutes(shift) <- 60;
+                plannedHours(shift) <- 7.00;
+                APPLY;
+                EXPORT JSON FROM
+                    overnightShiftAccepted = NOT canceled(),
+                    overnightAvailableMinutes = shiftAvailableMinutes(shift);
+            }
+        }
+    }
 }

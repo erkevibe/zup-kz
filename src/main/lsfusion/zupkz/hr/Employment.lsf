@@ -20,6 +20,7 @@ CLASS Employment 'Трудовой договор';
 
 employee 'Сотрудник' = DATA Employee (Employment);
 organization 'Организация' = DATA Organization (Employment);
+// Legacy compatibility fields. New UI and calculations use EmploymentAssignment.
 department 'Подразделение' = DATA Department (Employment);
 position 'Должность' = DATA Position (Employment);
 hireDate 'Дата приёма' = DATA DATE (Employment);
@@ -34,8 +35,6 @@ salary 'Оклад' = DATA NUMERIC[16,2] (Employment);
 
 employmentEmployeeName 'Ф.И.О.' (Employment e) = employeeFullName(employee(e));
 employmentOrganizationName 'Организация (название)' (Employment e) = name(organization(e));
-employmentDepartmentName 'Подразделение (название)' (Employment e) = name(department(e));
-employmentPositionName 'Должность (название)' (Employment e) = name(position(e));
 
 CONSTRAINT contractEndDate(Employment e) < hireDate(e)
     MESSAGE 'Дата окончания договора не может быть раньше даты приёма';
@@ -83,6 +82,24 @@ activeAssignmentOn(Employment contract, DATE date) = GROUP LAST EmploymentAssign
     ORDER assignmentFrom(a), a;
 assignmentCount(Employment contract) = GROUP SUM 1 IF
     employment(EmploymentAssignment a) == contract;
+lastAssignment(Employment contract) = GROUP LAST EmploymentAssignment a
+    IF employment(a) == contract ORDER assignmentFrom(a), a;
+displayAssignment(Employment contract) =
+    IF activeAssignmentOn(contract, currentDate()) THEN activeAssignmentOn(contract, currentDate())
+    ELSE lastAssignment(contract);
+employmentDepartmentName 'Подразделение (название)' (Employment e) =
+    IF displayAssignment(e) THEN name(department(staffPosition(displayAssignment(e))))
+    ELSE name(department(e));
+employmentPositionName 'Должность (название)' (Employment e) =
+    IF displayAssignment(e) THEN name(position(staffPosition(displayAssignment(e))))
+    ELSE name(position(e));
+employmentSalary 'Текущий оклад' (Employment e) =
+    IF assignmentSalary(displayAssignment(e)) THEN assignmentSalary(displayAssignment(e))
+    ELSE salary(e);
+
+CONSTRAINT PREV(assignmentCount(Employment e)) AND
+           (CHANGED(department(e)) OR CHANGED(position(e)) OR CHANGED(salary(e)))
+    MESSAGE 'Подразделение, должность и оклад изменяются только кадровым назначением';
 
 CLASS PersonnelEventKind 'Вид кадрового события' {
     hire 'Приём',
@@ -264,7 +281,7 @@ cancelPersonnelEvent 'Отменить' (PersonnelEvent e) {
         eventCancelledAt(e) <- currentDateTime();
         APPLY;
     }
-}
+} CONFIRM;
 
 submitPersonnelEventEsutd 'Передать в ЕСУТД' (PersonnelEvent e) {
     IF eventStatus(e) != PersonnelEventStatus.posted THEN
@@ -361,10 +378,10 @@ prepareTerminationEvent 'Подготовить увольнение' (Employmen
 FORM employments 'Трудовые договоры'
     OBJECTS e = Employment
     PROPERTIES(e) READONLY employmentEmployeeName, employmentOrganizationName,
-                           employmentDepartmentName, employmentPositionName
-    PROPERTIES(e) employee, organization, department, position,
+                           employmentDepartmentName, employmentPositionName, employmentSalary
+    PROPERTIES(e) employee, organization,
                   hireDate, contractNumber, contractDate, employmentKind,
-                  contractTermKind, contractEndDate, workPlace, workConditions, salary
+                  contractTermKind, contractEndDate, workPlace, workConditions
 ;
 
 FORM employmentAssignments 'Назначения'
@@ -389,10 +406,10 @@ FORM personnelEvents 'Кадровые события'
 FORM personnelWorkplace 'Приём, перевод и увольнение'
     OBJECTS contract = Employment
     PROPERTIES(contract) READONLY employmentEmployeeName, employmentOrganizationName,
-                                  employmentDepartmentName, employmentPositionName
-    PROPERTIES(contract) employee, organization, department, position,
+                                  employmentDepartmentName, employmentPositionName, employmentSalary
+    PROPERTIES(contract) employee, organization,
                          hireDate, contractNumber, contractDate, employmentKind,
-                         contractTermKind, contractEndDate, workPlace, workConditions, salary
+                         contractTermKind, contractEndDate, workPlace, workConditions
     PROPERTIES(contract) prepareHireEvent TOOLBAR, prepareTransferEvent TOOLBAR,
                          prepareTerminationEvent TOOLBAR
 

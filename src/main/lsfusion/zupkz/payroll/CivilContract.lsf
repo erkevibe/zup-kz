@@ -222,7 +222,7 @@ closeCivilContract 'Закрыть договор' (CivilContract c) {
         civilContractStatus(c) <- CivilContractStatus.closed;
         APPLY;
     }
-}
+} CONFIRM;
 
 cancelCivilContract 'Отменить договор' (CivilContract c) {
     IF civilContractStatus(c) AND civilContractStatus(c) != CivilContractStatus.draft THEN
@@ -232,7 +232,7 @@ cancelCivilContract 'Отменить договор' (CivilContract c) {
         civilContractStatus(c) <- CivilContractStatus.cancelled;
         APPLY;
     }
-}
+} CONFIRM;
 
 calculateCivilAct 'Рассчитать акт' (CivilContractAct a) {
     IF civilActStatus(a) AND civilActStatus(a) != CivilContractActStatus.draft THEN
@@ -334,7 +334,7 @@ cancelCivilAct 'Отменить и сторнировать' (CivilContractAct 
         civilActStatus(a) <- CivilContractActStatus.cancelled;
         APPLY;
     }
-}
+} CONFIRM;
 
 markCivilActPaid 'Отметить выплаченным' (CivilContractAct a) {
     IF civilActStatus(a) != CivilContractActStatus.approved THEN
