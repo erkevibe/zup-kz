@@ -27,6 +27,8 @@ employeeFullName 'Ф.И.О.' (Employee e) =
 employeeIinCount(STRING[12] value) = GROUP SUM 1 IF iin(Employee e) == value;
 CONSTRAINT iin(Employee e) AND length(iin(e)) != 12
     MESSAGE 'ИИН должен содержать 12 символов';
+CONSTRAINT iin(Employee e) AND NOT onlyDigits(iin(e))
+    MESSAGE 'ИИН должен состоять только из цифр';
 CONSTRAINT employeeIinCount(STRING[12] value) > 1
     MESSAGE 'ИИН должен быть уникальным';
 

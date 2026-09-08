@@ -371,7 +371,7 @@ destroyArchiveDocument 'Зарегистрировать уничтожение'
 
 FORM archiveDocumentKinds 'Виды архивных документов'
     OBJECTS k = ArchiveDocumentKind
-    PROPERTIES(k) archiveKindCode, archiveKindName, archiveKindNameKz, archiveKindActive
+    PROPERTIES(k) archiveKindName, archiveKindNameKz, archiveKindActive, archiveKindCode
 ;
 
 FORM archiveRetentionRules 'Правила хранения архивных документов'

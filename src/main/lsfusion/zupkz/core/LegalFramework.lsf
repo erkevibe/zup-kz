@@ -75,7 +75,7 @@ retireRegulatoryPack 'Вывести из действия' (RegulatoryPack p) {
 
 FORM regulatoryPacks 'Нормативные наборы'
     OBJECTS p = RegulatoryPack
-    PROPERTIES(p) packCode, packName, packVersion, packValidFrom, packValidTo
+    PROPERTIES(p) packName, packVersion, packValidFrom, packValidTo, packCode
     PROPERTIES(p) READONLY packStatus, packApprovedAt, packApprovedBy
     PROPERTIES(p) approveRegulatoryPack, retireRegulatoryPack
 ;
@@ -143,13 +143,13 @@ CONSTRAINT (CHANGED(statutoryValuePack(StatutoryParameterValue v)) OR
 
 FORM legalSources 'Нормативные источники'
     OBJECTS s = LegalSource
-    PROPERTIES(s) code, title, documentNumber, sourceUrl, adoptedDate,
-                  effectiveFrom, effectiveTo, verifiedOn
+    PROPERTIES(s) title, documentNumber, adoptedDate, effectiveFrom, effectiveTo,
+                  verifiedOn, sourceUrl, code
 ;
 
 FORM statutoryParameters 'Параметры законодательства'
     OBJECTS p = StatutoryParameter
-    PROPERTIES(p) parameterCode, parameterName, unit, description
+    PROPERTIES(p) parameterName, unit, description, parameterCode
 ;
 
 FORM statutoryParameterValues 'Значения параметров законодательства'

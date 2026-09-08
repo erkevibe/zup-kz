@@ -95,7 +95,7 @@ NAVIGATOR {
             NEW payrollRecalculationLines;
             NEW sickLeaveBenefitLines;
         }
-        NEW FOLDER payrollContracts 'Договоры ГПХ' {
+        NEW FOLDER payrollContracts 'ГПХ' {
             NEW civilContracts;
             NEW civilContractActs;
         }

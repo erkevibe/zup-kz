@@ -56,6 +56,16 @@ initialRolePermissionsTest() {
             navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.permit,
         chiefReportsPermitted = dataPermission(userRoleSID('zup_chief_accountant'),
             navigatorElementCanonicalName('ZUPKZ.reportsKz')) == Permission.permit,
+        hrUiTestForbidden = dataPermission(userRoleSID('zup_hr'),
+            navigatorElementCanonicalName('ZUPKZ.uiTestInternalForms')) == Permission.forbid,
+        chiefUiTestForbidden = dataPermission(userRoleSID('zup_chief_accountant'),
+            navigatorElementCanonicalName('ZUPKZ.uiTestInternalForms')) == Permission.forbid,
+        chiefAdministrationForbidden = dataPermission(userRoleSID('zup_chief_accountant'),
+            navigatorElementCanonicalName('System.administration')) == Permission.forbid,
+        auditorAdministrationForbidden = dataPermission(userRoleSID('zup_auditor'),
+            navigatorElementCanonicalName('System.administration')) == Permission.forbid,
+        chiefDesignForbidden = dataPermission(userRoleSID('zup_chief_accountant'),
+            navigatorElementCanonicalName('SystemEvents.showDesign')) == Permission.forbid,
         auditorReadOnly = dataPermissionChange(userRoleSID('zup_auditor'),
             propertyGroup('System_root')) == Permission.forbid;
 }
@@ -98,6 +108,16 @@ accessWorkflowTest() {
                                 navigatorElementCanonicalName('ZUPKZ.personnel')) == Permission.permit,
                             hrPayrollForbidden = dataPermission(userRoleSID('zup_hr'),
                                 navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.forbid,
+                            hrUiTestForbidden = dataPermission(userRoleSID('zup_hr'),
+                                navigatorElementCanonicalName('ZUPKZ.uiTestInternalForms')) == Permission.forbid,
+                            chiefUiTestForbidden = dataPermission(userRoleSID('zup_chief_accountant'),
+                                navigatorElementCanonicalName('ZUPKZ.uiTestInternalForms')) == Permission.forbid,
+                            chiefAdministrationForbidden = dataPermission(userRoleSID('zup_chief_accountant'),
+                                navigatorElementCanonicalName('System.administration')) == Permission.forbid,
+                            auditorAdministrationForbidden = dataPermission(userRoleSID('zup_auditor'),
+                                navigatorElementCanonicalName('System.administration')) == Permission.forbid,
+                            chiefDesignForbidden = dataPermission(userRoleSID('zup_chief_accountant'),
+                                navigatorElementCanonicalName('SystemEvents.showDesign')) == Permission.forbid,
                             selfRegistrationDisabled = disableRole('selfRegister'),
                             auditorReadOnly = dataPermissionChange(userRoleSID('zup_auditor'),
                                 propertyGroup('System_root')) == Permission.forbid;
@@ -134,6 +154,37 @@ crossOrganizationVerificationTest() {
     EXPORT JSON FROM
         hiddenStatusPreserved = timesheetStatus(accessHiddenTimesheet()) == TimesheetStatus.draft,
         hiddenNamePreserved = name(accessHiddenOrganization()) == 'Доступ B';
+}
+
+employeeIinFormatGuardTest() {
+    NEW worker = Employee {
+        iin(worker) <- 'A40404300009';
+        lastName(worker) <- 'Некорректный';
+        firstName(worker) <- 'ИИН';
+    }
+    APPLY;
+    EXPORT JSON FROM employeeIinFormatRejected = canceled();
+}
+
+organizationBinFormatGuardTest() {
+    NEW org = Organization {
+        bin(org) <- 'B66666666675';
+        name(org) <- 'Некорректный БИН';
+    }
+    APPLY;
+    EXPORT JSON FROM organizationBinFormatRejected = canceled();
+}
+
+bankDetailsFormatGuardTest() {
+    NEW worker = Employee {
+        iin(worker) <- '940404300009';
+        lastName(worker) <- 'Некорректный';
+        firstName(worker) <- 'IBAN';
+        salaryBankBic(worker) <- 'TESTKZKX';
+        salaryIban(worker) <- 'KZ00invalid000000001';
+    }
+    APPLY;
+    EXPORT JSON FROM bankDetailsFormatRejected = canceled();
 }
 
 NAVIGATOR {

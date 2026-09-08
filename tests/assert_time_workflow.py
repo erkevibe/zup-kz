@@ -18,3 +18,9 @@ assert Decimal(str(actual["summaryPlannedHoursResult"])) == Decimal("8.00")
 assert Decimal(str(actual["summaryWorkedHoursResult"])) == Decimal("8.00")
 assert actual["scheduleOverlapRejected"] is True
 assert actual["scheduleOriginalPreserved"] is True
+assert actual["scheduleCycleOwnershipRejected"] is True
+assert actual["scheduleCycleDayOffRejected"] is True
+assert actual["scheduleCycleDuplicateDayRejected"] is True
+assert actual["scheduleOrganizationRejected"] is True
+assert actual["scheduleEmploymentPeriodRejected"] is True
+assert actual["scheduleValidityPeriodRejected"] is True

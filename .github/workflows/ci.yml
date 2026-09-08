@@ -151,10 +151,28 @@ jobs:
                 'http://localhost:7651/exec?action=ZUPKZ.scheduleOverlapGuardVerificationTest' \
                 --output schedule-overlap-verification-result.json
 
+              for action in \
+                scheduleCycleOwnershipGuardTest \
+                scheduleCycleDayOffGuardTest \
+                scheduleCycleDuplicateDayGuardTest \
+                scheduleOrganizationGuardTest \
+                scheduleEmploymentPeriodGuardTest \
+                scheduleValidityPeriodGuardTest; do
+                curl --fail --silent --show-error \
+                  "http://localhost:7651/exec?action=ZUPKZ.${action}" \
+                  --output "${action}-result.json"
+              done
+
               python3 tests/assert_time_workflow.py \
                 time-workflow-result.json \
                 schedule-overlap-guard-result.json \
-                schedule-overlap-verification-result.json
+                schedule-overlap-verification-result.json \
+                scheduleCycleOwnershipGuardTest-result.json \
+                scheduleCycleDayOffGuardTest-result.json \
+                scheduleCycleDuplicateDayGuardTest-result.json \
+                scheduleOrganizationGuardTest-result.json \
+                scheduleEmploymentPeriodGuardTest-result.json \
+                scheduleValidityPeriodGuardTest-result.json
 
               curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.leaveWorkflowTest' \
@@ -186,10 +204,22 @@ jobs:
                 'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationVerificationTest' \
                 --output cross-organization-verification-result.json
 
+              for action in \
+                employeeIinFormatGuardTest \
+                organizationBinFormatGuardTest \
+                bankDetailsFormatGuardTest; do
+                curl --fail --silent --show-error \
+                  "http://localhost:7651/exec?action=ZUPKZ.${action}" \
+                  --output "${action}-result.json"
+              done
+
               python3 tests/assert_access_workflow.py \
                 access-workflow-result.json \
                 cross-organization-policy-result.json \
-                cross-organization-verification-result.json
+                cross-organization-verification-result.json \
+                employeeIinFormatGuardTest-result.json \
+                organizationBinFormatGuardTest-result.json \
+                bankDetailsFormatGuardTest-result.json
 
               curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.uiRoleSetupTest' \

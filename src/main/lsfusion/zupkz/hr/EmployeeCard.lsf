@@ -213,6 +213,41 @@ FORM employeeCards 'Личные карточки работников'
             organization(employment(assignment)) == cardOrganization(c)
 ;
 
+DESIGN employeeCards {
+    MOVE BOX(c) FIRST {
+        caption = 'Карточка работника';
+        height = 245;
+        flex = 0;
+    }
+    NEW employeeDetails AFTER BOX(c) {
+        tabbed = TRUE;
+        NEW identityTab {
+            caption = 'Документы';
+            MOVE BOX(id) { caption = 'Документы, удостоверяющие личность'; }
+        }
+        NEW educationTab {
+            caption = 'Образование';
+            MOVE BOX(education) { caption = 'Образование'; }
+        }
+        NEW familyTab {
+            caption = 'Семья';
+            MOVE BOX(family) { caption = 'Состав семьи'; }
+        }
+        NEW militaryTab {
+            caption = 'Воинский учёт';
+            MOVE BOX(military) { caption = 'Воинский учёт'; }
+        }
+        NEW historyTab {
+            caption = 'Стаж';
+            MOVE BOX(history) { caption = 'Предыдущие места работы'; }
+        }
+        NEW assignmentsTab {
+            caption = 'Назначения';
+            MOVE BOX(assignment) { caption = 'Назначения в организации'; }
+        }
+    }
+}
+
 employeeCardTitleRu 'Документ / Құжат (RU)' (EmployeeCard c) =
     'ЛИЧНАЯ КАРТОЧКА РАБОТНИКА';
 employeeCardTitleKz 'Құжат / Документ (KZ)' (EmployeeCard c) =

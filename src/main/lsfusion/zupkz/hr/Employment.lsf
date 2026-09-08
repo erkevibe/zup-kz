@@ -413,3 +413,22 @@ FORM personnelWorkplace 'Приём, перевод и увольнение'
                       acceptPersonnelEventEsutd, rejectPersonnelEventEsutd
     FILTERS eventEmployment(event) == contract
 ;
+
+DESIGN personnelWorkplace {
+    MOVE BOX(contract) FIRST {
+        caption = 'Трудовые договоры';
+        height = 260;
+        flex = 0;
+    }
+    NEW personnelDetails AFTER BOX(contract) {
+        tabbed = TRUE;
+        NEW assignmentsTab {
+            caption = 'Назначения';
+            MOVE BOX(assignment) { caption = 'История назначений'; }
+        }
+        NEW eventsTab {
+            caption = 'Кадровые события';
+            MOVE BOX(event) { caption = 'Приём, переводы и увольнение'; }
+        }
+    }
+}
