@@ -1,0 +1,236 @@
+MODULE PayrollMonthWorkplace;
+
+REQUIRE PayrollSettlement;
+NAMESPACE ZUPKZ;
+
+payrollWorkplaceManageRoleAllowed() =
+    has(currentUser() AS CustomUser, userRoleSID('admin')) OR
+    has(currentUser() AS CustomUser, userRoleSID('zup_payroll')) OR
+    has(currentUser() AS CustomUser, userRoleSID('zup_chief_accountant'));
+
+payrollWorkplaceEditable(PayrollRun r) =
+    NOT payrollRunStatus(r) OR payrollRunStatus(r) == PayrollRunStatus.draft;
+payrollWorkplaceInputEditable(PayrollRun r) = payrollWorkplaceManageRoleAllowed() AND
+    (NOT payrollRunStatus(r) OR payrollRunStatus(r) == PayrollRunStatus.draft OR
+     payrollRunStatus(r) == PayrollRunStatus.timeCollected);
+
+payrollWorkplaceInputEmployee 'Сотрудник' (PayrollInput i) =
+    assignmentEmployeeName(inputAssignment(i));
+payrollWorkplaceInputType 'Вид расчёта' (PayrollInput i) =
+    calculationName(inputCalculationType(i));
+
+payrollWorkplaceSocialStatus 'Социальные платежи' (PayrollRun r) =
+    IF closingSocial(r) THEN caption(socialPaymentStatus(closingSocial(r))) ELSE 'Не создан';
+payrollWorkplaceTaxStatus 'ИПН и социальный налог' (PayrollRun r) =
+    IF closingTaxes(r) THEN caption(taxCalculationStatus(closingTaxes(r))) ELSE 'Не создан';
+payrollWorkplaceEnforcementStatus 'Исполнительные удержания' (PayrollRun r) =
+    IF closingEnforcement(r) THEN caption(enforcementCalculationStatus(closingEnforcement(r)))
+    ELSE 'Не создан';
+payrollWorkplaceStatementStatus 'Ведомость выплаты' (PayrollRun r) =
+    IF closingStatement(r) THEN caption(paymentStatementStatus(closingStatement(r))) ELSE 'Не создан';
+
+payrollWorkplaceNextStep 'Следующий шаг' (PayrollRun r) =
+    IF NOT payrollOrganization(r) OR NOT payrollNumber(r) OR
+       NOT payrollPeriodFrom(r) OR NOT payrollPeriodTo(r) THEN
+        'Заполните организацию, номер и период расчёта'
+    ELSE IF NOT payrollRunStatus(r) OR payrollRunStatus(r) == PayrollRunStatus.draft THEN
+        IF approvedTimesheetForPayrollCount(r) THEN 'Соберите утверждённый табель'
+        ELSE 'Утвердите табель этой организации за тот же период'
+    ELSE IF payrollRunStatus(r) == PayrollRunStatus.timeCollected THEN
+        'Рассчитайте зарплату'
+    ELSE IF payrollRunStatus(r) == PayrollRunStatus.calculated THEN
+        IF NOT closingSocial(r) OR socialPaymentStatus(closingSocial(r)) != SocialPaymentStatus.approved THEN
+            'Рассчитайте и утвердите социальные платежи'
+        ELSE IF NOT closingTaxes(r) OR taxCalculationStatus(closingTaxes(r)) != TaxCalculationStatus.approved THEN
+            'Рассчитайте и утвердите ИПН и социальный налог'
+        ELSE IF NOT closingEnforcement(r) OR
+                enforcementCalculationStatus(closingEnforcement(r)) != EnforcementCalculationStatus.approved THEN
+            'Рассчитайте и утвердите исполнительные удержания'
+        ELSE IF NOT payrollPaymentDueDate(r) THEN
+            'Укажите дату выплаты зарплаты'
+        ELSE 'Закройте расчёт зарплаты'
+    ELSE IF payrollRunStatus(r) == PayrollRunStatus.approved THEN
+        IF NOT closingStatement(r) THEN 'Подготовьте ведомость выплаты'
+        ELSE IF paymentStatementStatus(closingStatement(r)) == PaymentStatementStatus.draft THEN
+            'Заполните ведомость выплаты'
+        ELSE IF paymentStatementStatus(closingStatement(r)) == PaymentStatementStatus.calculated THEN
+            'Утвердите ведомость выплаты'
+        ELSE IF paymentStatementStatus(closingStatement(r)) == PaymentStatementStatus.approved THEN
+            'Отметьте ведомость выплаченной'
+        ELSE 'Проверьте остаток к выплате'
+    ELSE IF payrollRunStatus(r) == PayrollRunStatus.paid THEN 'Расчёт завершён';
+
+payrollWorkplaceCanCollect(PayrollRun r) = payrollWorkplaceManageRoleAllowed() AND
+    payrollWorkplaceEditable(r) AND approvedTimesheetForPayrollCount(r);
+payrollWorkplaceCanCalculate(PayrollRun r) = payrollWorkplaceManageRoleAllowed() AND
+    payrollRunStatus(r) == PayrollRunStatus.timeCollected;
+payrollWorkplaceCanOpenSocial(PayrollRun r) = closingDocumentsRoleAllowed() AND
+    payrollRunStatus(r) == PayrollRunStatus.calculated AND
+    (NOT closingSocial(r) OR socialPaymentStatus(closingSocial(r)) != SocialPaymentStatus.approved);
+payrollWorkplaceCanOpenTaxes(PayrollRun r) = closingDocumentsRoleAllowed() AND
+    payrollRunStatus(r) == PayrollRunStatus.calculated AND closingSocial(r) AND
+    socialPaymentStatus(closingSocial(r)) == SocialPaymentStatus.approved AND
+    (NOT closingTaxes(r) OR taxCalculationStatus(closingTaxes(r)) != TaxCalculationStatus.approved);
+payrollWorkplaceCanOpenEnforcement(PayrollRun r) = closingDocumentsRoleAllowed() AND
+    payrollRunStatus(r) == PayrollRunStatus.calculated AND closingTaxes(r) AND
+    taxCalculationStatus(closingTaxes(r)) == TaxCalculationStatus.approved AND
+    (NOT closingEnforcement(r) OR
+     enforcementCalculationStatus(closingEnforcement(r)) != EnforcementCalculationStatus.approved);
+payrollWorkplaceCanClose(PayrollRun r) = closingDocumentsRoleAllowed() AND
+    payrollRunStatus(r) == PayrollRunStatus.calculated AND payrollPaymentDueDate(r) AND
+    approvedSocialPaymentForRun(r) AND approvedTaxCalculationForRun(r) AND
+    approvedEnforcementForRun(r);
+payrollWorkplaceCanOpenStatement(PayrollRun r) = closingDocumentsRoleAllowed() AND
+    payrollRunStatus(r) == PayrollRunStatus.approved;
+payrollWorkplaceCanReset(PayrollRun r) = payrollWorkplaceManageRoleAllowed() AND
+    payrollRunStatus(r) == PayrollRunStatus.calculated;
+payrollWorkplaceCanReopen(PayrollRun r) = closingDocumentsRoleAllowed() AND
+    payrollRunStatus(r) == PayrollRunStatus.approved;
+
+FORM payrollMonthWorkplace 'Расчёт за месяц'
+    OBJECTS r = PayrollRun
+    PROPERTIES(r) READONLY listNumber = payrollNumber, listOrganization = payrollOrganizationName,
+                  listPeriodFrom = payrollPeriodFrom, listPeriodTo = payrollPeriodTo,
+                  listStatus = payrollStatusName, listPayable = totalPayable
+    PROPERTIES(r) PANEL payrollOrganizationName ON CHANGE changePayrollOrganization(r)
+                  READONLYIF NOT payrollWorkplaceEditable(r),
+                  payrollNumber READONLYIF NOT payrollWorkplaceEditable(r),
+                  payrollPeriodFrom READONLYIF NOT payrollWorkplaceEditable(r),
+                  payrollPeriodTo READONLYIF NOT payrollWorkplaceEditable(r),
+                  payrollPaymentDueDate READONLYIF payrollRunStatus(r) == PayrollRunStatus.paid
+    PROPERTIES(r) PANEL READONLY payrollStatusName, payrollWorkplaceNextStep,
+                  totalAccrued, totalDeducted, totalPayable, remainingPayrollAmount,
+                  payrollWorkplaceSocialStatus, payrollWorkplaceTaxStatus,
+                  payrollWorkplaceEnforcementStatus, payrollWorkplaceStatementStatus
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanCollect(r) collectApprovedTime
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanCalculate(r) calculatePayroll
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanOpenSocial(r) openPayrollSocial
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanOpenTaxes(r) openPayrollTaxes
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanOpenEnforcement(r) openPayrollEnforcement
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanClose(r) closePayroll
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanOpenStatement(r) openPayrollStatement
+    PROPERTIES(r) PANEL payrollResetReason, payrollReopenReason
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanReset(r) resetPayrollForRecalculation
+    PROPERTIES(r) SHOWIF payrollWorkplaceCanReopen(r) reopenPayroll
+    FILTERS organizationAllowed(payrollOrganization(r))
+
+    OBJECTS s = PayrollTimeSummary
+    PROPERTIES(s) READONLY summaryEmployeeName, summaryPlannedHours, summaryWorkedHours,
+                  summaryWorkedDays, summaryNightHours, summaryOvertimeHours,
+                  summaryHolidayHours, summaryWeekendHours, summaryBusinessTripHours,
+                  summaryAbsenceHours
+    FILTERS summaryPayrollRun(s) == r
+
+    OBJECTS i = PayrollInput
+    PROPERTIES(i) READONLY payrollWorkplaceInputEmployee, payrollWorkplaceInputType
+    PROPERTIES(i) SHOWIF payrollWorkplaceInputEditable(r) inputAssignment, inputCalculationType
+    PROPERTIES(i) inputBase READONLYIF NOT payrollWorkplaceInputEditable(r),
+                  inputPercent READONLYIF NOT payrollWorkplaceInputEditable(r),
+                  inputManualAmount READONLYIF NOT payrollWorkplaceInputEditable(r),
+                  inputBasis READONLYIF NOT payrollWorkplaceInputEditable(r)
+    PROPERTIES(i) READONLY inputAmount
+    FILTERS inputPayrollRun(i) == r
+
+    OBJECTS l = PayrollLine
+    PROPERTIES(l) READONLY lineEmployeeName, lineTypeName, calculationBase,
+                  calculationQuantity, calculationRate, calculationCoefficient,
+                  calculationAmount, calculationNote
+    FILTERS linePayrollRun(l) == r
+
+    OBJECTS settlement = PayrollSettlementLine
+    PROPERTIES(settlement) READONLY settlementEmployeeName, settlementAccrued,
+                  settlementTotalDeducted, settlementPayable, unpaidSettlementAmount
+    PROPERTIES(settlement) openPayrollSettlement, printPayrollSettlementPdf
+    FILTERS settlementPayrollRun(settlement) == r
+
+    OBJECTS statement = PaymentStatement
+    PROPERTIES(statement) READONLY paymentStatementNumber, paymentStatementDate,
+                  statementMethodName, statementStatusName, totalPaymentStatementAmount
+    FILTERS paymentStatementPayrollRun(statement) == r
+;
+
+DESIGN payrollMonthWorkplace {
+    PROPERTY(listNumber) { caption = 'Расчёт'; charWidth = 22; }
+    PROPERTY(listOrganization) { charWidth = 30; }
+    PROPERTY(listPeriodFrom) { caption = 'С'; charWidth = 10; }
+    PROPERTY(listPeriodTo) { caption = 'По'; charWidth = 10; }
+    PROPERTY(listStatus) { charWidth = 16; }
+    PROPERTY(listPayable) { caption = 'К выплате до налогов, ₸'; charWidth = 18; }
+    MOVE BOX(r) FIRST { caption = 'Расчётные месяцы — выберите строку'; height = 165; flex = 0; }
+    NEW workplace AFTER BOX(r) {
+        caption = 'Выбранный расчёт';
+        NEW header {
+            horizontal = TRUE;
+            NEW document {
+                caption = 'Период';
+                MOVE PROPERTY(payrollOrganizationName(r)) { charWidth = 28; }
+                MOVE PROPERTY(payrollNumber(r)) { charWidth = 20; }
+                MOVE PROPERTY(payrollPeriodFrom(r));
+                MOVE PROPERTY(payrollPeriodTo(r));
+                MOVE PROPERTY(payrollPaymentDueDate(r));
+            }
+            NEW progress {
+                caption = 'Состояние и следующий шаг';
+                MOVE PROPERTY(payrollStatusName(r));
+                MOVE PROPERTY(payrollWorkplaceNextStep(r)) {
+                    charWidth = 32;
+                    charHeight = 2;
+                    wrap = TRUE;
+                    tag = 'div';
+                }
+                MOVE PROPERTY(totalAccrued(r));
+                MOVE PROPERTY(totalDeducted(r));
+                MOVE PROPERTY(totalPayable(r));
+                MOVE PROPERTY(remainingPayrollAmount(r));
+            }
+            NEW documents {
+                caption = 'Документы закрытия';
+                MOVE PROPERTY(payrollWorkplaceSocialStatus(r));
+                MOVE PROPERTY(payrollWorkplaceTaxStatus(r));
+                MOVE PROPERTY(payrollWorkplaceEnforcementStatus(r));
+                MOVE PROPERTY(payrollWorkplaceStatementStatus(r));
+            }
+        }
+        NEW nextAction {
+            caption = 'Доступное действие';
+            horizontal = TRUE;
+            MOVE PROPERTY(collectApprovedTime(r));
+            MOVE PROPERTY(calculatePayroll(r));
+            MOVE PROPERTY(openPayrollSocial(r));
+            MOVE PROPERTY(openPayrollTaxes(r));
+            MOVE PROPERTY(openPayrollEnforcement(r));
+            MOVE PROPERTY(closePayroll(r));
+            MOVE PROPERTY(openPayrollStatement(r));
+        }
+        NEW details {
+            tabbed = TRUE;
+            NEW timeTab {
+                caption = 'Табель';
+                MOVE BOX(s) { caption = 'Снимок утверждённого времени'; }
+            }
+            NEW inputsTab {
+                caption = 'Начисления и удержания';
+                MOVE BOX(i) { caption = 'Ввод до расчёта'; }
+            }
+            NEW resultTab {
+                caption = 'Результат расчёта';
+                MOVE BOX(l) { caption = 'Начисления и удержания сотрудников'; }
+            }
+            NEW settlementTab {
+                caption = 'Расчётные листки';
+                MOVE BOX(settlement) { caption = 'Закрытые суммы сотрудников'; }
+            }
+            NEW statementTab {
+                caption = 'Выплата';
+                MOVE BOX(statement) { caption = 'Ведомость выбранного расчёта'; }
+            }
+            NEW correctionTab {
+                caption = 'Исправление';
+                MOVE PROPERTY(payrollResetReason(r)) { charWidth = 48; charHeight = 3; }
+                MOVE PROPERTY(resetPayrollForRecalculation(r));
+                MOVE PROPERTY(payrollReopenReason(r)) { charWidth = 48; charHeight = 3; }
+                MOVE PROPERTY(reopenPayroll(r));
+            }
+        }
+    }
+}
