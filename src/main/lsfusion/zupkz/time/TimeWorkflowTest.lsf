@@ -84,3 +84,53 @@ timeWorkflowTest() {
         }
     }
 }
+
+scheduleOverlapGuardAssignment() = GROUP LAST EmploymentAssignment a IF
+    contractNumber(employment(a)) == 'SCHEDULE-OVERLAP-GUARD' ORDER a;
+scheduleOverlapGuardCount() = GROUP SUM 1 IF
+    scheduleEmploymentAssignment(EmployeeScheduleAssignment a) == scheduleOverlapGuardAssignment();
+
+scheduleOverlapGuardTest() {
+    NEW org = Organization {
+        bin(org) <- '666666666667';
+        NEW worker = Employee {
+            iin(worker) <- '940404300005';
+            lastName(worker) <- 'Графиков';
+            firstName(worker) <- 'Тест';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                contractNumber(contract) <- 'SCHEDULE-OVERLAP-GUARD';
+                hireDate(contract) <- 2026_01_01;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_01_01;
+                    NEW schedule = WorkSchedule {
+                        scheduleOrganization(schedule) <- org;
+                        scheduleCode(schedule) <- 'SCHEDULE-OVERLAP-GUARD';
+                        scheduleType(schedule) <- WorkScheduleType.fiveDay;
+                        NEW original = EmployeeScheduleAssignment {
+                            scheduleEmploymentAssignment(original) <- assignment;
+                            employeeWorkSchedule(original) <- schedule;
+                            employeeScheduleFrom(original) <- 2026_01_01;
+                            employeeScheduleTo(original) <- 2026_06_30;
+                        }
+                        APPLY;
+                        NEW overlap = EmployeeScheduleAssignment {
+                            scheduleEmploymentAssignment(overlap) <- assignment;
+                            employeeWorkSchedule(overlap) <- schedule;
+                            employeeScheduleFrom(overlap) <- 2026_06_30;
+                            employeeScheduleTo(overlap) <- 2026_12_31;
+                        }
+                        APPLY;
+                        EXPORT JSON FROM scheduleOverlapRejected = canceled();
+                    }
+                }
+            }
+        }
+    }
+}
+
+scheduleOverlapGuardVerificationTest() {
+    EXPORT JSON FROM scheduleOriginalPreserved = scheduleOverlapGuardCount() == 1;
+}

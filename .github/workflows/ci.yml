@@ -143,7 +143,18 @@ jobs:
                 'http://localhost:7651/exec?action=ZUPKZ.timeWorkflowTest' \
                 --output time-workflow-result.json
 
-              python3 tests/assert_time_workflow.py time-workflow-result.json
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.scheduleOverlapGuardTest' \
+                --output schedule-overlap-guard-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.scheduleOverlapGuardVerificationTest' \
+                --output schedule-overlap-verification-result.json
+
+              python3 tests/assert_time_workflow.py \
+                time-workflow-result.json \
+                schedule-overlap-guard-result.json \
+                schedule-overlap-verification-result.json
 
               curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.leaveWorkflowTest' \

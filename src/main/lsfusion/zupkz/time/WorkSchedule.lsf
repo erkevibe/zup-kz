@@ -72,6 +72,16 @@ cycleStartDate 'Начало цикла' = DATA DATE (EmployeeScheduleAssignment
 
 CONSTRAINT employeeScheduleTo(EmployeeScheduleAssignment a) < employeeScheduleFrom(a)
     MESSAGE 'Дата окончания назначения графика не может быть раньше даты начала';
+overlappingEmployeeScheduleCount(EmployeeScheduleAssignment a) = GROUP SUM 1 IF
+    scheduleEmploymentAssignment(EmployeeScheduleAssignment other) ==
+        scheduleEmploymentAssignment(a) AND
+    employeeScheduleFrom(other) <=
+        (IF employeeScheduleTo(a) THEN employeeScheduleTo(a) ELSE 9999_12_31) AND
+    (IF employeeScheduleTo(other) THEN employeeScheduleTo(other) ELSE 9999_12_31) >=
+        employeeScheduleFrom(a);
+CONSTRAINT scheduleEmploymentAssignment(EmployeeScheduleAssignment a) AND
+           employeeScheduleFrom(a) AND overlappingEmployeeScheduleCount(a) > 1
+    MESSAGE 'Периоды графиков одного назначения сотрудника не должны пересекаться';
 
 FORM workSchedules 'Графики работы'
     OBJECTS s = WorkSchedule
