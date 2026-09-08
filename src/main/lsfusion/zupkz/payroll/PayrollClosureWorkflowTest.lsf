@@ -11,6 +11,13 @@ payrollReopenReasonEntryCount(PayrollRun run, STRING[500] reason) = GROUP SUM 1 
     payrollLifecycleReason(e) == reason;
 payrollSettlementLineCount(PayrollRun run) = GROUP SUM 1 IF
     settlementPayrollRun(PayrollSettlementLine l) == run;
+concurrentPayrollRun() = GROUP LAST PayrollRun run IF
+    payrollNumber(run) == 'CONCURRENT-CLOSE-2026-09' ORDER run;
+concurrentPayrollWorker() = GROUP LAST Employee worker IF
+    iin(worker) == '900101300098' ORDER worker;
+concurrentPayrollCloseEntryCount(PayrollRun run) = GROUP SUM 1 IF
+    payrollLifecycleRun(PayrollLifecycleEntry e) == run AND
+    payrollLifecycleOperation(e) == PayrollLifecycleOperation.closed;
 
 payrollClosureWorkflowTest() {
     NEW org = Organization {
@@ -104,4 +111,91 @@ payrollClosureWorkflowTest() {
             }
         }
     }
+}
+
+payrollConcurrencySetupTest() {
+    IF concurrentPayrollRun() THEN
+        EXPORT JSON FROM alreadyExists = TRUE,
+            status = caption(payrollRunStatus(concurrentPayrollRun())),
+            settlementLineCount = payrollSettlementLineCount(concurrentPayrollRun());
+    ELSE NEW org = Organization {
+        name(org) <- 'Тест конкурентного закрытия';
+        bin(org) <- '707090900001';
+        NEW worker = Employee {
+            iin(worker) <- '900101300098';
+            lastName(worker) <- 'Конкурентное';
+            firstName(worker) <- 'Закрытие';
+            NEW contract = Employment {
+                employee(contract) <- worker;
+                organization(contract) <- org;
+                salary(contract) <- 120000.00;
+                NEW assignment = EmploymentAssignment {
+                    employment(assignment) <- contract;
+                    assignmentFrom(assignment) <- 2026_09_01;
+                    NEW run = PayrollRun {
+                        payrollOrganization(run) <- org;
+                        payrollNumber(run) <- 'CONCURRENT-CLOSE-2026-09';
+                        payrollPeriodFrom(run) <- 2026_09_01;
+                        payrollPeriodTo(run) <- 2026_09_30;
+                        payrollPaymentDueDate(run) <- 2026_10_09;
+                        payrollRunStatus(run) <- PayrollRunStatus.calculated;
+                        NEW payrollLine = PayrollLine {
+                            linePayrollRun(payrollLine) <- run;
+                            linePayrollAssignment(payrollLine) <- assignment;
+                            lineCalculationType(payrollLine) <- calculationTypeByCode('BASE_SALARY');
+                            calculationAmount(payrollLine) <- 120000.00;
+                            NEW social = SocialPaymentDocument {
+                                socialPaymentPayrollRun(social) <- run;
+                                socialPaymentStatus(social) <- SocialPaymentStatus.approved;
+                                NEW socialLine = SocialPaymentLine {
+                                    socialPaymentDocument(socialLine) <- social;
+                                    socialPaymentEmployee(socialLine) <- worker;
+                                    NEW taxes = TaxCalculationDocument {
+                                        taxCalculationPayrollRun(taxes) <- run;
+                                        taxCalculationSocialPayments(taxes) <- social;
+                                        taxCalculationStatus(taxes) <- TaxCalculationStatus.approved;
+                                        NEW taxLine = TaxCalculationLine {
+                                            taxCalculationDocument(taxLine) <- taxes;
+                                            taxCalculationEmployee(taxLine) <- worker;
+                                            NEW enforcement = EnforcementCalculationDocument {
+                                                enforcementTaxCalculation(enforcement) <- taxes;
+                                                enforcementCalculationStatus(enforcement) <-
+                                                    EnforcementCalculationStatus.approved;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        APPLY;
+        IF canceled() THEN {
+            CANCEL;
+            EXPORT JSON FROM rejected = TRUE;
+        } ELSE EXPORT JSON FROM ready = TRUE,
+            status = caption(payrollRunStatus(concurrentPayrollRun()));
+    }
+}
+
+payrollConcurrentCloseTest() {
+    IF NOT concurrentPayrollRun() THEN EXPORT JSON FROM missing = TRUE;
+    ELSE {
+        closePayroll(concurrentPayrollRun());
+        EXPORT JSON FROM status = caption(payrollRunStatus(concurrentPayrollRun())),
+            rejected = canceled();
+    }
+}
+
+payrollConcurrencyVerificationTest() {
+    EXPORT JSON FROM
+        status = caption(payrollRunStatus(concurrentPayrollRun())),
+        settlementLineCount = payrollSettlementLineCount(concurrentPayrollRun()),
+        employeeLineCount = payrollSettlementEmployeeLineCount(
+            concurrentPayrollRun(), concurrentPayrollWorker()),
+        closeEntryCount = concurrentPayrollCloseEntryCount(concurrentPayrollRun()),
+        payable = settlementPayable(settlementLineByEmployee(
+            concurrentPayrollRun(), concurrentPayrollWorker()));
 }
