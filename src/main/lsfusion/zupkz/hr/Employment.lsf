@@ -35,6 +35,8 @@ salary 'Оклад' = DATA NUMERIC[16,2] (Employment);
 
 employmentEmployeeName 'Ф.И.О.' (Employment e) = employeeFullName(employee(e));
 employmentOrganizationName 'Организация (название)' (Employment e) = name(organization(e));
+employmentKindName 'Вид занятости' (Employment e) = caption(employmentKind(e));
+contractTermKindName 'Срок договора' (Employment e) = caption(contractTermKind(e));
 
 CONSTRAINT contractEndDate(Employment e) < hireDate(e)
     MESSAGE 'Дата окончания договора не может быть раньше даты приёма';
@@ -147,6 +149,10 @@ eventEmployeeName 'Ф.И.О.' (PersonnelEvent e) =
     employmentEmployeeName(eventEmployment(e));
 eventOrganizationName 'Организация (название)' (PersonnelEvent e) =
     employmentOrganizationName(eventEmployment(e));
+eventKindName 'Вид события' (PersonnelEvent e) = caption(eventKind(e));
+eventStaffCode 'Штатная единица' (PersonnelEvent e) = staffCode(eventStaffPosition(e));
+eventStatusName 'Статус' (PersonnelEvent e) = caption(eventStatus(e));
+eventEsutdStatusName 'Статус ЕСУТД' (PersonnelEvent e) = caption(esutdStatus(e));
 
 // Values required to reverse a posted event without reconstructing history.
 eventPreviousAssignment 'Предыдущее назначение' =
@@ -327,14 +333,65 @@ rejectPersonnelEventEsutd 'Зафиксировать отказ ЕСУТД' (Pe
     }
 }
 
+FORM employmentKinds 'Виды занятости'
+    OBJECTS k = EmploymentKind
+    PROPERTIES(k) READONLY caption
+;
+
+FORM contractTermKinds 'Сроки трудовых договоров'
+    OBJECTS k = ContractTermKind
+    PROPERTIES(k) READONLY caption
+;
+
+FORM personnelEventKinds 'Виды кадровых событий'
+    OBJECTS k = PersonnelEventKind
+    PROPERTIES(k) READONLY caption
+;
+
+changeEmploymentEmployee(Employment contract) {
+    DIALOG employees OBJECTS e = employee(contract) NULL INPUT selected NULL
+    DO employee(contract) <- selected;
+}
+
+changeEmploymentOrganization(Employment contract) {
+    DIALOG organizations OBJECTS o = organization(contract) NULL INPUT selected NULL
+    DO organization(contract) <- selected;
+}
+
+changeEmploymentKind(Employment contract) {
+    DIALOG employmentKinds OBJECTS k = employmentKind(contract) NULL INPUT selected NULL
+    DO employmentKind(contract) <- selected;
+}
+
+changeContractTermKind(Employment contract) {
+    DIALOG contractTermKinds OBJECTS k = contractTermKind(contract) NULL INPUT selected NULL
+    DO contractTermKind(contract) <- selected;
+}
+
+changeAssignmentStaffPosition(EmploymentAssignment assignment) {
+    DIALOG staffPositions OBJECTS s = staffPosition(assignment) NULL INPUT selected NULL
+    DO staffPosition(assignment) <- selected;
+}
+
+changeEventKind(PersonnelEvent event) {
+    DIALOG personnelEventKinds OBJECTS k = eventKind(event) NULL INPUT selected NULL
+    DO eventKind(event) <- selected;
+}
+
+changeEventStaffPosition(PersonnelEvent event) {
+    DIALOG staffPositions OBJECTS s = eventStaffPosition(event) NULL INPUT selected NULL
+    DO eventStaffPosition(event) <- selected;
+}
+
 FORM personnelEventCard 'Кадровое событие'
     OBJECTS e = PersonnelEvent PANEL
     PROPERTIES(e) READONLY eventEmployeeName, eventOrganizationName
-    PROPERTIES(e) eventKind, eventEmployment, eventStaffPosition,
+    PROPERTIES(e) eventKindName ON CHANGE changeEventKind(e),
+                  eventStaffCode ON CHANGE changeEventStaffPosition(e),
                   eventFte, eventSalary, effectiveDate, orderNumber, orderDate, basis,
                   esutdExternalId, esutdRejectionReason
-    PROPERTIES(e) READONLY eventStatus, eventPostedAt, eventCancelledAt,
-                           esutdStatus, esutdSubmittedAt, esutdRespondedAt
+    PROPERTIES(e) READONLY eventStatusName, eventPostedAt, eventCancelledAt,
+                           eventEsutdStatusName, esutdSubmittedAt, esutdRespondedAt
     PROPERTIES(e) postPersonnelEvent, cancelPersonnelEvent, submitPersonnelEventEsutd,
                   acceptPersonnelEventEsutd, rejectPersonnelEventEsutd
 ;
@@ -377,11 +434,13 @@ prepareTerminationEvent 'Подготовить увольнение' (Employmen
 
 FORM employments 'Трудовые договоры'
     OBJECTS e = Employment
-    PROPERTIES(e) READONLY employmentEmployeeName, employmentOrganizationName,
-                           employmentDepartmentName, employmentPositionName, employmentSalary
-    PROPERTIES(e) employee, organization,
-                  hireDate, contractNumber, contractDate, employmentKind,
-                  contractTermKind, contractEndDate, workPlace, workConditions
+    PROPERTIES(e) employmentEmployeeName ON CHANGE changeEmploymentEmployee(e),
+                  employmentOrganizationName ON CHANGE changeEmploymentOrganization(e)
+    PROPERTIES(e) READONLY employmentDepartmentName, employmentPositionName, employmentSalary
+    PROPERTIES(e) hireDate, contractNumber, contractDate,
+                  employmentKindName ON CHANGE changeEmploymentKind(e),
+                  contractTermKindName ON CHANGE changeContractTermKind(e),
+                  contractEndDate, workPlace, workConditions
 ;
 
 FORM employmentAssignments 'Назначения'
@@ -397,35 +456,38 @@ FORM personnelEvents 'Кадровые события'
     PROPERTIES(e) eventKind, eventEmployment, eventStaffPosition,
                   eventFte, eventSalary, effectiveDate, orderNumber, orderDate, basis,
                   esutdExternalId, esutdRejectionReason
-    PROPERTIES(e) READONLY eventAssignment, eventStatus, eventPostedAt, eventCancelledAt,
-                           esutdStatus, esutdSubmittedAt, esutdRespondedAt
+    PROPERTIES(e) READONLY eventAssignment, eventStatusName, eventPostedAt, eventCancelledAt,
+                           eventEsutdStatusName, esutdSubmittedAt, esutdRespondedAt
     PROPERTIES(e) postPersonnelEvent, cancelPersonnelEvent, submitPersonnelEventEsutd,
                   acceptPersonnelEventEsutd, rejectPersonnelEventEsutd
 ;
 
 FORM personnelWorkplace 'Приём, перевод и увольнение'
     OBJECTS contract = Employment
-    PROPERTIES(contract) READONLY employmentEmployeeName, employmentOrganizationName,
-                                  employmentDepartmentName, employmentPositionName, employmentSalary
-    PROPERTIES(contract) employee, organization,
-                         hireDate, contractNumber, contractDate, employmentKind,
-                         contractTermKind, contractEndDate, workPlace, workConditions
+    PROPERTIES(contract) employmentEmployeeName ON CHANGE changeEmploymentEmployee(contract),
+                         employmentOrganizationName ON CHANGE changeEmploymentOrganization(contract)
+    PROPERTIES(contract) READONLY employmentDepartmentName, employmentPositionName, employmentSalary
+    PROPERTIES(contract) hireDate, contractNumber, contractDate,
+                         employmentKindName ON CHANGE changeEmploymentKind(contract),
+                         contractTermKindName ON CHANGE changeContractTermKind(contract),
+                         contractEndDate, workPlace, workConditions
     PROPERTIES(contract) prepareHireEvent TOOLBAR, prepareTransferEvent TOOLBAR,
                          prepareTerminationEvent TOOLBAR
 
     OBJECTS assignment = EmploymentAssignment
-    PROPERTIES(assignment) READONLY assignmentEmployeeName, assignmentStaffCode,
-                                    assignmentPositionName
-    PROPERTIES(assignment) staffPosition, assignmentFrom, assignmentTo,
+    PROPERTIES(assignment) READONLY assignmentEmployeeName, assignmentPositionName
+    PROPERTIES(assignment) assignmentStaffCode ON CHANGE changeAssignmentStaffPosition(assignment),
+                           assignmentFrom, assignmentTo,
                            fte, assignmentSalary
     FILTERS employment(assignment) == contract
 
     OBJECTS event = PersonnelEvent
-    PROPERTIES(event) eventKind, eventStaffPosition, eventFte, eventSalary,
+    PROPERTIES(event) eventKindName ON CHANGE changeEventKind(event),
+                      eventStaffCode ON CHANGE changeEventStaffPosition(event), eventFte, eventSalary,
                       effectiveDate, orderNumber, orderDate, basis,
                       esutdExternalId, esutdRejectionReason
-    PROPERTIES(event) READONLY eventStatus, eventPostedAt, eventCancelledAt,
-                               esutdStatus, esutdSubmittedAt, esutdRespondedAt
+    PROPERTIES(event) READONLY eventStatusName, eventPostedAt, eventCancelledAt,
+                               eventEsutdStatusName, esutdSubmittedAt, esutdRespondedAt
     PROPERTIES(event) postPersonnelEvent, cancelPersonnelEvent, submitPersonnelEventEsutd,
                       acceptPersonnelEventEsutd, rejectPersonnelEventEsutd
     FILTERS eventEmployment(event) == contract
