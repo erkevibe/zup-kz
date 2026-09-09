@@ -189,6 +189,7 @@ class Observer:
 
     def _record_process(self, event_id: int, occurred_at: str, fields: dict[str, str]) -> None:
         process_code, case_id, activity = fields["process"], fields["case"], fields["activity"]
+        case_ref = hashlib.sha256(case_id.encode()).hexdigest()[:12]
         previous = self.db.execute(
             "SELECT activity FROM case_state WHERE process_code=? AND case_id=?",
             (process_code, case_id),
@@ -198,12 +199,12 @@ class Observer:
         if not previous and activity not in process_rules.get("starts", []):
             self.observer_incident(
                 "invalid-start", "ERROR",
-                f"Invalid {process_code} start for case {case_id}: {activity}",
+                f"Invalid {process_code} start for case {case_ref}: {activity}",
             )
         if previous and activity not in allowed.get(previous["activity"], []):
             self.observer_incident(
                 "invalid-transition", "ERROR",
-                f"Invalid {process_code} transition for case {case_id}: {previous['activity']} -> {activity}",
+                f"Invalid {process_code} transition for case {case_ref}: {previous['activity']} -> {activity}",
             )
         self.db.execute(
             """INSERT INTO process_event(raw_event_id,process_code,case_id,activity,from_state,to_state,
@@ -349,7 +350,8 @@ class Observer:
 
     def write_alerts(self) -> None:
         rows = self.db.execute(
-            """SELECT * FROM incident WHERE state='open' AND count > last_notified_count
+            """SELECT * FROM incident WHERE state='open'
+               AND (last_notified_count=0 OR count >= last_notified_count * 2)
                ORDER BY CASE severity WHEN 'FATAL' THEN 0 WHEN 'ERROR' THEN 1 ELSE 2 END, last_seen"""
         ).fetchall()
         if not rows:

@@ -100,6 +100,14 @@ class ObserverTest(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertEqual(json.loads(lines[0])["severity"], "WARN")
 
+    def test_repeated_incident_alerts_use_exponential_backoff(self):
+        for index in range(3):
+            with self.log.open("a", encoding="utf-8") as stream:
+                stream.write(f"2026-09-09 10:00:0{index} WARN request id={index} failed\n")
+            self.observer.scan_once()
+        lines = (self.root / "alerts.ndjson").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
