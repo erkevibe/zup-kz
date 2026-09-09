@@ -1,0 +1,25 @@
+{
+  "database": "/var/lib/zup-observer/observer.db",
+  "alert_file": "/var/lib/zup-observer/alerts.ndjson",
+  "poll_seconds": 15,
+  "baseline_minutes": 30,
+  "files": [],
+  "journals": [
+    {
+      "name": "host-journal",
+      "units": []
+    }
+  ],
+  "commands": [
+    {
+      "name": "guacamole-docker",
+      "timeout": 60,
+      "argv": [
+        "/usr/bin/python3",
+        "/opt/zup-observer/guac_log_export.py",
+        "{since}"
+      ]
+    }
+  ],
+  "processes": {}
+}

@@ -23,21 +23,7 @@
       "units": []
     }
   ],
-  "commands": [
-    {
-      "name": "guacamole",
-      "timeout": 60,
-      "argv": [
-        "/usr/bin/ssh",
-        "-o", "BatchMode=yes",
-        "-o", "ConnectTimeout=10",
-        "-i", "/var/lib/zup-observer/.ssh/guac-log-reader",
-        "root@192.168.1.230",
-        "--",
-        "{since}"
-      ]
-    }
-  ],
+  "commands": [],
   "processes": {
     "hr": {
       "starts": ["prepared"],

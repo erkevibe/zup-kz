@@ -87,14 +87,14 @@ sudo -u zupobserver /usr/bin/python3 /opt/zup-observer/zup_observer.py report \
   --config /etc/zup-observer.json
 ```
 
-Для Guacamole создаётся отдельная ключевая пара `guac-log-reader`, не
-переиспользуется административный root-ключ. Её public key на Guacamole
-добавляется в `/root/.ssh/authorized_keys` с ограничениями
-`from="192.168.1.228",restrict,command="/opt/zup-observer/guac-log-export"`.
-Даже при утечке этого ключа SSH всегда запускает только проверяющий аргументы
-экспортёр `docker logs`, а shell, forwarding и произвольные команды недоступны.
-Скрипты `guac-log-export` и `guac_log_export.py` принадлежат root и недоступны
-для записи другим пользователям.
+На Guacamole запускается отдельный локальный экземпляр по unit-файлу
+`zup-kz-observer-guacamole.service` и конфигурации `rules.guacamole.json`.
+Он читает journald и `docker logs` на том же LXC; сырые логи и ключи между
+серверами не передаются. Сервис запускается от root, потому что доступ к Docker
+socket фактически равносилен root, но ограничен systemd hardening и имеет право
+записи только в `/var/lib/zup-observer`. ИИ-наблюдатель получает с каждого LXC
+только результат команды `zup_observer.py report` через уже настроенный
+административный канал.
 
 Сообщение вида
 `ZUP_PROCESS process=payroll case=RUN-1 activity=calculated organization=ORG-1`
