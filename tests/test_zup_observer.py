@@ -2,6 +2,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import datetime as dt
 from pathlib import Path
 from unittest import mock
 
@@ -24,6 +25,8 @@ class ObserverTest(unittest.TestCase):
             "processes": {"payroll": {
                 "starts": ["timesheet"],
                 "transitions": {"timesheet": ["calculated"], "calculated": []},
+                "max_age_seconds": {"timesheet": 60},
+                "recommendations": {"timesheet": "Рассчитать зарплату"},
             }},
         }
         self.observer = MODULE.Observer(self.config)
@@ -93,6 +96,29 @@ class ObserverTest(unittest.TestCase):
         sample = self.observer.db.execute("SELECT sample FROM incident").fetchone()[0]
         self.assertIn("Invalid payroll start", sample)
 
+    def test_stalled_process_is_reported_once_and_resolved_by_transition(self):
+        self.log.write_text(
+            "INFO ZUP_PROCESS process=payroll case=R3 activity=timesheet\n",
+            encoding="utf-8",
+        )
+        old = dt.datetime.now(MODULE.UTC) - dt.timedelta(minutes=2)
+        with mock.patch.object(MODULE, "utc_now", return_value=old.isoformat()):
+            self.observer.scan_once()
+        self.observer.check_stalled_processes(dt.datetime.now(MODULE.UTC))
+        self.observer.check_stalled_processes(dt.datetime.now(MODULE.UTC))
+        rows = self.observer.db.execute(
+            "SELECT state,sample FROM incident WHERE sample LIKE 'Stalled payroll case %'"
+        ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertIn("Рассчитать зарплату", rows[0]["sample"])
+        with self.log.open("a", encoding="utf-8") as stream:
+            stream.write("INFO ZUP_PROCESS process=payroll case=R3 activity=calculated\n")
+        self.observer.scan_once()
+        state = self.observer.db.execute(
+            "SELECT state FROM incident WHERE sample LIKE 'Stalled payroll case %'"
+        ).fetchone()[0]
+        self.assertEqual(state, "resolved")
+
     def test_redacts_secrets_and_personal_identifiers(self):
         value = MODULE.redact("password=hunter2 token=abc 901010400010 KZ123456789012345678")
         self.assertNotIn("hunter2", value)
@@ -130,6 +156,21 @@ class ObserverTest(unittest.TestCase):
         self.assertEqual(len(report["topIncidents"]), 1)
         self.assertEqual(report["summary"][0]["incidents"], 1)
         self.assertEqual(len(report["sources"]), 1)
+
+    def test_report_contains_process_state_and_transition_counts(self):
+        self.log.write_text(
+            "INFO ZUP_PROCESS process=payroll case=R4 activity=timesheet\n"
+            "INFO ZUP_PROCESS process=payroll case=R4 activity=calculated\n",
+            encoding="utf-8",
+        )
+        self.observer.scan_once()
+        with mock.patch("builtins.print") as output:
+            self.observer.report(limit=1)
+        report = json.loads(output.call_args.args[0])
+        self.assertEqual(report["processStates"][0]["activity"], "calculated")
+        transition = next(row for row in report["processTransitions"] if row["from_state"] == "timesheet")
+        self.assertEqual(transition["to_activity"], "calculated")
+        self.assertEqual(transition["occurrences"], 1)
 
 
 if __name__ == "__main__":

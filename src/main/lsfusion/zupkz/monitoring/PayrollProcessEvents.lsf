@@ -1,0 +1,58 @@
+MODULE PayrollProcessEvents;
+
+REQUIRE PayrollSettlement;
+NAMESPACE ZUPKZ;
+
+// Структурированные события остаются в штатном серверном журнале lsFusion.
+// В них нет данных сотрудников и денежных сумм.
+processLogToken(TEXT value) = replace(replace(
+    IF value THEN value ELSE 'unknown', '"', ''), '\n', '_');
+payrollProcessOrganization(PayrollRun r) = processLogToken(
+    IF shortName(payrollOrganization(r)) THEN shortName(payrollOrganization(r))
+    ELSE name(payrollOrganization(r)));
+payrollProcessCase(PayrollRun r) = payrollProcessOrganization(r) + ':' +
+    processLogToken(payrollNumber(r)) + ':' + STRING(payrollPeriodTo(r));
+
+logPayrollProcess(PayrollRun run, STRING[50] activity) {
+    IF run AND activity THEN
+        printToLog('ZUP_PROCESS process=payroll case="' + payrollProcessCase(run) +
+            '" activity=' + activity + ' organization="' +
+            payrollProcessOrganization(run) + '" outcome=success',
+            'zup-process', 'info');
+}
+
+// Один обработчик на статус исключает расхождение между UI, импортом и API.
+WHEN CHANGED(payrollRunStatus(PayrollRun r)) DO {
+    IF payrollRunStatus(r) == PayrollRunStatus.timeCollected THEN {
+        IF PREV(payrollRunStatus(r)) == PayrollRunStatus.calculated THEN
+            logPayrollProcess(r, 'reset');
+        ELSE
+            logPayrollProcess(r, 'timesheet');
+    }
+    IF payrollRunStatus(r) == PayrollRunStatus.calculated THEN {
+        IF PREV(payrollRunStatus(r)) == PayrollRunStatus.approved THEN
+            logPayrollProcess(r, 'reopened');
+        ELSE
+            logPayrollProcess(r, 'calculated');
+    }
+    IF payrollRunStatus(r) == PayrollRunStatus.approved THEN
+        logPayrollProcess(r, 'closed');
+    IF payrollRunStatus(r) == PayrollRunStatus.paid THEN
+        logPayrollProcess(r, 'paid');
+}
+
+WHEN CHANGED(socialPaymentStatus(SocialPaymentDocument d)) AND
+     socialPaymentStatus(d) == SocialPaymentStatus.approved DO
+    logPayrollProcess(socialPaymentPayrollRun(d), 'social-approved');
+
+WHEN CHANGED(taxCalculationStatus(TaxCalculationDocument d)) AND
+     taxCalculationStatus(d) == TaxCalculationStatus.approved DO
+    logPayrollProcess(taxCalculationPayrollRun(d), 'tax-approved');
+
+WHEN CHANGED(enforcementCalculationStatus(EnforcementCalculationDocument d)) AND
+     enforcementCalculationStatus(d) == EnforcementCalculationStatus.approved DO
+    logPayrollProcess(enforcementPayrollRun(d), 'enforcement-approved');
+
+WHEN CHANGED(paymentStatementStatus(PaymentStatement d)) AND
+     paymentStatementStatus(d) == PaymentStatementStatus.approved DO
+    logPayrollProcess(paymentStatementPayrollRun(d), 'statement-approved');
