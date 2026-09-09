@@ -1,6 +1,6 @@
 MODULE HREmployee;
 
-REQUIRE Utils;
+REQUIRE Utils, Authentication, Security;
 NAMESPACE ZUPKZ;
 
 CLASS Employee 'Сотрудник';
@@ -19,10 +19,22 @@ gender 'Пол' = DATA Gender (Employee);
 citizenshipCode 'Код страны гражданства' = DATA STRING[3] (Employee);
 personalDataConsentDate 'Дата согласия на обработку ПД' = DATA DATE (Employee);
 personalDataPurpose 'Цель обработки ПД' = DATA STRING[250] (Employee);
+employeeUser 'Учётная запись кабинета' = DATA CustomUser (Employee);
+
+employeeUserCount(CustomUser user) = GROUP SUM 1 IF employeeUser(Employee e) == user;
+CONSTRAINT employeeUserCount(CustomUser user) > 1
+    MESSAGE 'Учётная запись может быть связана только с одним сотрудником';
+employeeByUser(CustomUser user) = GROUP AGGR Employee e BY employeeUser(e);
+employeeUserAdministrationAllowed(CustomUser user) = has(user, userRoleSID('admin'));
+employeeUserAdministrationAllowed() =
+    employeeUserAdministrationAllowed(currentUser() AS CustomUser);
+CONSTRAINT CHANGED(employeeUser(Employee e)) AND NOT employeeUserAdministrationAllowed()
+    MESSAGE 'Привязку учётной записи сотрудника изменяет только администратор';
 
 employeeFullName 'Ф.И.О.' (Employee e) =
     lastName(e) + ' ' + firstName(e) +
     (IF middleName(e) THEN ' ' + middleName(e) ELSE '');
+employeeUserLogin 'Логин кабинета' (Employee e) = login(employeeUser(e) AS CustomUser);
 
 employeeIinCount(STRING[12] value) = GROUP SUM 1 IF iin(Employee e) == value;
 CONSTRAINT iin(Employee e) AND length(iin(e)) != 12

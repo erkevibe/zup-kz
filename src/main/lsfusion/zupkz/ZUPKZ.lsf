@@ -11,7 +11,8 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         PayrollEnforcement, PayrollSettlement, PayrollPayments,
         PayrollCivilContractPayments,
         TaxesKZSocialTransferRegisters, ReportsKZForm200, ReportsKZForm20005,
-        KZAccessControl, KZOrganizationAccessSecondary, PayrollMonthWorkplace;
+        HREmployeeCabinet, KZAccessControl, KZOrganizationAccessSecondary,
+        PayrollMonthWorkplace;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {
@@ -132,7 +133,12 @@ NAVIGATOR {
         NEW form20005Lines;
     }
 
+    NEW FOLDER employeeSelfService 'Кабинет сотрудника' WINDOW toolbar {
+        NEW employeeCabinet;
+    }
+
     NEW FOLDER accessAdministration 'Доступ' WINDOW toolbar {
         NEW userOrganizationAccesses;
+        NEW employeeCabinetUsers;
     }
 }

@@ -8,7 +8,7 @@ REQUIRE Security, KZOrganization, HRDepartment, HRPosition, HRStaffSchedule,
         TaxesKZSocialPayments, TaxesKZIncomeTax, PayrollSettlement,
         PayrollPayments, PayrollEnforcement, PayrollCivilContract,
         PayrollCivilContractPayments, TaxesKZSocialTransferRegisters,
-        ReportsKZForm20005;
+        ReportsKZForm20005, HREmployeeCabinet;
 NAMESPACE ZUPKZ;
 
 employeeAllowed(Employee worker) = GROUP MAX organizationAllowed(organization(Employment contract))
@@ -405,6 +405,7 @@ denyBusinessFolders(UserRole role) {
     dataPermission(role, navigatorElementCanonicalName('ZUPKZ.taxesKz')) <- Permission.forbid;
     dataPermission(role, navigatorElementCanonicalName('ZUPKZ.reportsKz')) <- Permission.forbid;
     dataPermission(role, navigatorElementCanonicalName('ZUPKZ.accessAdministration')) <- Permission.forbid;
+    dataPermission(role, navigatorElementCanonicalName('ZUPKZ.employeeSelfService')) <- Permission.forbid;
     // QA-формы и системное администрирование не входят ни в одну бизнес-роль.
     dataPermission(role, navigatorElementCanonicalName('ZUPKZ.uiTestInternalForms')) <- Permission.forbid;
     dataPermission(role, navigatorElementCanonicalName('System.administration')) <- Permission.forbid;
@@ -442,6 +443,10 @@ ensureZupRoles() {
         sid(role) <- 'zup_auditor';
         name(role) <- 'ZUP KZ — Auditor';
     }
+    IF NOT userRoleSID('zup_employee') THEN NEW role = UserRole {
+        sid(role) <- 'zup_employee';
+        name(role) <- 'ZUP KZ — Employee';
+    }
 
 }
 
@@ -454,6 +459,7 @@ applyZupRolePermissions() {
     denyBusinessFolders(userRoleSID('zup_payroll'));
     denyBusinessFolders(userRoleSID('zup_chief_accountant'));
     denyBusinessFolders(userRoleSID('zup_auditor'));
+    denyBusinessFolders(userRoleSID('zup_employee'));
 
     dataPermission(userRoleSID('zup_hr'),
         navigatorElementCanonicalName('ZUPKZ.masterData')) <- Permission.permit;
@@ -485,6 +491,15 @@ applyZupRolePermissions() {
         actionCanonicalName('ZUPKZ.downloadEnforcementOrdersXlsx[]')) <- Permission.permit;
     dataPermissionChange(userRoleSID('zup_auditor'),
         actionCanonicalName('ZUPKZ.downloadEnforcementLinesXlsx[]')) <- Permission.permit;
+
+    dataPermission(userRoleSID('zup_employee'),
+        navigatorElementCanonicalName('ZUPKZ.employeeSelfService')) <- Permission.permit;
+    dataPermissionChange(userRoleSID('zup_employee'), propertyGroup('System_root')) <- Permission.forbid;
+    dataPermissionEditObjects(userRoleSID('zup_employee'), propertyGroup('System_root')) <- Permission.forbid;
+    dataPermissionChange(userRoleSID('zup_employee'),
+        actionCanonicalName('ZUPKZ.openPayrollSettlement[ZUPKZ.PayrollSettlementLine]')) <- Permission.permit;
+    dataPermissionChange(userRoleSID('zup_employee'),
+        actionCanonicalName('ZUPKZ.printPayrollSettlementPdf[ZUPKZ.PayrollSettlementLine]')) <- Permission.permit;
 }
 
 loadZupRoles() {
