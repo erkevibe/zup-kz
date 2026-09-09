@@ -27,45 +27,50 @@ accessHiddenForm200() = GROUP LAST Form200Declaration d IF
 uiRoleTestUser(STRING[100] value) = GROUP LAST CustomUser u IF login(u) == value ORDER u;
 
 createUiRoleTestUser(STRING[100] loginValue, STRING[50] roleSid, Organization org) {
-    NEW user = CustomUser {
-        login(user) <- loginValue;
-        calculateBase64Hash('SHA-256', 'zup-ui-test-only');
-        sha256Password(user) <- calculatedHash();
-        in(user, userRoleSID(roleSid)) <- TRUE;
-        NEW access = UserOrganizationAccess {
-            accessUser(access) <- user;
-            accessOrganization(access) <- org;
-            accessActive(access) <- TRUE;
+    IF NOT uiRoleTestUser(loginValue) THEN
+        NEW user = CustomUser {
+            login(user) <- loginValue;
+            calculateBase64Hash('SHA-256', 'zup-ui-test-only');
+            sha256Password(user) <- calculatedHash();
+            in(user, userRoleSID(roleSid)) <- TRUE;
+            NEW access = UserOrganizationAccess {
+                accessUser(access) <- user;
+                accessOrganization(access) <- org;
+                accessActive(access) <- TRUE;
+            }
         }
-    }
 }
 
 uiRoleSetupTest() {
     loadZupRoles();
-    NEW org = Organization {
-        name(org) <- 'UI Test Organization';
-        bin(org) <- '555555555555';
-        createUiRoleTestUser('ui-hr', 'zup_hr', org);
-        createUiRoleTestUser('ui-time', 'zup_timekeeper', org);
-        createUiRoleTestUser('ui-payroll', 'zup_payroll', org);
-        createUiRoleTestUser('ui-chief', 'zup_chief_accountant', org);
-        createUiRoleTestUser('ui-auditor', 'zup_auditor', org);
+    IF NOT organizationByBin('555555555555') THEN
+        NEW org = Organization {
+            name(org) <- 'UI Test Organization';
+            bin(org) <- '555555555555';
+        }
+    APPLY;
+
+    createUiRoleTestUser('ui-hr', 'zup_hr', organizationByBin('555555555555'));
+    createUiRoleTestUser('ui-time', 'zup_timekeeper', organizationByBin('555555555555'));
+    createUiRoleTestUser('ui-payroll', 'zup_payroll', organizationByBin('555555555555'));
+    createUiRoleTestUser('ui-chief', 'zup_chief_accountant', organizationByBin('555555555555'));
+    createUiRoleTestUser('ui-auditor', 'zup_auditor', organizationByBin('555555555555'));
+    IF NOT uiRoleTestUser('ui-employee') THEN
         NEW employeeAccount = CustomUser {
             login(employeeAccount) <- 'ui-employee';
             calculateBase64Hash('SHA-256', 'zup-ui-test-only');
             sha256Password(employeeAccount) <- calculatedHash();
             in(employeeAccount, userRoleSID('zup_employee')) <- TRUE;
         }
-        APPLY;
+    APPLY;
 
-        EXPORT JSON FROM
-            hrReady = has(uiRoleTestUser('ui-hr'), userRoleSID('zup_hr')),
-            timeReady = has(uiRoleTestUser('ui-time'), userRoleSID('zup_timekeeper')),
-            payrollReady = has(uiRoleTestUser('ui-payroll'), userRoleSID('zup_payroll')),
-            chiefReady = has(uiRoleTestUser('ui-chief'), userRoleSID('zup_chief_accountant')),
-            auditorReady = has(uiRoleTestUser('ui-auditor'), userRoleSID('zup_auditor')),
-            employeeReady = has(uiRoleTestUser('ui-employee'), userRoleSID('zup_employee'));
-    }
+    EXPORT JSON FROM
+        hrReady = has(uiRoleTestUser('ui-hr'), userRoleSID('zup_hr')),
+        timeReady = has(uiRoleTestUser('ui-time'), userRoleSID('zup_timekeeper')),
+        payrollReady = has(uiRoleTestUser('ui-payroll'), userRoleSID('zup_payroll')),
+        chiefReady = has(uiRoleTestUser('ui-chief'), userRoleSID('zup_chief_accountant')),
+        auditorReady = has(uiRoleTestUser('ui-auditor'), userRoleSID('zup_auditor')),
+        employeeReady = has(uiRoleTestUser('ui-employee'), userRoleSID('zup_employee'));
 }
 
 initialRolePermissionsTest() {
@@ -141,6 +146,8 @@ employeeCabinetSetupTest() {
             }
         }
     }
+    IF employeeCabinetOwnEmployee() AND uiRoleTestUser('ui-employee') THEN
+        employeeUser(employeeCabinetOwnEmployee()) <- uiRoleTestUser('ui-employee');
     APPLY;
     EXPORT JSON FROM
         employeeMapped = employeeByUser(uiRoleTestUser('ui-employee')) ==
