@@ -25,6 +25,16 @@ expected_key_sets = [
         "employeePayrollForbidden",
         "employeeReadOnly",
     },
+    {
+        "employeeMappedPersisted",
+        "cardPersisted",
+        "employmentPersisted",
+        "assignmentPersisted",
+        "hireEventPersisted",
+        "leavePersisted",
+        "sickLeavePersisted",
+        "settlementPersisted",
+    },
 ]
 
 for path, expected_keys in zip(sys.argv[1:], expected_key_sets, strict=True):

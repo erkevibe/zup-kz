@@ -303,6 +303,21 @@ employeeCabinetSetupTest() {
             settlementPayable(employeeCabinetOwnSettlement());
 }
 
+employeeCabinetFixtureVerificationTest() {
+    EXPORT JSON FROM
+        employeeMappedPersisted = employeeByUser(uiRoleTestUser('ui-employee')) ==
+            employeeCabinetOwnEmployee(),
+        cardPersisted = employeeCabinetCard() IS EmployeeCard,
+        employmentPersisted = employeeCabinetEmployment() IS Employment,
+        assignmentPersisted = employeeCabinetAssignment() IS EmploymentAssignment,
+        hireEventPersisted = eventStatus(employeeCabinetHire()) == PersonnelEventStatus.posted,
+        leavePersisted = leaveStatus(employeeCabinetLeave()) == LeaveStatus.approved,
+        sickLeavePersisted = sickLeaveStatus(employeeCabinetSickLeave()) == SickLeaveStatus.approved,
+        settlementPersisted = settlementAccrued(employeeCabinetOwnSettlement()) -
+            settlementTotalDeducted(employeeCabinetOwnSettlement()) ==
+            settlementPayable(employeeCabinetOwnSettlement());
+}
+
 employeeCabinetAccessTest() {
     EXPORT JSON FROM
         ownSettlementAllowed = settlementViewAllowedFor(uiRoleTestUser('ui-employee'),

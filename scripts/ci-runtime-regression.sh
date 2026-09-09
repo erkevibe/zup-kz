@@ -149,8 +149,10 @@ python3 tests/assert_access_workflow.py \
 check uiRoleSetupTest ui-role-setup-result.json tests/assert_ui_role_setup.py
 request employeeCabinetSetupTest employee-cabinet-setup-result.json
 request employeeCabinetAccessTest employee-cabinet-access-result.json
+request employeeCabinetFixtureVerificationTest employee-cabinet-verification-result.json
 python3 tests/assert_employee_cabinet.py \
-    employee-cabinet-setup-result.json employee-cabinet-access-result.json
+    employee-cabinet-setup-result.json employee-cabinet-access-result.json \
+    employee-cabinet-verification-result.json
 check printWorkflowTest print-workflow-result.json tests/assert_print_workflow.py
 check employeeCardWorkflowTest employee-card-workflow-result.json tests/assert_employee_card_workflow.py
 check planningWorkflowTest planning-workflow-result.json tests/assert_planning_workflow.py
