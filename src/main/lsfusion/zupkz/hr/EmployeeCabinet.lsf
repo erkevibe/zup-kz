@@ -56,9 +56,9 @@ FORM employeeCabinet 'Кабинет сотрудника'
             leaveStatus(leave) == LeaveStatus.approved
 
     OBJECTS sick = SickLeaveDocument
-    PROPERTIES(sick) READONLY sickLeaveNumber, sickLeaveIssueDate, sickLeaveFrom,
+    PROPERTIES(sick) READONLY sickLeaveNumber, sickLeaveFrom,
                           sickLeaveTo, cabinetSickLeaveReasonName, cabinetSickLeaveStatusName
-    PROPERTIES(sick) PANEL READONLY sickLeaveGrossAmount
+    PROPERTIES(sick) PANEL READONLY sickLeaveIssueDate, sickLeaveGrossAmount
     FILTERS employee(employment(sickLeaveAssignment(sick))) == worker,
             sickLeaveStatus(sick) == SickLeaveStatus.approved
 
@@ -135,32 +135,32 @@ DESIGN employeeCabinet {
             caption = 'Отсутствия';
             MOVE BOX(leave) {
                 caption = 'Утверждённые отпуска';
-                PROPERTY(leaveNumber(leave)) { charWidth = 18; }
-                PROPERTY(cabinetLeaveKindName(leave)) { charWidth = 30; }
-                PROPERTY(leaveDateFrom(leave)) { charWidth = 11; }
-                PROPERTY(leaveDateTo(leave)) { charWidth = 11; }
-                PROPERTY(cabinetLeaveStatusName(leave)) { charWidth = 14; }
+                PROPERTY(leaveNumber(leave)) { charWidth = 16; }
+                PROPERTY(cabinetLeaveKindName(leave)) { charWidth = 28; }
+                PROPERTY(leaveDateFrom(leave)) { charWidth = 10; }
+                PROPERTY(leaveDateTo(leave)) { charWidth = 10; }
+                PROPERTY(cabinetLeaveStatusName(leave)) { charWidth = 12; }
             }
             MOVE BOX(sick) {
                 caption = 'Утверждённые больничные';
-                PROPERTY(sickLeaveNumber(sick)) { charWidth = 18; }
+                PROPERTY(sickLeaveNumber(sick)) { charWidth = 16; }
                 PROPERTY(sickLeaveIssueDate(sick)) { charWidth = 11; }
-                PROPERTY(sickLeaveFrom(sick)) { charWidth = 11; }
-                PROPERTY(sickLeaveTo(sick)) { charWidth = 11; }
-                PROPERTY(cabinetSickLeaveReasonName(sick)) { charWidth = 20; }
-                PROPERTY(cabinetSickLeaveStatusName(sick)) { charWidth = 14; }
+                PROPERTY(sickLeaveFrom(sick)) { charWidth = 10; }
+                PROPERTY(sickLeaveTo(sick)) { charWidth = 10; }
+                PROPERTY(cabinetSickLeaveReasonName(sick)) { charWidth = 16; }
+                PROPERTY(cabinetSickLeaveStatusName(sick)) { charWidth = 12; }
             }
         }
         NEW settlementsTab {
             caption = 'Расчётные листки';
             MOVE BOX(settlement) {
                 caption = 'Закрытые расчётные листки';
-                PROPERTY(settlementRunNumber(settlement)) { charWidth = 18; }
-                PROPERTY(settlementPeriodFrom(settlement)) { charWidth = 11; }
-                PROPERTY(settlementPeriodTo(settlement)) { charWidth = 11; }
-                PROPERTY(settlementAccrued(settlement)) { charWidth = 14; }
-                PROPERTY(settlementTotalDeducted(settlement)) { charWidth = 14; }
-                PROPERTY(settlementPayable(settlement)) { charWidth = 14; }
+                PROPERTY(settlementRunNumber(settlement)) { charWidth = 14; }
+                PROPERTY(settlementPeriodFrom(settlement)) { charWidth = 10; }
+                PROPERTY(settlementPeriodTo(settlement)) { charWidth = 10; }
+                PROPERTY(settlementAccrued(settlement)) { charWidth = 12; }
+                PROPERTY(settlementTotalDeducted(settlement)) { charWidth = 12; }
+                PROPERTY(settlementPayable(settlement)) { charWidth = 12; }
             }
         }
     }
