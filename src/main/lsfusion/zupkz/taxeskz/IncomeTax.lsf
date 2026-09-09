@@ -344,6 +344,7 @@ missingTaxStatutoryParameter(DATE date) =
     NOT numericStatutoryParameterReady('IPN_THRESHOLD_MRP', date) OR
     NOT numericStatutoryParameterReady('IPN_BASE_RATE', date) OR
     NOT numericStatutoryParameterReady('IPN_HIGH_RATE', date) OR
+    NOT numericStatutoryParameterReady('IPN_NONRESIDENT_CIVIL_RATE', date) OR
     NOT numericStatutoryParameterReady('SOCIAL_TAX_RATE', date);
 
 calculateTaxes 'Рассчитать' (TaxCalculationDocument d) {

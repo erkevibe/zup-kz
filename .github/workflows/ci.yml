@@ -107,6 +107,13 @@ jobs:
                 payroll-legal-scenarios-result.json
 
               curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.civilContractLegalScenarioTest' \
+                --output civil-contract-legal-scenarios-result.json
+
+              python3 tests/assert_civil_contract_legal_scenarios.py \
+                civil-contract-legal-scenarios-result.json
+
+              curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.payrollClosureWorkflowTest' \
                 --output payroll-closure-workflow-result.json
 

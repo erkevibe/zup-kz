@@ -38,6 +38,7 @@ expected_parameters = {
     "employerOsmsMaxMzp": Decimal("40"),
     "ipnBaseRate": Decimal("10"),
     "ipnHighRate": Decimal("15"),
+    "nonresidentCivilIpnRate": Decimal("20"),
     "ipnThresholdMrp": Decimal("8500"),
     "ipnBasicMonthlyMrp": Decimal("30"),
     "ipnBasicAnnualMrp": Decimal("360"),
