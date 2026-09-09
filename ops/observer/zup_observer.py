@@ -190,11 +190,17 @@ class Observer:
         process_code, case_id, activity = fields["process"], fields["case"], fields["activity"]
         case_ref = hashlib.sha256(case_id.encode()).hexdigest()[:12]
         previous = self.db.execute(
-            "SELECT activity FROM case_state WHERE process_code=? AND case_id=?",
+            "SELECT activity,occurred_at FROM case_state WHERE process_code=? AND case_id=?",
             (process_code, case_id),
         ).fetchone()
         process_rules = self.rules.get(process_code, {})
         allowed = process_rules.get("transitions", {})
+        dedupe_seconds = int(process_rules.get("dedupe_seconds", 0))
+        if previous and previous["activity"] == activity and dedupe_seconds:
+            previous_at = dt.datetime.fromisoformat(previous["occurred_at"].replace("Z", "+00:00"))
+            current_at = dt.datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
+            if abs((current_at - previous_at).total_seconds()) <= dedupe_seconds:
+                return
         if not previous and activity not in process_rules.get("starts", []):
             self.observer_incident(
                 "invalid-start", "ERROR",
