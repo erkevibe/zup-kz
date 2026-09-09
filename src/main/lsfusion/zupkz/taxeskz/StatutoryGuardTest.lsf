@@ -1,6 +1,6 @@
 MODULE StatutoryGuardTest;
 
-REQUIRE CivilContractLegalScenarioTest, PayrollRecalculationWorkflowTest, PilotUiWorkflowTest;
+REQUIRE IncomeTaxBoundaryScenarioTest, PayrollRecalculationWorkflowTest, PilotUiWorkflowTest;
 NAMESPACE ZUPKZ;
 
 // A period without an approved and complete legal pack must stop both

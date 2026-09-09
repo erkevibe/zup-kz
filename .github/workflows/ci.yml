@@ -114,6 +114,13 @@ jobs:
                 civil-contract-legal-scenarios-result.json
 
               curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.incomeTaxBoundaryScenarioTest' \
+                --output income-tax-boundaries-result.json
+
+              python3 tests/assert_income_tax_boundaries.py \
+                income-tax-boundaries-result.json
+
+              curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.payrollClosureWorkflowTest' \
                 --output payroll-closure-workflow-result.json
 

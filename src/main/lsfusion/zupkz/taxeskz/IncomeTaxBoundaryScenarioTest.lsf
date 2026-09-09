@@ -1,0 +1,179 @@
+MODULE IncomeTaxBoundaryScenarioTest;
+
+REQUIRE CivilContractLegalScenarioTest;
+NAMESPACE ZUPKZ;
+
+boundaryEmployee(STRING[12] iinValue) = GROUP AGGR Employee e BY iin(e);
+boundaryLedgerTaxable(Organization org, Employee worker) = GROUP SUM
+    taxLedgerTaxableIncome(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == org AND taxLedgerEmployee(e) == worker;
+boundaryLedgerIpn(Organization org, Employee worker) = GROUP SUM
+    taxLedgerIpn(PersonalTaxLedgerEntry e) IF
+    taxLedgerOrganization(e) == org AND taxLedgerEmployee(e) == worker;
+
+// One person first receives salary and then resident civil-contract income.
+// The second document must continue the same annual IPN scale and cross the
+// 8 500 MRP threshold without losing a tiyn to per-document rounding.
+incomeTaxBoundaryScenarioTest() {
+    NEW org = Organization {
+        bin(org) <- '770909500011';
+        name(org) <- 'Границы ИПН 2026';
+
+        NEW run = PayrollRun {
+            payrollOrganization(run) <- org;
+            payrollNumber(run) <- 'LEGAL-IPN-BOUNDARY-2026-01';
+            payrollPeriodFrom(run) <- 2026_01_01;
+            payrollPeriodTo(run) <- 2026_01_31;
+            payrollRunStatus(run) <- PayrollRunStatus.draft;
+
+            NEW worker = Employee {
+                iin(worker) <- '900101870003';
+                lastName(worker) <- 'Граница';
+                firstName(worker) <- 'Смешанный доход';
+                birthDate(worker) <- 1990_01_01;
+                citizenshipCode(worker) <- 'KZ';
+
+                NEW employeeTax = EmployeeTaxProfile {
+                    taxProfileOrganization(employeeTax) <- org;
+                    taxProfileEmployee(employeeTax) <- worker;
+                    taxProfileValidFrom(employeeTax) <- 2026_01_01;
+                    taxProfileValidTo(employeeTax) <- 2026_01_31;
+                    taxProfileResident(employeeTax) <- TRUE;
+                    taxProfileIncomeStatus(employeeTax) <- TaxIncomeStatus.employee;
+                    taxProfileSocialDeduction(employeeTax) <- IpnSocialDeductionKind.none;
+                    taxProfileBasis(employeeTax) <- 'Эталон границы ИПН 2026';
+                }
+                NEW civilTax = EmployeeTaxProfile {
+                    taxProfileOrganization(civilTax) <- org;
+                    taxProfileEmployee(civilTax) <- worker;
+                    taxProfileValidFrom(civilTax) <- 2026_02_01;
+                    taxProfileValidTo(civilTax) <- 2026_12_31;
+                    taxProfileResident(civilTax) <- TRUE;
+                    taxProfileIncomeStatus(civilTax) <- TaxIncomeStatus.civilContract;
+                    taxProfileSocialDeduction(civilTax) <- IpnSocialDeductionKind.none;
+                    taxProfileBasis(civilTax) <- 'Эталон смешанного дохода 2026';
+                }
+                NEW socialProfile = SocialPaymentProfile {
+                    socialProfileOrganization(socialProfile) <- org;
+                    socialProfileEmployee(socialProfile) <- worker;
+                    socialProfileValidFrom(socialProfile) <- 2026_01_01;
+                    socialProfileValidTo(socialProfile) <- 2026_12_31;
+                    socialProfileOpvExempt(socialProfile) <- TRUE;
+                    socialProfileOpvrExempt(socialProfile) <- TRUE;
+                    socialProfileVosmsExempt(socialProfile) <- TRUE;
+                    socialProfileOosmsExempt(socialProfile) <- TRUE;
+                    socialProfileSoExempt(socialProfile) <- TRUE;
+                    socialProfileBasis(socialProfile) <- 'Изоляция эталона ИПН от социальных платежей';
+
+                    NEW employment = Employment {
+                        employee(employment) <- worker;
+                        organization(employment) <- org;
+                        salary(employment) <- 36761500.00;
+
+                        NEW assignment = EmploymentAssignment {
+                            employment(assignment) <- employment;
+                            assignmentFrom(assignment) <- 2026_01_01;
+                            assignmentSalary(assignment) <- 36761500.00;
+
+                            NEW line = PayrollLine {
+                                linePayrollRun(line) <- run;
+                                linePayrollAssignment(line) <- assignment;
+                                lineCalculationType(line) <- calculationTypeByCode('BASE_SALARY');
+                                calculationBase(line) <- 36761500.00;
+                                calculationAmount(line) <- 36761500.00;
+                                calculationNote(line) <- 'На 1 000 тенге ниже годового порога';
+                            }
+                        }
+                    }
+                }
+            }
+
+            payrollRunStatus(run) <- PayrollRunStatus.calculated;
+            NEW social = SocialPaymentDocument {
+                socialPaymentPayrollRun(social) <- run;
+                socialPaymentStatus(social) <- SocialPaymentStatus.draft;
+                calculateSocialPayments(social);
+
+                NEW taxes = TaxCalculationDocument {
+                    taxCalculationPayrollRun(taxes) <- run;
+                    taxCalculationSocialPayments(taxes) <- social;
+                    taxCalculationStatus(taxes) <- TaxCalculationStatus.draft;
+                    calculateTaxes(taxes);
+
+                    NEW contract = CivilContract {
+                        civilContractOrganization(contract) <- org;
+                        civilContractContractor(contract) <-
+                            boundaryEmployee('900101870003');
+                        civilContractNumber(contract) <- 'LEGAL-MIXED-GPH-2026';
+                        civilContractDate(contract) <- 2026_02_01;
+                        civilContractFrom(contract) <- 2026_02_01;
+                        civilContractTo(contract) <- 2026_12_31;
+                        civilContractSubject(contract) <- 'Доход, пересекающий годовой порог ИПН';
+                        civilContractAmount(contract) <- 2000.00;
+                        civilContractStatus(contract) <- CivilContractStatus.active;
+
+                        NEW act = CivilContractAct {
+                            civilActContract(act) <- contract;
+                            civilActNumber(act) <- 'LEGAL-MIXED-GPH-2026-02';
+                            civilActDate(act) <- 2026_02_28;
+                            civilActGrossIncome(act) <- 2000.00;
+                            civilActStatus(act) <- CivilContractActStatus.draft;
+                            calculateCivilAct(act);
+
+                            EXPORT JSON FROM
+                                threshold = numericStatutoryValueOn(
+                                    statutoryParameterByCode('MRP'), 2026_01_31) *
+                                    numericStatutoryValueOn(
+                                        statutoryParameterByCode('IPN_THRESHOLD_MRP'), 2026_01_31),
+                                ipnAtThreshold = progressiveIpn(36762500.00, 36762500.00,
+                                    10.000000, 15.000000),
+                                ipnOneTengeAbove = progressiveIpn(36762501.00, 36762500.00,
+                                    10.000000, 15.000000),
+                                roundedFourTiyinExcess =
+                                    progressiveIpn(36762500.04, 36762500.00,
+                                        10.000000, 15.000000) -
+                                    progressiveIpn(36762500.00, 36762500.00,
+                                        10.000000, 15.000000),
+                                salaryTaxable = ipnTaxableIncome(
+                                    taxCalculationLineByEmployee(taxes,
+                                        boundaryEmployee('900101870003'))),
+                                salaryIpn = ipnAmount(
+                                    taxCalculationLineByEmployee(taxes,
+                                        boundaryEmployee('900101870003'))),
+                                civilTaxable = civilActTaxableIncome(act),
+                                civilIpn = civilActIpn(act),
+                                civilPayable = civilActPayable(act),
+                                combinedTaxable = boundaryLedgerTaxable(org,
+                                    boundaryEmployee('900101870003')),
+                                combinedIpn = boundaryLedgerIpn(org,
+                                    boundaryEmployee('900101870003')),
+                                opvMaxBase = numericStatutoryValueOn(
+                                    statutoryParameterByCode('MZP'), 2026_01_31) *
+                                    numericStatutoryValueOn(
+                                        statutoryParameterByCode('OPV_MAX_MZP'), 2026_01_31),
+                                opvMaxAmount = socialPaymentAmount(4250000.00,
+                                    numericStatutoryValueOn(
+                                        statutoryParameterByCode('OPV_RATE'), 2026_01_31)),
+                                soMaxBase = numericStatutoryValueOn(
+                                    statutoryParameterByCode('MZP'), 2026_01_31) *
+                                    numericStatutoryValueOn(
+                                        statutoryParameterByCode('SO_MAX_MZP'), 2026_01_31),
+                                soMaxAmount = socialPaymentAmount(595000.00,
+                                    numericStatutoryValueOn(
+                                        statutoryParameterByCode('SO_RATE'), 2026_01_31)),
+                                vosmsMaxBase = numericStatutoryValueOn(
+                                    statutoryParameterByCode('MZP'), 2026_01_31) *
+                                    numericStatutoryValueOn(
+                                        statutoryParameterByCode('VOSMS_MAX_MZP'), 2026_01_31),
+                                vosmsMaxAmount = socialPaymentAmount(1700000.00,
+                                    numericStatutoryValueOn(
+                                        statutoryParameterByCode('VOSMS_RATE'), 2026_01_31)),
+                                salaryPack = packCode(taxCalculationRegulatoryPack(taxes)),
+                                civilPack = packCode(civilActRegulatoryPack(act));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
