@@ -19,16 +19,15 @@
 ## Сборка
 
 ```bash
-mvn --batch-mode --file ../platform/pom.xml \
-  -pl :server,:web-compile-maven-plugin -am install -DskipTests
-mvn --batch-mode --no-snapshot-updates clean package -Passemble,embed-server
+./scripts/check.sh
+./scripts/build.sh ../platform
 ```
 
-Первая команда собирает API, сервер и Maven-плагин из текущего commit соседнего
-форка. Вторая использует эти локальные артефакты и не заменяет их опубликованным
-`7.0-SNAPSHOT`. Она проверяет компиляцию и собирает сервер, но не запускает
-прикладные сценарии. Полная регрессия выполняется workflow `CI`; его checkout
-платформы закреплён на конкретном commit. Порядок выпуска приведён в
+Скрипт сверяет соседний checkout платформы с `platform-revision.txt`, собирает
+нужные модули платформы и production JAR приложения. Тестовые lsFusion-модули
+хранятся в `src/test/lsfusion` и попадают только в профиль `test-logics`, который
+использует CI. Полная серверная регрессия выполняется workflow `CI` тем же
+скриптом сборки и на той же закреплённой ревизии платформы. Порядок выпуска приведён в
 [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md).
 
 Настройки конкретной установки не коммитятся. Скопируйте
