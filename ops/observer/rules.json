@@ -48,7 +48,12 @@
       }
     },
     "payroll": {
-      "starts": ["timesheet"],
+      "starts": [
+        "timesheet", "calculated", "social-approved", "tax-approved",
+        "enforcement-approved", "closed", "statement-approved", "paid",
+        "reopened", "reset"
+      ],
+      "dedupe_seconds": 120,
       "transitions": {
         "timesheet": ["calculated"],
         "calculated": ["social-approved", "reset"],

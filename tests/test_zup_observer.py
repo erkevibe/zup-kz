@@ -24,6 +24,7 @@ class ObserverTest(unittest.TestCase):
             "files": [{"name": "app", "globs": [str(self.log)]}],
             "processes": {"payroll": {
                 "starts": ["timesheet"],
+                "dedupe_seconds": 120,
                 "transitions": {"timesheet": ["calculated"], "calculated": []},
                 "max_age_seconds": {"timesheet": 60},
                 "recommendations": {"timesheet": "Рассчитать зарплату"},
@@ -171,6 +172,17 @@ class ObserverTest(unittest.TestCase):
         transition = next(row for row in report["processTransitions"] if row["from_state"] == "timesheet")
         self.assertEqual(transition["to_activity"], "calculated")
         self.assertEqual(transition["occurrences"], 1)
+
+    def test_same_process_event_from_multiple_sources_is_counted_once(self):
+        duplicate = "INFO ZUP_PROCESS process=payroll case=R5 activity=timesheet\n"
+        second_log = self.root / "journal.log"
+        self.config["files"].append({"name": "journal", "globs": [str(second_log)]})
+        self.log.write_text(duplicate, encoding="utf-8")
+        second_log.write_text(duplicate, encoding="utf-8")
+        self.observer.scan_once()
+        self.assertEqual(self.count("raw_event"), 2)
+        self.assertEqual(self.count("process_event"), 1)
+        self.assertEqual(self.count("incident"), 0)
 
 
 if __name__ == "__main__":
