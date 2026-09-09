@@ -3,7 +3,18 @@ import sys
 
 
 expected_key_sets = [
-    {"employeeMapped", "ownSettlementCreated", "foreignSettlementCreated"},
+    {
+        "employeeMapped",
+        "cardCreated",
+        "employmentCreated",
+        "assignmentCreated",
+        "hireEventCreated",
+        "leaveCreated",
+        "sickLeaveCreated",
+        "ownSettlementCreated",
+        "foreignSettlementCreated",
+        "settlementBalanced",
+    },
     {
         "ownSettlementAllowed",
         "foreignSettlementDenied",
@@ -13,6 +24,16 @@ expected_key_sets = [
         "employeeCabinetPermitted",
         "employeePayrollForbidden",
         "employeeReadOnly",
+    },
+    {
+        "employeeMappedPersisted",
+        "cardPersisted",
+        "employmentPersisted",
+        "assignmentPersisted",
+        "hireEventPersisted",
+        "leavePersisted",
+        "sickLeavePersisted",
+        "settlementPersisted",
     },
 ]
 

@@ -112,48 +112,246 @@ employeeCabinetOwnSettlement() = settlementLineByEmployee(
     employeeCabinetRun(), employeeCabinetOwnEmployee());
 employeeCabinetForeignSettlement() = settlementLineByEmployee(
     employeeCabinetRun(), employeeCabinetForeignEmployee());
+employeeCabinetOrganization() = organizationByBin('555555555555');
+employeeCabinetDepartment() = GROUP LAST Department d IF
+    organization(d) == employeeCabinetOrganization() AND code(d) == 'CABINET-DEPT' ORDER d;
+employeeCabinetPosition() = GROUP LAST Position p IF
+    organization(p) == employeeCabinetOrganization() AND code(p) == 'CABINET-SPECIALIST' ORDER p;
+employeeCabinetStaff() = GROUP LAST StaffPosition s IF
+    organization(s) == employeeCabinetOrganization() AND staffCode(s) == 'CABINET-STAFF-001' ORDER s;
+employeeCabinetCard() = GROUP LAST EmployeeCard c IF
+    cardEmployee(c) == employeeCabinetOwnEmployee() AND
+    cardOrganization(c) == employeeCabinetOrganization() ORDER c;
+employeeCabinetEmployment() = GROUP LAST Employment e IF
+    employee(e) == employeeCabinetOwnEmployee() AND contractNumber(e) == 'CABINET-TD-001' ORDER e;
+employeeCabinetAssignment() = GROUP LAST EmploymentAssignment a IF
+    employment(a) == employeeCabinetEmployment() ORDER a;
+employeeCabinetHire() = GROUP LAST PersonnelEvent e IF
+    eventEmployment(e) == employeeCabinetEmployment() AND orderNumber(e) == 'CABINET-HIRE-001' ORDER e;
+employeeCabinetLeave() = GROUP LAST LeaveDocument l IF
+    leaveAssignment(l) == employeeCabinetAssignment() AND leaveNumber(l) == 'CABINET-LEAVE-001' ORDER l;
+employeeCabinetLegacySickLeave() = GROUP LAST SickLeaveDocument d IF
+    sickLeaveAssignment(d) == employeeCabinetAssignment() AND
+    sickLeaveNumber(d) == 'CABINET-SICK-001' ORDER d;
+employeeCabinetSickAverage() = GROUP LAST AverageEarningsDocument d IF
+    averageAssignment(d) == employeeCabinetAssignment() AND
+    averageNumber(d) == 'CABINET-AVG-SICK-002' ORDER d;
+employeeCabinetSickLeave() = GROUP LAST SickLeaveDocument d IF
+    sickLeaveAssignment(d) == employeeCabinetAssignment() AND
+    sickLeaveNumber(d) == 'CABINET-SICK-002' ORDER d;
 
 employeeCabinetSetupTest() {
-    IF NOT employeeCabinetRun() THEN NEW own = Employee {
+    IF NOT employeeCabinetOwnEmployee() THEN NEW own = Employee {
         iin(own) <- '901010400010';
         lastName(own) <- 'Кабинетов';
         firstName(own) <- 'Сотрудник';
-        employeeUser(own) <- uiRoleTestUser('ui-employee');
-        NEW foreign = Employee {
-            iin(foreign) <- '911111400011';
-            lastName(foreign) <- 'Чужой';
-            firstName(foreign) <- 'Сотрудник';
-            NEW run = PayrollRun {
-                payrollOrganization(run) <- organizationByBin('555555555555');
-                payrollNumber(run) <- 'CABINET-2026-08';
-                payrollPeriodFrom(run) <- 2026_08_01;
-                payrollPeriodTo(run) <- 2026_08_31;
-                payrollRunStatus(run) <- PayrollRunStatus.approved;
-                NEW ownLine = PayrollSettlementLine {
-                    settlementPayrollRun(ownLine) <- run;
-                    settlementEmployee(ownLine) <- own;
-                    settlementAccrued(ownLine) <- 400000.00;
-                    settlementPayable(ownLine) <- 320000.00;
-                    settlementClosedAt(ownLine) <- currentDateTime();
-                }
-                NEW foreignLine = PayrollSettlementLine {
-                    settlementPayrollRun(foreignLine) <- run;
-                    settlementEmployee(foreignLine) <- foreign;
-                    settlementAccrued(foreignLine) <- 500000.00;
-                    settlementPayable(foreignLine) <- 400000.00;
-                    settlementClosedAt(foreignLine) <- currentDateTime();
-                }
-            }
+    }
+    IF NOT employeeCabinetForeignEmployee() THEN NEW foreign = Employee {
+        iin(foreign) <- '911111400011';
+        lastName(foreign) <- 'Чужой';
+        firstName(foreign) <- 'Сотрудник';
+    }
+    IF NOT employeeCabinetDepartment() THEN NEW department = Department {
+        organization(department) <- employeeCabinetOrganization();
+        code(department) <- 'CABINET-DEPT';
+        name(department) <- 'Отдел клиентского сервиса';
+    }
+    IF NOT employeeCabinetPosition() THEN NEW position = Position {
+        organization(position) <- employeeCabinetOrganization();
+        code(position) <- 'CABINET-SPECIALIST';
+        name(position) <- 'Специалист по работе с клиентами';
+    }
+    APPLY;
+
+    IF NOT birthDate(employeeCabinetOwnEmployee()) THEN
+        birthDate(employeeCabinetOwnEmployee()) <- 1990_10_10;
+    IF NOT gender(employeeCabinetOwnEmployee()) THEN
+        gender(employeeCabinetOwnEmployee()) <- Gender.male;
+    IF NOT citizenshipCode(employeeCabinetOwnEmployee()) THEN
+        citizenshipCode(employeeCabinetOwnEmployee()) <- 'KAZ';
+    IF NOT employeeCabinetStaff() THEN NEW staff = StaffPosition {
+        organization(staff) <- employeeCabinetOrganization();
+        department(staff) <- employeeCabinetDepartment();
+        position(staff) <- employeeCabinetPosition();
+        staffCode(staff) <- 'CABINET-STAFF-001';
+        validFrom(staff) <- 2026_01_01;
+        plannedFTE(staff) <- 1.0000;
+        salaryMin(staff) <- 300000.00;
+        salaryMax(staff) <- 500000.00;
+    }
+    IF NOT employeeCabinetCard() THEN NEW card = EmployeeCard {
+        cardEmployee(card) <- employeeCabinetOwnEmployee();
+        cardOrganization(card) <- employeeCabinetOrganization();
+        cardNumber(card) <- 'CABINET-T2-001';
+        cardDate(card) <- 2026_01_05;
+        personnelNumber(card) <- 'CAB-0001';
+        phone(card) <- '+7 701 555 01 01';
+        email(card) <- 'employee@example.test';
+        registeredAddress(card) <- 'г. Алматы, тестовый адрес регистрации';
+        residentialAddress(card) <- 'г. Алматы, тестовый адрес проживания';
+    }
+    IF NOT employeeCabinetEmployment() THEN NEW contract = Employment {
+        employee(contract) <- employeeCabinetOwnEmployee();
+        organization(contract) <- employeeCabinetOrganization();
+        department(contract) <- employeeCabinetDepartment();
+        position(contract) <- employeeCabinetPosition();
+        hireDate(contract) <- 2026_01_12;
+        contractNumber(contract) <- 'CABINET-TD-001';
+        contractDate(contract) <- 2026_01_05;
+        employmentKind(contract) <- EmploymentKind.primary;
+        contractTermKind(contract) <- ContractTermKind.indefinite;
+        workPlace(contract) <- 'г. Алматы';
+        workConditions(contract) <- 'Нормальные условия труда';
+        salary(contract) <- 400000.00;
+    }
+    APPLY;
+
+    IF NOT employeeCabinetAssignment() THEN NEW assignment = EmploymentAssignment {
+        employment(assignment) <- employeeCabinetEmployment();
+        staffPosition(assignment) <- employeeCabinetStaff();
+        assignmentFrom(assignment) <- 2026_01_12;
+        fte(assignment) <- 1.0000;
+        assignmentSalary(assignment) <- 400000.00;
+    }
+    APPLY;
+
+    // Представительный набор для визуальной приёмки; расчётные алгоритмы
+    // отпусков и больничных проверяются отдельными workflow-тестами.
+    IF NOT employeeCabinetHire() THEN NEW hire = PersonnelEvent {
+        eventKind(hire) <- PersonnelEventKind.hire;
+        eventEmployment(hire) <- employeeCabinetEmployment();
+        eventAssignment(hire) <- employeeCabinetAssignment();
+        eventStaffPosition(hire) <- employeeCabinetStaff();
+        eventFte(hire) <- 1.0000;
+        eventSalary(hire) <- 400000.00;
+        effectiveDate(hire) <- 2026_01_12;
+        orderNumber(hire) <- 'CABINET-HIRE-001';
+        orderDate(hire) <- 2026_01_05;
+        basis(hire) <- 'Трудовой договор CABINET-TD-001';
+        eventStatus(hire) <- PersonnelEventStatus.posted;
+        eventPostedAt(hire) <- currentDateTime();
+        esutdStatus(hire) <- EsutdStatus.notSubmitted;
+    }
+    IF NOT employeeCabinetLeave() THEN NEW leave = LeaveDocument {
+        leaveNumber(leave) <- 'CABINET-LEAVE-001';
+        leaveOrderDate(leave) <- 2026_08_25;
+        leaveAssignment(leave) <- employeeCabinetAssignment();
+        leaveKind(leave) <- LeaveKind.unpaid;
+        leaveDateFrom(leave) <- 2026_09_14;
+        leaveDateTo(leave) <- 2026_09_18;
+        leaveCalendar(leave) <- calendarByYear(2026);
+        leaveWorkWeek(leave) <- LeaveWorkWeek.fiveDay;
+        leaveBasis(leave) <- 'Учебный UI-сценарий: личное заявление';
+        leaveStatus(leave) <- LeaveStatus.approved;
+        leaveApprovedAt(leave) <- currentDateTime();
+        leaveApprovedBy(leave) <- currentUser() AS CustomUser;
+    }
+    IF sickLeaveStatus(employeeCabinetLegacySickLeave()) == SickLeaveStatus.approved THEN
+        cancelSickLeave(employeeCabinetLegacySickLeave());
+    IF NOT employeeCabinetSickAverage() THEN NEW average = AverageEarningsDocument {
+        averageNumber(average) <- 'CABINET-AVG-SICK-002';
+        averageAssignment(average) <- employeeCabinetAssignment();
+        averageEventKind(average) <- AverageEarningsEventKind.sickLeave;
+        averageMode(average) <- AverageEarningsMode.daily;
+        averageEventFrom(average) <- 2026_10_05;
+        averageEventTo(average) <- 2026_10_07;
+        averagePeriodFrom(average) <- 2025_10_01;
+        averagePeriodTo(average) <- 2026_09_30;
+        averageEventWorkDays(average) <- 3.00;
+        averageStatus(average) <- AverageEarningsStatus.baseCollected;
+        NEW base = AverageEarningsBaseLine {
+            baseAverageDocument(base) <- average;
+            baseEarnings(base) <- 420000.00;
+            baseWorkedDays(base) <- 21.00;
+            baseIncreaseCoefficient(base) <- 1.000000;
+            baseIncluded(base) <- TRUE;
+            baseNote(base) <- 'Учебная база среднего заработка для UI';
+            calculateAverageEarnings(average);
         }
     }
-    IF employeeCabinetOwnEmployee() AND uiRoleTestUser('ui-employee') THEN
-        employeeUser(employeeCabinetOwnEmployee()) <- uiRoleTestUser('ui-employee');
+    IF NOT employeeCabinetSickLeave() THEN NEW sick = SickLeaveDocument {
+        sickLeaveNumber(sick) <- 'CABINET-SICK-002';
+        sickLeaveIssueDate(sick) <- 2026_10_07;
+        sickLeaveMedicalOrganization(sick) <- 'Учебная поликлиника';
+        sickLeaveAssignment(sick) <- employeeCabinetAssignment();
+        sickLeaveFrom(sick) <- 2026_10_05;
+        sickLeaveTo(sick) <- 2026_10_07;
+        sickLeaveReason(sick) <- SickLeaveReason.illness;
+        sickLeaveAverage(sick) <- employeeCabinetSickAverage();
+        sickLeaveStatus(sick) <- SickLeaveStatus.draft;
+        NEW benefit = SickLeaveBenefitLine {
+            sickBenefitDocument(benefit) <- sick;
+            sickBenefitMonth(benefit) <- 2026_10_05;
+            sickBenefitWorkDays(benefit) <- 3.00;
+            sickBenefitNote(benefit) <- 'Учебный UI-сценарий';
+            calculateSickLeave(sick);
+            approveSickLeave(sick);
+        }
+    }
+    IF NOT employeeCabinetRun() THEN NEW run = PayrollRun {
+        payrollOrganization(run) <- employeeCabinetOrganization();
+        payrollNumber(run) <- 'CABINET-2026-08';
+        payrollPeriodFrom(run) <- 2026_08_01;
+        payrollPeriodTo(run) <- 2026_08_31;
+        payrollRunStatus(run) <- PayrollRunStatus.approved;
+        NEW ownLine = PayrollSettlementLine {
+            settlementPayrollRun(ownLine) <- run;
+            settlementEmployee(ownLine) <- employeeCabinetOwnEmployee();
+            settlementAccrued(ownLine) <- 400000.00;
+            settlementPayable(ownLine) <- 320000.00;
+            settlementClosedAt(ownLine) <- currentDateTime();
+        }
+        NEW foreignLine = PayrollSettlementLine {
+            settlementPayrollRun(foreignLine) <- run;
+            settlementEmployee(foreignLine) <- employeeCabinetForeignEmployee();
+            settlementAccrued(foreignLine) <- 500000.00;
+            settlementPayable(foreignLine) <- 400000.00;
+            settlementClosedAt(foreignLine) <- currentDateTime();
+        }
+    }
     APPLY;
+
+    // Старый UI-набор мог содержать только начислено/к выплате. Доводим
+    // синтетический закрытый снимок до арифметически согласованного состояния.
+    payrollLifecycleTransition(employeeCabinetRun()) <- TRUE;
+    settlementOpv(employeeCabinetOwnSettlement()) <- 40000.00;
+    settlementVosms(employeeCabinetOwnSettlement()) <- 8000.00;
+    settlementIpn(employeeCabinetOwnSettlement()) <- 32000.00;
+    settlementOpv(employeeCabinetForeignSettlement()) <- 50000.00;
+    settlementVosms(employeeCabinetForeignSettlement()) <- 10000.00;
+    settlementIpn(employeeCabinetForeignSettlement()) <- 40000.00;
+    employeeUser(employeeCabinetOwnEmployee()) <- uiRoleTestUser('ui-employee');
+    APPLY;
+
     EXPORT JSON FROM
         employeeMapped = employeeByUser(uiRoleTestUser('ui-employee')) ==
             employeeCabinetOwnEmployee(),
+        cardCreated = employeeCabinetCard() IS EmployeeCard,
+        employmentCreated = employeeCabinetEmployment() IS Employment,
+        assignmentCreated = employeeCabinetAssignment() IS EmploymentAssignment,
+        hireEventCreated = eventStatus(employeeCabinetHire()) == PersonnelEventStatus.posted,
+        leaveCreated = leaveStatus(employeeCabinetLeave()) == LeaveStatus.approved,
+        sickLeaveCreated = sickLeaveStatus(employeeCabinetSickLeave()) == SickLeaveStatus.approved,
         ownSettlementCreated = settlementPayable(employeeCabinetOwnSettlement()) == 320000.00,
-        foreignSettlementCreated = settlementPayable(employeeCabinetForeignSettlement()) == 400000.00;
+        foreignSettlementCreated = settlementPayable(employeeCabinetForeignSettlement()) == 400000.00,
+        settlementBalanced = settlementAccrued(employeeCabinetOwnSettlement()) -
+            settlementTotalDeducted(employeeCabinetOwnSettlement()) ==
+            settlementPayable(employeeCabinetOwnSettlement());
+}
+
+employeeCabinetFixtureVerificationTest() {
+    EXPORT JSON FROM
+        employeeMappedPersisted = employeeByUser(uiRoleTestUser('ui-employee')) ==
+            employeeCabinetOwnEmployee(),
+        cardPersisted = employeeCabinetCard() IS EmployeeCard,
+        employmentPersisted = employeeCabinetEmployment() IS Employment,
+        assignmentPersisted = employeeCabinetAssignment() IS EmploymentAssignment,
+        hireEventPersisted = eventStatus(employeeCabinetHire()) == PersonnelEventStatus.posted,
+        leavePersisted = leaveStatus(employeeCabinetLeave()) == LeaveStatus.approved,
+        sickLeavePersisted = sickLeaveStatus(employeeCabinetSickLeave()) == SickLeaveStatus.approved,
+        settlementPersisted = settlementAccrued(employeeCabinetOwnSettlement()) -
+            settlementTotalDeducted(employeeCabinetOwnSettlement()) ==
+            settlementPayable(employeeCabinetOwnSettlement());
 }
 
 employeeCabinetAccessTest() {

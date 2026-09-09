@@ -4,6 +4,12 @@ REQUIRE Authentication, HREmployeeCard, HRLeave, PayrollSickLeave, PayrollSettle
 NAMESPACE ZUPKZ;
 
 currentCabinetEmployee() = employeeByUser(currentUser() AS CustomUser);
+cabinetGenderName 'Пол' (Employee worker) = caption(gender(worker));
+cabinetCitizenshipCode 'Гражданство' (Employee worker) = citizenshipCode(worker);
+cabinetLeaveKindName 'Вид отпуска' (LeaveDocument leave) = caption(leaveKind(leave));
+cabinetLeaveStatusName 'Статус' (LeaveDocument leave) = caption(leaveStatus(leave));
+cabinetSickLeaveReasonName 'Причина' (SickLeaveDocument sick) = caption(sickLeaveReason(sick));
+cabinetSickLeaveStatusName 'Статус' (SickLeaveDocument sick) = caption(sickLeaveStatus(sick));
 
 FORM employeeCabinetUsers 'Учётные записи сотрудников'
     OBJECTS worker = Employee
@@ -14,19 +20,20 @@ FORM employeeCabinetUsers 'Учётные записи сотрудников'
 
 FORM employeeCabinet 'Кабинет сотрудника'
     OBJECTS worker = Employee
-    PROPERTIES(worker) READONLY employeeFullName, iin, birthDate, gender, citizenshipCode
+    PROPERTIES(worker) READONLY employeeFullName, iin, birthDate,
+                                cabinetGenderName, cabinetCitizenshipCode
     FILTERS worker == currentCabinetEmployee()
 
     OBJECTS card = EmployeeCard
-    PROPERTIES(card) READONLY cardOrganizationName, personnelNumber, phone, email,
-                          registeredAddress, residentialAddress
+    PROPERTIES(card) READONLY cardOrganizationName, personnelNumber
+    PROPERTIES(card) PANEL READONLY phone, email, registeredAddress, residentialAddress
     FILTERS cardEmployee(card) == worker
 
     OBJECTS contract = Employment
     PROPERTIES(contract) READONLY employmentOrganizationName, employmentDepartmentName,
-                              employmentPositionName, employmentSalary, hireDate,
-                              contractNumber, contractDate, employmentKindName,
-                              contractTermKindName, contractEndDate, workPlace, workConditions
+                              employmentPositionName, hireDate, contractNumber
+    PROPERTIES(contract) PANEL READONLY employmentSalary, contractDate, employmentKindName,
+                                    contractTermKindName, contractEndDate, workPlace, workConditions
     FILTERS employee(contract) == worker
 
     OBJECTS assignment = EmploymentAssignment
@@ -36,62 +43,125 @@ FORM employeeCabinet 'Кабинет сотрудника'
 
     OBJECTS event = PersonnelEvent
     PROPERTIES(event) READONLY eventOrganizationName, eventKindName, effectiveDate,
-                           orderNumber, orderDate, basis, eventStatusName,
-                           eventEsutdStatusName
+                           orderNumber
+    PROPERTIES(event) PANEL READONLY orderDate, basis, eventStatusName, eventEsutdStatusName
     FILTERS employee(eventEmployment(event)) == worker,
             eventStatus(event) == PersonnelEventStatus.posted
 
     OBJECTS leave = LeaveDocument
-    PROPERTIES(leave) READONLY leaveNumber, leaveKind, leaveDateFrom, leaveDateTo,
-                           leaveCalendarDays, leaveChargedDays, leaveGrossAmount, leaveStatus
+    PROPERTIES(leave) READONLY leaveNumber, cabinetLeaveKindName, leaveDateFrom, leaveDateTo,
+                           cabinetLeaveStatusName
+    PROPERTIES(leave) PANEL READONLY leaveCalendarDays, leaveChargedDays, leaveGrossAmount
     FILTERS employee(employment(leaveAssignment(leave))) == worker,
             leaveStatus(leave) == LeaveStatus.approved
 
     OBJECTS sick = SickLeaveDocument
-    PROPERTIES(sick) READONLY sickLeaveNumber, sickLeaveIssueDate, sickLeaveFrom,
-                          sickLeaveTo, sickLeaveReason, sickLeaveGrossAmount, sickLeaveStatus
+    PROPERTIES(sick) READONLY sickLeaveNumber, sickLeaveFrom,
+                          sickLeaveTo, cabinetSickLeaveReasonName, cabinetSickLeaveStatusName
+    PROPERTIES(sick) PANEL READONLY sickLeaveIssueDate, sickLeaveGrossAmount
     FILTERS employee(employment(sickLeaveAssignment(sick))) == worker,
             sickLeaveStatus(sick) == SickLeaveStatus.approved
 
     OBJECTS settlement = PayrollSettlementLine
     PROPERTIES(settlement) READONLY settlementRunNumber, settlementPeriodFrom,
                                 settlementPeriodTo, settlementAccrued,
-                                settlementTotalDeducted, settlementPayable,
-                                unpaidSettlementAmount
+                                settlementTotalDeducted, settlementPayable
+    PROPERTIES(settlement) PANEL READONLY unpaidSettlementAmount
     PROPERTIES(settlement) openPayrollSettlement TOOLBAR,
                            printPayrollSettlementPdf TOOLBAR
     FILTERS settlementEmployee(settlement) == worker, settlementClosedAt(settlement)
 ;
 
 DESIGN employeeCabinet {
+    PROPERTY(employeeFullName(worker)) { charWidth = 28; }
+    PROPERTY(iin(worker)) { charWidth = 13; }
+    PROPERTY(birthDate(worker)) { charWidth = 11; }
+    PROPERTY(cabinetGenderName(worker)) { charWidth = 10; }
+    PROPERTY(cabinetCitizenshipCode(worker)) { charWidth = 12; }
     MOVE BOX(worker) FIRST {
         caption = 'Мои данные';
-        height = 115;
+        height = 105;
         flex = 0;
     }
     NEW cabinetDetails AFTER BOX(worker) {
         tabbed = TRUE;
         NEW cardsTab {
             caption = 'Контакты';
-            MOVE BOX(card) { caption = 'Данные по организациям'; }
+            MOVE BOX(card) {
+                caption = 'Данные по организациям';
+                PROPERTY(cardOrganizationName(card)) { charWidth = 28; }
+                PROPERTY(personnelNumber(card)) { charWidth = 14; }
+                PROPERTY(phone(card)) { charWidth = 18; }
+                PROPERTY(email(card)) { charWidth = 28; }
+                PROPERTY(registeredAddress(card)) { charWidth = 36; wrap = TRUE; }
+                PROPERTY(residentialAddress(card)) { charWidth = 36; wrap = TRUE; }
+            }
         }
         NEW contractsTab {
             caption = 'Работа';
-            MOVE BOX(contract) { caption = 'Трудовые договоры'; }
-            MOVE BOX(assignment) { caption = 'Назначения и оклад'; }
+            MOVE BOX(contract) {
+                caption = 'Трудовые договоры';
+                PROPERTY(employmentOrganizationName(contract)) { charWidth = 22; }
+                PROPERTY(employmentDepartmentName(contract)) { charWidth = 24; }
+                PROPERTY(employmentPositionName(contract)) { charWidth = 28; }
+                PROPERTY(employmentSalary(contract)) { charWidth = 13; }
+                PROPERTY(hireDate(contract)) { charWidth = 11; }
+                PROPERTY(contractNumber(contract)) { charWidth = 16; }
+                PROPERTY(contractDate(contract)) { charWidth = 11; }
+                PROPERTY(employmentKindName(contract)) { charWidth = 24; }
+                PROPERTY(contractTermKindName(contract)) { charWidth = 24; }
+                PROPERTY(contractEndDate(contract)) { charWidth = 11; }
+                PROPERTY(workPlace(contract)) { charWidth = 20; }
+                PROPERTY(workConditions(contract)) { charWidth = 36; wrap = TRUE; }
+            }
+            MOVE BOX(assignment) {
+                caption = 'Назначения и оклад';
+                PROPERTY(assignmentStaffCode(assignment)) { charWidth = 20; }
+                PROPERTY(assignmentPositionName(assignment)) { charWidth = 32; }
+            }
         }
         NEW eventsTab {
             caption = 'Кадровая история';
-            MOVE BOX(event) { caption = 'Проведённые кадровые события'; }
+            MOVE BOX(event) {
+                caption = 'Проведённые кадровые события';
+                PROPERTY(eventOrganizationName(event)) { charWidth = 22; }
+                PROPERTY(eventKindName(event)) { charWidth = 16; }
+                PROPERTY(effectiveDate(event)) { charWidth = 12; }
+                PROPERTY(orderNumber(event)) { charWidth = 18; }
+                PROPERTY(basis(event)) { charWidth = 36; wrap = TRUE; }
+            }
         }
         NEW absencesTab {
             caption = 'Отсутствия';
-            MOVE BOX(leave) { caption = 'Утверждённые отпуска'; }
-            MOVE BOX(sick) { caption = 'Утверждённые больничные'; }
+            MOVE BOX(leave) {
+                caption = 'Утверждённые отпуска';
+                PROPERTY(leaveNumber(leave)) { charWidth = 18; }
+                PROPERTY(cabinetLeaveKindName(leave)) { charWidth = 32; }
+                PROPERTY(leaveDateFrom(leave)) { charWidth = 10; }
+                PROPERTY(leaveDateTo(leave)) { charWidth = 10; }
+                PROPERTY(cabinetLeaveStatusName(leave)) { charWidth = 12; }
+            }
+            MOVE BOX(sick) {
+                caption = 'Утверждённые больничные';
+                PROPERTY(sickLeaveNumber(sick)) { charWidth = 18; }
+                PROPERTY(sickLeaveIssueDate(sick)) { charWidth = 11; }
+                PROPERTY(sickLeaveFrom(sick)) { charWidth = 10; }
+                PROPERTY(sickLeaveTo(sick)) { charWidth = 10; }
+                PROPERTY(cabinetSickLeaveReasonName(sick)) { charWidth = 18; }
+                PROPERTY(cabinetSickLeaveStatusName(sick)) { charWidth = 14; }
+            }
         }
         NEW settlementsTab {
             caption = 'Расчётные листки';
-            MOVE BOX(settlement) { caption = 'Закрытые расчётные листки'; }
+            MOVE BOX(settlement) {
+                caption = 'Закрытые расчётные листки';
+                PROPERTY(settlementRunNumber(settlement)) { charWidth = 14; }
+                PROPERTY(settlementPeriodFrom(settlement)) { charWidth = 10; }
+                PROPERTY(settlementPeriodTo(settlement)) { charWidth = 10; }
+                PROPERTY(settlementAccrued(settlement)) { charWidth = 12; }
+                PROPERTY(settlementTotalDeducted(settlement)) { charWidth = 12; }
+                PROPERTY(settlementPayable(settlement)) { charWidth = 12; }
+            }
         }
     }
 }
