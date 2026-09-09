@@ -135,20 +135,20 @@ DESIGN employeeCabinet {
             caption = 'Отсутствия';
             MOVE BOX(leave) {
                 caption = 'Утверждённые отпуска';
-                PROPERTY(leaveNumber(leave)) { charWidth = 16; }
-                PROPERTY(cabinetLeaveKindName(leave)) { charWidth = 28; }
+                PROPERTY(leaveNumber(leave)) { charWidth = 18; }
+                PROPERTY(cabinetLeaveKindName(leave)) { charWidth = 32; }
                 PROPERTY(leaveDateFrom(leave)) { charWidth = 10; }
                 PROPERTY(leaveDateTo(leave)) { charWidth = 10; }
                 PROPERTY(cabinetLeaveStatusName(leave)) { charWidth = 12; }
             }
             MOVE BOX(sick) {
                 caption = 'Утверждённые больничные';
-                PROPERTY(sickLeaveNumber(sick)) { charWidth = 16; }
+                PROPERTY(sickLeaveNumber(sick)) { charWidth = 18; }
                 PROPERTY(sickLeaveIssueDate(sick)) { charWidth = 11; }
                 PROPERTY(sickLeaveFrom(sick)) { charWidth = 10; }
                 PROPERTY(sickLeaveTo(sick)) { charWidth = 10; }
-                PROPERTY(cabinetSickLeaveReasonName(sick)) { charWidth = 16; }
-                PROPERTY(cabinetSickLeaveStatusName(sick)) { charWidth = 12; }
+                PROPERTY(cabinetSickLeaveReasonName(sick)) { charWidth = 18; }
+                PROPERTY(cabinetSickLeaveStatusName(sick)) { charWidth = 14; }
             }
         }
         NEW settlementsTab {
