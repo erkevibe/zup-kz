@@ -421,13 +421,18 @@ settlementTotalDeducted 'Всего удержано' (PayrollSettlementLine l) 
     (IF settlementVosms(l) THEN settlementVosms(l) ELSE 0.00) +
     (IF settlementIpn(l) THEN settlementIpn(l) ELSE 0.00) +
     (IF settlementEnforcement(l) THEN settlementEnforcement(l) ELSE 0.00);
-settlementViewRoleAllowed() = has(currentUser() AS CustomUser, userRoleSID('admin')) OR
-    has(currentUser() AS CustomUser, userRoleSID('zup_chief_accountant')) OR
-    has(currentUser() AS CustomUser, userRoleSID('zup_payroll')) OR
-    has(currentUser() AS CustomUser, userRoleSID('zup_auditor'));
-settlementViewAllowed(PayrollSettlementLine l) = l IS PayrollSettlementLine AND
-    settlementClosedAt(l) AND settlementViewRoleAllowed() AND
-    organizationAllowed(payrollOrganization(settlementPayrollRun(l)));
+settlementViewRoleAllowed(CustomUser user) = has(user, userRoleSID('admin')) OR
+    has(user, userRoleSID('zup_chief_accountant')) OR
+    has(user, userRoleSID('zup_payroll')) OR has(user, userRoleSID('zup_auditor'));
+settlementViewRoleAllowed() = settlementViewRoleAllowed(currentUser() AS CustomUser);
+settlementViewAllowedFor(CustomUser user, PayrollSettlementLine l) =
+    l IS PayrollSettlementLine AND
+    settlementClosedAt(l) AND
+    ((settlementViewRoleAllowed(user) AND
+      canReadOrganization(user, payrollOrganization(settlementPayrollRun(l)))) OR
+     settlementEmployee(l) == employeeByUser(user));
+settlementViewAllowed(PayrollSettlementLine l) =
+    settlementViewAllowedFor(currentUser() AS CustomUser, l);
 
 // Детализация использует защищённые PayrollLine, только этого работника и расчёта.
 settlementContainsLine(PayrollSettlementLine l, PayrollLine d) =

@@ -6,7 +6,7 @@ with open(sys.argv[1], encoding="utf-8") as source:
     actual = json.load(source)
 
 expected_key_sets = [
-    {"hrReady", "timeReady", "payrollReady", "chiefReady", "auditorReady"},
+    {"hrReady", "timeReady", "payrollReady", "chiefReady", "auditorReady", "employeeReady"},
     {
         "hrPersonnelPermitted",
         "hrPayrollForbidden",
@@ -19,6 +19,9 @@ expected_key_sets = [
         "auditorAdministrationForbidden",
         "chiefDesignForbidden",
         "auditorReadOnly",
+        "employeeCabinetPermitted",
+        "employeePayrollForbidden",
+        "employeeReadOnly",
     },
 ]
 

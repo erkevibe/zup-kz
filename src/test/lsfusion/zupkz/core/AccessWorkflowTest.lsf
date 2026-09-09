@@ -50,6 +50,12 @@ uiRoleSetupTest() {
         createUiRoleTestUser('ui-payroll', 'zup_payroll', org);
         createUiRoleTestUser('ui-chief', 'zup_chief_accountant', org);
         createUiRoleTestUser('ui-auditor', 'zup_auditor', org);
+        NEW employeeAccount = CustomUser {
+            login(employeeAccount) <- 'ui-employee';
+            calculateBase64Hash('SHA-256', 'zup-ui-test-only');
+            sha256Password(employeeAccount) <- calculatedHash();
+            in(employeeAccount, userRoleSID('zup_employee')) <- TRUE;
+        }
         APPLY;
 
         EXPORT JSON FROM
@@ -57,7 +63,8 @@ uiRoleSetupTest() {
             timeReady = has(uiRoleTestUser('ui-time'), userRoleSID('zup_timekeeper')),
             payrollReady = has(uiRoleTestUser('ui-payroll'), userRoleSID('zup_payroll')),
             chiefReady = has(uiRoleTestUser('ui-chief'), userRoleSID('zup_chief_accountant')),
-            auditorReady = has(uiRoleTestUser('ui-auditor'), userRoleSID('zup_auditor'));
+            auditorReady = has(uiRoleTestUser('ui-auditor'), userRoleSID('zup_auditor')),
+            employeeReady = has(uiRoleTestUser('ui-employee'), userRoleSID('zup_employee'));
     }
 }
 
@@ -84,6 +91,81 @@ initialRolePermissionsTest() {
         chiefDesignForbidden = dataPermission(userRoleSID('zup_chief_accountant'),
             navigatorElementCanonicalName('SystemEvents.showDesign')) == Permission.forbid,
         auditorReadOnly = dataPermissionChange(userRoleSID('zup_auditor'),
+            propertyGroup('System_root')) == Permission.forbid,
+        employeeCabinetPermitted = dataPermission(userRoleSID('zup_employee'),
+            navigatorElementCanonicalName('ZUPKZ.employeeSelfService')) == Permission.permit,
+        employeePayrollForbidden = dataPermission(userRoleSID('zup_employee'),
+            navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.forbid,
+        employeeReadOnly = dataPermissionChange(userRoleSID('zup_employee'),
+            propertyGroup('System_root')) == Permission.forbid;
+}
+
+employeeCabinetOwnEmployee() = GROUP LAST Employee e IF iin(e) == '901010400010' ORDER e;
+employeeCabinetForeignEmployee() = GROUP LAST Employee e IF iin(e) == '911111400011' ORDER e;
+employeeCabinetRun() = GROUP LAST PayrollRun r IF payrollNumber(r) == 'CABINET-2026-08' ORDER r;
+employeeCabinetOwnSettlement() = settlementLineByEmployee(
+    employeeCabinetRun(), employeeCabinetOwnEmployee());
+employeeCabinetForeignSettlement() = settlementLineByEmployee(
+    employeeCabinetRun(), employeeCabinetForeignEmployee());
+
+employeeCabinetSetupTest() {
+    IF NOT employeeCabinetRun() THEN NEW own = Employee {
+        iin(own) <- '901010400010';
+        lastName(own) <- 'Кабинетов';
+        firstName(own) <- 'Сотрудник';
+        employeeUser(own) <- uiRoleTestUser('ui-employee');
+        NEW foreign = Employee {
+            iin(foreign) <- '911111400011';
+            lastName(foreign) <- 'Чужой';
+            firstName(foreign) <- 'Сотрудник';
+            NEW run = PayrollRun {
+                payrollOrganization(run) <- organizationByBin('555555555555');
+                payrollNumber(run) <- 'CABINET-2026-08';
+                payrollPeriodFrom(run) <- 2026_08_01;
+                payrollPeriodTo(run) <- 2026_08_31;
+                payrollRunStatus(run) <- PayrollRunStatus.approved;
+                NEW ownLine = PayrollSettlementLine {
+                    settlementPayrollRun(ownLine) <- run;
+                    settlementEmployee(ownLine) <- own;
+                    settlementAccrued(ownLine) <- 400000.00;
+                    settlementPayable(ownLine) <- 320000.00;
+                    settlementClosedAt(ownLine) <- currentDateTime();
+                }
+                NEW foreignLine = PayrollSettlementLine {
+                    settlementPayrollRun(foreignLine) <- run;
+                    settlementEmployee(foreignLine) <- foreign;
+                    settlementAccrued(foreignLine) <- 500000.00;
+                    settlementPayable(foreignLine) <- 400000.00;
+                    settlementClosedAt(foreignLine) <- currentDateTime();
+                }
+            }
+        }
+    }
+    APPLY;
+    EXPORT JSON FROM
+        employeeMapped = employeeByUser(uiRoleTestUser('ui-employee')) ==
+            employeeCabinetOwnEmployee(),
+        ownSettlementCreated = settlementPayable(employeeCabinetOwnSettlement()) == 320000.00,
+        foreignSettlementCreated = settlementPayable(employeeCabinetForeignSettlement()) == 400000.00;
+}
+
+employeeCabinetAccessTest() {
+    EXPORT JSON FROM
+        ownSettlementAllowed = settlementViewAllowedFor(uiRoleTestUser('ui-employee'),
+            employeeCabinetOwnSettlement()),
+        foreignSettlementDenied = NOT settlementViewAllowedFor(uiRoleTestUser('ui-employee'),
+            employeeCabinetForeignSettlement()),
+        employeeHasNoOrganizationAccess = NOT userOrganizationAllowed(
+            uiRoleTestUser('ui-employee'), organizationByBin('555555555555')),
+        employeeCannotChangeBinding = NOT employeeUserAdministrationAllowed(
+            uiRoleTestUser('ui-employee')),
+        administratorCanChangeBinding = employeeUserAdministrationAllowed(
+            currentUser() AS CustomUser),
+        employeeCabinetPermitted = dataPermission(userRoleSID('zup_employee'),
+            navigatorElementCanonicalName('ZUPKZ.employeeSelfService')) == Permission.permit,
+        employeePayrollForbidden = dataPermission(userRoleSID('zup_employee'),
+            navigatorElementCanonicalName('ZUPKZ.payroll')) == Permission.forbid,
+        employeeReadOnly = dataPermissionChange(userRoleSID('zup_employee'),
             propertyGroup('System_root')) == Permission.forbid;
 }
 
@@ -180,7 +262,8 @@ accessWorkflowTest() {
                         EXPORT JSON FROM
                             allRolesCreated = userRoleSID('zup_hr') AND
                                 userRoleSID('zup_timekeeper') AND userRoleSID('zup_payroll') AND
-                                userRoleSID('zup_chief_accountant') AND userRoleSID('zup_auditor'),
+                                userRoleSID('zup_chief_accountant') AND userRoleSID('zup_auditor') AND
+                                userRoleSID('zup_employee'),
                             userHasHrRole = has(user, userRoleSID('zup_hr')),
                             assignedOrganizationAllowed = userOrganizationAllowed(user, assignedOrg),
                             hiddenOrganizationRejected = NOT userOrganizationAllowed(user, hiddenOrg),

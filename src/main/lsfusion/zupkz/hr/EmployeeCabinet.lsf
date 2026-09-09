@@ -1,0 +1,97 @@
+MODULE HREmployeeCabinet;
+
+REQUIRE Authentication, HREmployeeCard, HRLeave, PayrollSickLeave, PayrollSettlement;
+NAMESPACE ZUPKZ;
+
+currentCabinetEmployee() = employeeByUser(currentUser() AS CustomUser);
+
+FORM employeeCabinetUsers 'Учётные записи сотрудников'
+    OBJECTS worker = Employee
+    PROPERTIES(worker) READONLY employeeFullName, iin, employeeUserLogin
+    PROPERTIES(worker) employeeUser
+    FILTERS employeeUserAdministrationAllowed()
+;
+
+FORM employeeCabinet 'Кабинет сотрудника'
+    OBJECTS worker = Employee
+    PROPERTIES(worker) READONLY employeeFullName, iin, birthDate, gender, citizenshipCode
+    FILTERS worker == currentCabinetEmployee()
+
+    OBJECTS card = EmployeeCard
+    PROPERTIES(card) READONLY cardOrganizationName, personnelNumber, phone, email,
+                          registeredAddress, residentialAddress
+    FILTERS cardEmployee(card) == worker
+
+    OBJECTS contract = Employment
+    PROPERTIES(contract) READONLY employmentOrganizationName, employmentDepartmentName,
+                              employmentPositionName, employmentSalary, hireDate,
+                              contractNumber, contractDate, employmentKindName,
+                              contractTermKindName, contractEndDate, workPlace, workConditions
+    FILTERS employee(contract) == worker
+
+    OBJECTS assignment = EmploymentAssignment
+    PROPERTIES(assignment) READONLY assignmentStaffCode, assignmentPositionName,
+                                assignmentFrom, assignmentTo, fte, assignmentSalary
+    FILTERS employee(employment(assignment)) == worker
+
+    OBJECTS event = PersonnelEvent
+    PROPERTIES(event) READONLY eventOrganizationName, eventKindName, effectiveDate,
+                           orderNumber, orderDate, basis, eventStatusName,
+                           eventEsutdStatusName
+    FILTERS employee(eventEmployment(event)) == worker,
+            eventStatus(event) == PersonnelEventStatus.posted
+
+    OBJECTS leave = LeaveDocument
+    PROPERTIES(leave) READONLY leaveNumber, leaveKind, leaveDateFrom, leaveDateTo,
+                           leaveCalendarDays, leaveChargedDays, leaveGrossAmount, leaveStatus
+    FILTERS employee(employment(leaveAssignment(leave))) == worker,
+            leaveStatus(leave) == LeaveStatus.approved
+
+    OBJECTS sick = SickLeaveDocument
+    PROPERTIES(sick) READONLY sickLeaveNumber, sickLeaveIssueDate, sickLeaveFrom,
+                          sickLeaveTo, sickLeaveReason, sickLeaveGrossAmount, sickLeaveStatus
+    FILTERS employee(employment(sickLeaveAssignment(sick))) == worker,
+            sickLeaveStatus(sick) == SickLeaveStatus.approved
+
+    OBJECTS settlement = PayrollSettlementLine
+    PROPERTIES(settlement) READONLY settlementRunNumber, settlementPeriodFrom,
+                                settlementPeriodTo, settlementAccrued,
+                                settlementTotalDeducted, settlementPayable,
+                                unpaidSettlementAmount
+    PROPERTIES(settlement) openPayrollSettlement TOOLBAR,
+                           printPayrollSettlementPdf TOOLBAR
+    FILTERS settlementEmployee(settlement) == worker, settlementClosedAt(settlement)
+;
+
+DESIGN employeeCabinet {
+    MOVE BOX(worker) FIRST {
+        caption = 'Мои данные';
+        height = 115;
+        flex = 0;
+    }
+    NEW cabinetDetails AFTER BOX(worker) {
+        tabbed = TRUE;
+        NEW cardsTab {
+            caption = 'Контакты';
+            MOVE BOX(card) { caption = 'Данные по организациям'; }
+        }
+        NEW contractsTab {
+            caption = 'Работа';
+            MOVE BOX(contract) { caption = 'Трудовые договоры'; }
+            MOVE BOX(assignment) { caption = 'Назначения и оклад'; }
+        }
+        NEW eventsTab {
+            caption = 'Кадровая история';
+            MOVE BOX(event) { caption = 'Проведённые кадровые события'; }
+        }
+        NEW absencesTab {
+            caption = 'Отсутствия';
+            MOVE BOX(leave) { caption = 'Утверждённые отпуска'; }
+            MOVE BOX(sick) { caption = 'Утверждённые больничные'; }
+        }
+        NEW settlementsTab {
+            caption = 'Расчётные листки';
+            MOVE BOX(settlement) { caption = 'Закрытые расчётные листки'; }
+        }
+    }
+}
