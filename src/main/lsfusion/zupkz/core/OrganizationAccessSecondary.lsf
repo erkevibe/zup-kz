@@ -501,6 +501,7 @@ civilContractActSecondaryContentChanged(CivilContractAct o) =
     CHANGED(civilActIpnHighRate(o)) OR
     CHANGED(civilActIpn(o)) OR
     CHANGED(civilActPayable(o)) OR
+    CHANGED(civilActRegulatoryPack(o)) OR
     CHANGED(civilActTaxLedgerEntry(o)) OR
     CHANGED(civilActTaxReversalLedgerEntry(o));
 @protectSecondaryOrganizationObject(civilContractAct, CivilContractAct, civilContractActAccessOrganization);

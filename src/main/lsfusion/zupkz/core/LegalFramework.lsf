@@ -107,6 +107,7 @@ description 'Описание' = DATA STRING[500] (StatutoryParameter);
 CLASS StatutoryParameterValue 'Значение параметра законодательства';
 
 statutoryValuePack 'Нормативный набор' = DATA RegulatoryPack (StatutoryParameterValue);
+statutoryValueBaselineLoad = DATA LOCAL BOOLEAN (StatutoryParameterValue);
 parameter 'Параметр' = DATA StatutoryParameter (StatutoryParameterValue);
 validFrom 'Действует с' = DATA DATE (StatutoryParameterValue);
 validTo 'Действует по' = DATA DATE (StatutoryParameterValue);
@@ -138,7 +139,8 @@ CONSTRAINT (CHANGED(statutoryValuePack(StatutoryParameterValue v)) OR
             CHANGED(numericValue(v)) OR CHANGED(textValue(v)) OR
             CHANGED(legalSource(v)) OR CHANGED(note(v))) AND
            (PREV(packStatus(statutoryValuePack(v))) == RegulatoryPackStatus.approved OR
-            packStatus(statutoryValuePack(v)) == RegulatoryPackStatus.approved)
+            packStatus(statutoryValuePack(v)) == RegulatoryPackStatus.approved) AND
+           NOT statutoryValueBaselineLoad(v)
     MESSAGE 'Значения утверждённого нормативного набора неизменяемы';
 
 FORM legalSources 'Нормативные источники'
@@ -219,9 +221,13 @@ ensureStatutoryValue(StatutoryParameter p, DATE dateFrom, DATE dateTo,
                      NUMERIC[18,6] value, LegalSource source, STRING[500] valueNote) {
     IF NOT statutoryValueByPeriod(regulatoryPackByCode('KZ-2026.1'), p, dateFrom) THEN {
         IF statutoryValueByPeriod(NULL, p, dateFrom) THEN
+        {
+            statutoryValueBaselineLoad(statutoryValueByPeriod(NULL, p, dateFrom)) <- TRUE;
             statutoryValuePack(statutoryValueByPeriod(NULL, p, dateFrom)) <-
                 regulatoryPackByCode('KZ-2026.1');
+        }
         ELSE NEW v = StatutoryParameterValue {
+                statutoryValueBaselineLoad(v) <- TRUE;
                 statutoryValuePack(v) <- regulatoryPackByCode('KZ-2026.1');
                 parameter(v) <- p;
                 validFrom(v) <- dateFrom;
@@ -283,6 +289,8 @@ loadBaselineLegalParameters() {
         ensureStatutoryParameter('OOSMS_MAX_MZP', 'Максимальная база ООСМС', 'MZP', 'Максимальная месячная база отчислений ОСМС');
         ensureStatutoryParameter('IPN_BASE_RATE', 'Базовая ставка ИПН', 'percent', 'Ставка ИПН до годового порога');
         ensureStatutoryParameter('IPN_HIGH_RATE', 'Повышенная ставка ИПН', 'percent', 'Ставка ИПН с превышения годового порога');
+        ensureStatutoryParameter('IPN_NONRESIDENT_CIVIL_RATE', 'Ставка ИПН по ГПХ нерезидента', 'percent',
+            'Ставка к доходу физического лица-нерезидента по договору ГПХ без вычетов');
         ensureStatutoryParameter('IPN_THRESHOLD_MRP', 'Годовой порог ИПН', 'MRP', 'Порог применения повышенной ставки ИПН');
         ensureStatutoryParameter('IPN_BASIC_MONTHLY_MRP', 'Базовый вычет ИПН за месяц', 'MRP', 'Базовый налоговый вычет за календарный месяц');
         ensureStatutoryParameter('IPN_BASIC_ANNUAL_MRP', 'Базовый вычет ИПН за год', 'MRP', 'Предельный базовый налоговый вычет за год');
@@ -336,6 +344,8 @@ loadBaselineLegalParameters() {
             10.000000, legalSourceByCode('TAX_CODE_2026'), 'До 8 500 МРП за календарный год включительно');
         ensureStatutoryValue(statutoryParameterByCode('IPN_HIGH_RATE'), 2026_01_01, NULL,
             15.000000, legalSourceByCode('TAX_CODE_2026'), 'С суммы превышения 8 500 МРП за календарный год');
+        ensureStatutoryValue(statutoryParameterByCode('IPN_NONRESIDENT_CIVIL_RATE'), 2026_01_01, NULL,
+            20.000000, legalSourceByCode('TAX_CODE_2026'), 'Доход нерезидента по договору ГПХ без применения вычетов');
         ensureStatutoryValue(statutoryParameterByCode('IPN_THRESHOLD_MRP'), 2026_01_01, NULL,
             8500.000000, legalSourceByCode('TAX_CODE_2026'), 'Годовой порог прогрессивной ставки');
         ensureStatutoryValue(statutoryParameterByCode('IPN_BASIC_MONTHLY_MRP'), 2026_01_01, NULL,

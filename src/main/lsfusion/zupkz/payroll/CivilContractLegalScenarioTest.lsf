@@ -1,0 +1,131 @@
+MODULE CivilContractLegalScenarioTest;
+
+REQUIRE PayrollLegalScenarioTest;
+NAMESPACE ZUPKZ;
+
+// A nonresident's social coverage is jurisdiction-dependent. The tax branch
+// therefore requires an explicit dated social profile instead of inferring it
+// from citizenship or tax residence.
+civilContractLegalScenarioTest() {
+    NEW org = Organization {
+        bin(org) <- '770909400010';
+        name(org) <- 'Эталон ГПХ нерезидента 2026';
+
+        NEW blockedWorker = Employee {
+            iin(blockedWorker) <- '900101880001';
+            lastName(blockedWorker) <- 'Без социального профиля';
+            firstName(blockedWorker) <- 'Нерезидент';
+            citizenshipCode(blockedWorker) <- 'USA';
+            NEW blockedTaxProfile = EmployeeTaxProfile {
+                taxProfileOrganization(blockedTaxProfile) <- org;
+                taxProfileEmployee(blockedTaxProfile) <- blockedWorker;
+                taxProfileValidFrom(blockedTaxProfile) <- 2026_01_01;
+                taxProfileResident(blockedTaxProfile) <- NULL;
+                taxProfileIncomeStatus(blockedTaxProfile) <- TaxIncomeStatus.civilContract;
+                taxProfileBasicDeduction(blockedTaxProfile) <- NULL;
+                taxProfileSocialDeduction(blockedTaxProfile) <- IpnSocialDeductionKind.none;
+
+                NEW blockedContract = CivilContract {
+                    civilContractOrganization(blockedContract) <- org;
+                    civilContractContractor(blockedContract) <- blockedWorker;
+                    civilContractNumber(blockedContract) <- 'LEGAL-GPH-NR-BLOCKED';
+                    civilContractDate(blockedContract) <- 2026_01_01;
+                    civilContractFrom(blockedContract) <- 2026_01_01;
+                    civilContractTo(blockedContract) <- 2026_12_31;
+                    civilContractSubject(blockedContract) <- 'Проверка обязательного социального профиля';
+                    civilContractAmount(blockedContract) <- 500000.00;
+                    civilContractStatus(blockedContract) <- CivilContractStatus.active;
+                    NEW blockedAct = CivilContractAct {
+                        civilActContract(blockedAct) <- blockedContract;
+                        civilActNumber(blockedAct) <- 'LEGAL-GPH-NR-BLOCKED-01';
+                        civilActDate(blockedAct) <- 2026_01_31;
+                        civilActGrossIncome(blockedAct) <- 500000.00;
+                        civilActStatus(blockedAct) <- CivilContractActStatus.draft;
+                        calculateCivilAct(blockedAct);
+
+                        NEW worker = Employee {
+                            iin(worker) <- '900101880002';
+                            lastName(worker) <- 'Эталон';
+                            firstName(worker) <- 'Нерезидент ГПХ';
+                            citizenshipCode(worker) <- 'USA';
+                            NEW taxProfile = EmployeeTaxProfile {
+                                taxProfileOrganization(taxProfile) <- org;
+                                taxProfileEmployee(taxProfile) <- worker;
+                                taxProfileValidFrom(taxProfile) <- 2026_01_01;
+                                taxProfileResident(taxProfile) <- NULL;
+                                taxProfileIncomeStatus(taxProfile) <- TaxIncomeStatus.civilContract;
+                                taxProfileBasicDeduction(taxProfile) <- NULL;
+                                taxProfileSocialDeduction(taxProfile) <- IpnSocialDeductionKind.none;
+
+                                NEW socialProfile = SocialPaymentProfile {
+                                    socialProfileOrganization(socialProfile) <- org;
+                                    socialProfileEmployee(socialProfile) <- worker;
+                                    socialProfileValidFrom(socialProfile) <- 2026_01_01;
+                                    socialProfileOpvExempt(socialProfile) <- TRUE;
+                                    socialProfileVosmsExempt(socialProfile) <- TRUE;
+                                    socialProfileSoExempt(socialProfile) <- TRUE;
+                                    socialProfileBasis(socialProfile) <-
+                                        'Эталон: не охвачен социальными платежами РК';
+                                    socialProfileLegalSource(socialProfile) <-
+                                        legalSourceByCode('SOCIAL_CODE_KZ');
+
+                                    NEW contract = CivilContract {
+                                        civilContractOrganization(contract) <- org;
+                                        civilContractContractor(contract) <- worker;
+                                        civilContractNumber(contract) <- 'LEGAL-GPH-NR-2026';
+                                        civilContractDate(contract) <- 2026_01_01;
+                                        civilContractFrom(contract) <- 2026_01_01;
+                                        civilContractTo(contract) <- 2027_12_31;
+                                        civilContractSubject(contract) <- 'Эталонные консультационные услуги';
+                                        civilContractAmount(contract) <- 1000000.00;
+                                        civilContractStatus(contract) <- CivilContractStatus.active;
+                                        NEW act = CivilContractAct {
+                                            civilActContract(act) <- contract;
+                                            civilActNumber(act) <- 'LEGAL-GPH-NR-2026-01';
+                                            civilActDate(act) <- 2026_01_31;
+                                            civilActGrossIncome(act) <- 500000.00;
+                                            civilActStatus(act) <- CivilContractActStatus.draft;
+                                            calculateCivilAct(act);
+
+                                            NEW futureAct = CivilContractAct {
+                                                civilActContract(futureAct) <- contract;
+                                                civilActNumber(futureAct) <- 'LEGAL-GPH-NR-2027-01';
+                                                civilActDate(futureAct) <- 2027_01_31;
+                                                civilActGrossIncome(futureAct) <- 500000.00;
+                                                civilActStatus(futureAct) <- CivilContractActStatus.draft;
+                                                calculateCivilAct(futureAct);
+
+                                                EXPORT JSON FROM
+                                                    missingSocialProfileBlocked =
+                                                        civilActStatus(blockedAct) ==
+                                                            CivilContractActStatus.draft,
+                                                    calculated = civilActStatus(act) ==
+                                                        CivilContractActStatus.calculated,
+                                                    nonresidentRecorded = NOT civilActResident(act),
+                                                    opv = civilActOpv(act),
+                                                    vosms = civilActVosms(act),
+                                                    socialContributions = civilActSo(act),
+                                                    basicDeduction = civilActBasicDeduction(act),
+                                                    socialDeduction = civilActSocialDeduction(act),
+                                                    taxableIncome = civilActTaxableIncome(act),
+                                                    baseRate = civilActIpnBaseRate(act),
+                                                    highRate = civilActIpnHighRate(act),
+                                                    ipn = civilActIpn(act),
+                                                    payable = civilActPayable(act),
+                                                    regulatoryPack = packCode(
+                                                        civilActRegulatoryPack(act)),
+                                                    package2027Blocked = civilActStatus(futureAct) ==
+                                                        CivilContractActStatus.draft AND
+                                                        NOT civilActRegulatoryPack(futureAct);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

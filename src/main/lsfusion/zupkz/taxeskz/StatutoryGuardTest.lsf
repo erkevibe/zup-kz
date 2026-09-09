@@ -1,6 +1,6 @@
 MODULE StatutoryGuardTest;
 
-REQUIRE PayrollLegalScenarioTest, PayrollRecalculationWorkflowTest, PilotUiWorkflowTest;
+REQUIRE CivilContractLegalScenarioTest, PayrollRecalculationWorkflowTest, PilotUiWorkflowTest;
 NAMESPACE ZUPKZ;
 
 // A period without an approved and complete legal pack must stop both
@@ -86,6 +86,9 @@ statutoryGuardTest() {
                                 statutoryParameterByCode('IPN_BASE_RATE'), 2026_01_31),
                             ipnHighRate = numericStatutoryValueOn(
                                 statutoryParameterByCode('IPN_HIGH_RATE'), 2026_01_31),
+                            nonresidentCivilIpnRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('IPN_NONRESIDENT_CIVIL_RATE'),
+                                2026_01_31),
                             ipnThresholdMrp = numericStatutoryValueOn(
                                 statutoryParameterByCode('IPN_THRESHOLD_MRP'), 2026_01_31),
                             ipnBasicMonthlyMrp = numericStatutoryValueOn(
