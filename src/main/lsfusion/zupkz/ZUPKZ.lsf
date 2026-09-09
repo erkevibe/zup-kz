@@ -12,7 +12,7 @@ REQUIRE KZOrganization, KZLegalFramework, HRDepartment, HRPosition,
         PayrollCivilContractPayments,
         TaxesKZSocialTransferRegisters, ReportsKZForm200, ReportsKZForm20005,
         HREmployeeCabinet, KZAccessControl, KZOrganizationAccessSecondary,
-        PayrollMonthWorkplace;
+        PayrollMonthWorkplace, PayrollProcessEvents;
 NAMESPACE ZUPKZ;
 
 NAVIGATOR {

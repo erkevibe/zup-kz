@@ -206,9 +206,15 @@ class Observer:
                 f"Invalid {process_code} transition for case {case_ref}: {previous['activity']} -> {activity}",
             )
         self.db.execute(
+            "UPDATE incident SET state='resolved' WHERE state='open' AND sample LIKE ?",
+            (f"Stalled {process_code} case {case_ref} at %",),
+        )
+        self.db.execute(
             """INSERT INTO process_event(raw_event_id,process_code,case_id,activity,from_state,to_state,
                organization,actor,outcome,occurred_at) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-            (event_id, process_code, case_id, activity, fields.get("from"), fields.get("to"),
+            (event_id, process_code, case_id, activity,
+             fields.get("from") or (previous["activity"] if previous else None),
+             fields.get("to") or activity,
              fields.get("organization"), fields.get("actor"), fields.get("outcome"), occurred_at),
         )
         self.db.execute(
@@ -217,6 +223,30 @@ class Observer:
                occurred_at=excluded.occurred_at""",
             (process_code, case_id, activity, occurred_at),
         )
+
+    def check_stalled_processes(self, now: dt.datetime | None = None) -> None:
+        current = now or dt.datetime.now(UTC)
+        for row in self.db.execute("SELECT * FROM case_state").fetchall():
+            rules = self.rules.get(row["process_code"], {})
+            threshold = rules.get("max_age_seconds", {}).get(row["activity"])
+            if not threshold:
+                continue
+            occurred = dt.datetime.fromisoformat(row["occurred_at"].replace("Z", "+00:00"))
+            if occurred.tzinfo is None:
+                occurred = occurred.replace(tzinfo=UTC)
+            if (current - occurred).total_seconds() < threshold:
+                continue
+            case_ref = hashlib.sha256(row["case_id"].encode()).hexdigest()[:12]
+            recommendation = rules.get("recommendations", {}).get(
+                row["activity"], "Проверить документ и выполнить следующий штатный шаг"
+            )
+            message = (f"Stalled {row['process_code']} case {case_ref} at {row['activity']} "
+                       f"since {row['occurred_at']}; recommendation: {recommendation}")
+            key = fingerprint("zup-observer:process-stalled", redact(message))
+            if not self.db.execute(
+                "SELECT 1 FROM incident WHERE fingerprint=?", (key,)
+            ).fetchone():
+                self._record_incident(key, "WARN", utc_now(), message)
 
     def scan_file(self, source_name: str, path: str) -> None:
         source = f"file:{source_name}:{path}"
@@ -352,6 +382,7 @@ class Observer:
             self.scan_journal(item)
         for item in self.config.get("commands", []):
             self.scan_command(item)
+        self.check_stalled_processes()
         self.db.commit()
         self.write_alerts()
 
@@ -386,10 +417,21 @@ class Observer:
         sources = self.db.execute(
             "SELECT source,updated_at FROM checkpoint ORDER BY source"
         ).fetchall()
+        process_states = self.db.execute(
+            """SELECT process_code,activity,count(*) AS active_cases
+               FROM case_state GROUP BY process_code,activity ORDER BY process_code,activity"""
+        ).fetchall()
+        process_transitions = self.db.execute(
+            """SELECT process_code,from_state,activity AS to_activity,count(*) AS occurrences
+               FROM process_event GROUP BY process_code,from_state,activity
+               ORDER BY process_code,from_state,activity"""
+        ).fetchall()
         print(json.dumps({
             "generatedAt": utc_now(),
             "summary": [dict(row) for row in summary],
             "sources": [dict(row) for row in sources],
+            "processStates": [dict(row) for row in process_states],
+            "processTransitions": [dict(row) for row in process_transitions],
             "topIncidents": [dict(row) for row in rows],
         }, ensure_ascii=False))
 

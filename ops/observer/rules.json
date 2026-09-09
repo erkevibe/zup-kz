@@ -51,15 +51,37 @@
       "starts": ["timesheet"],
       "transitions": {
         "timesheet": ["calculated"],
-        "calculated": ["social-calculated", "recalculated", "reopened"],
-        "social-calculated": ["tax-calculated", "recalculated"],
-        "tax-calculated": ["enforcement-calculated", "closed", "recalculated"],
-        "enforcement-calculated": ["closed", "recalculated"],
-        "closed": ["statement", "reopened"],
-        "statement": ["paid", "reopened"],
-        "paid": ["reopened"],
-        "recalculated": ["social-calculated", "tax-calculated", "closed"],
-        "reopened": ["calculated"]
+        "calculated": ["social-approved", "reset"],
+        "social-approved": ["tax-approved", "reset"],
+        "tax-approved": ["enforcement-approved", "reset"],
+        "enforcement-approved": ["closed", "reset"],
+        "closed": ["statement-approved", "reopened"],
+        "statement-approved": ["paid"],
+        "paid": [],
+        "reopened": ["closed", "reset"],
+        "reset": ["calculated"]
+      },
+      "max_age_seconds": {
+        "timesheet": 259200,
+        "calculated": 172800,
+        "social-approved": 172800,
+        "tax-approved": 172800,
+        "enforcement-approved": 172800,
+        "closed": 259200,
+        "statement-approved": 259200,
+        "reopened": 86400,
+        "reset": 86400
+      },
+      "recommendations": {
+        "timesheet": "Проверить ошибки расчёта зарплаты и обязательные реквизиты сотрудников",
+        "calculated": "Рассчитать и утвердить социальные платежи",
+        "social-approved": "Рассчитать и утвердить ИПН и социальный налог",
+        "tax-approved": "Рассчитать и утвердить исполнительные удержания",
+        "enforcement-approved": "Проверить дату выплаты и закрыть расчёт зарплаты",
+        "closed": "Сформировать и утвердить платёжную ведомость",
+        "statement-approved": "Подтвердить фактическую выплату ведомости",
+        "reopened": "Закрыть исправленный расчёт либо сбросить его для пересчёта",
+        "reset": "Повторно рассчитать зарплату после проверки исходных данных"
       }
     }
   }
