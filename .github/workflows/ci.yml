@@ -15,6 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: ./scripts/check.sh
+      - run: python3 -m unittest -v tests/test_zup_observer.py
 
   runtime:
     needs: static

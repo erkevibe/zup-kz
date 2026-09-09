@@ -4,3 +4,4 @@ target/
 conf/settings.properties
 *.log
 logs/
+__pycache__/

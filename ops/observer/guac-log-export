@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+original=${SSH_ORIGINAL_COMMAND:-}
+case "$original" in
+    "-- "*) since=${original#-- } ;;
+    *) echo 'Only a timestamp argument is allowed' >&2; exit 2 ;;
+esac
+
+case "$since" in
+    *[!0-9T:Z.+-]*) echo 'Invalid timestamp' >&2; exit 2 ;;
+esac
+
+exec /usr/bin/python3 /opt/zup-observer/guac_log_export.py "$since"

@@ -57,6 +57,53 @@ systemctl list-timers zup-kz-backup.timer
 Не считайте резервирование проверенным, пока дамп не был восстановлен в
 отдельную контрольную базу и приложение не прошло smoke-тест на ней.
 
+## Наблюдение за журналами
+
+`zup-kz-observer.service` непрерывно читает весь journald хоста и прикладные журналы,
+фиксирует позицию каждого источника в SQLite и группирует одинаковые ошибки в
+инциденты. SQLite находится вне PostgreSQL приложения, поэтому наблюдение не
+прекращается при падении основной БД. Сырые сообщения очищаются от паролей,
+токенов, ИИН и IBAN до записи.
+
+Установка на `zup-dev`:
+
+```bash
+sudo useradd --system --home /var/lib/zup-observer --create-home zupobserver
+sudo install -d -m 0750 -o root -g zupobserver /opt/zup-observer
+sudo install -m 0755 ops/observer/zup_observer.py /opt/zup-observer/
+sudo install -m 0640 -o root -g zupobserver ops/observer/rules.json /etc/zup-observer.json
+sudo install -m 0644 conf/observer.env.example /etc/default/zup-observer
+sudo install -m 0644 ops/systemd/zup-kz-observer.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now zup-kz-observer.service
+```
+
+Пользователю `zupobserver` выдаётся только чтение конкретных каталогов логов;
+доступ к конфигурации приложения и паролям БД не нужен. Проверка:
+
+```bash
+systemctl status zup-kz-observer.service
+sudo -u zupobserver /usr/bin/python3 /opt/zup-observer/zup_observer.py report \
+  --config /etc/zup-observer.json
+```
+
+Для Guacamole создаётся отдельная ключевая пара `guac-log-reader`, не
+переиспользуется административный root-ключ. Её public key на Guacamole
+добавляется в `/root/.ssh/authorized_keys` с ограничениями
+`from="192.168.1.228",restrict,command="/opt/zup-observer/guac-log-export"`.
+Даже при утечке этого ключа SSH всегда запускает только проверяющий аргументы
+экспортёр `docker logs`, а shell, forwarding и произвольные команды недоступны.
+Скрипты `guac-log-export` и `guac_log_export.py` принадлежат root и недоступны
+для записи другим пользователям.
+
+Сообщение вида
+`ZUP_PROCESS process=payroll case=RUN-1 activity=calculated organization=ORG-1`
+создаёт событие мини-process-mining. Допустимые старты и переходы кадрового,
+согласовательного и зарплатного процессов заданы в `rules.json`. Нарушение
+порядка становится отдельным инцидентом. Новые инциденты пишутся в
+`/var/lib/zup-observer/alerts.ndjson`; периодический ИИ-наблюдатель читает этот
+обезличенный поток, а не исходные журналы.
+
 ## Проверка восстановления и обновления
 
 `scripts/restore-drill.sh` восстанавливает указанный архив только в новую базу
