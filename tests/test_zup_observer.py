@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).parents[1] / "ops" / "observer" / "zup_observer.py"
@@ -104,6 +105,13 @@ class ObserverTest(unittest.TestCase):
         lines = (self.root / "alerts.ndjson").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 1)
         self.assertEqual(json.loads(lines[0])["severity"], "WARN")
+
+    def test_unreadable_source_becomes_incident_instead_of_crash(self):
+        self.log.write_text("ERROR hidden\n", encoding="utf-8")
+        with mock.patch("builtins.open", side_effect=PermissionError("denied")):
+            self.observer.scan_file("app", str(self.log))
+        sample = self.observer.db.execute("SELECT sample FROM incident").fetchone()[0]
+        self.assertIn("Cannot read", sample)
 
     def test_repeated_incident_alerts_use_exponential_backoff(self):
         for index in range(3):

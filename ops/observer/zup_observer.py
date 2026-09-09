@@ -238,9 +238,14 @@ class Observer:
                 offset, pending = 0, ""
         elif saved:
             self.observer_incident("source-rotated", "WARN", f"Source inode changed: {source}")
-        with open(path, "rb") as stream:
-            stream.seek(offset)
-            payload = stream.read()
+        try:
+            with open(path, "rb") as stream:
+                stream.seek(offset)
+                payload = stream.read()
+        except OSError as error:
+            self.observer_incident("source-unavailable", "FATAL", f"Cannot read {source}: {error}")
+            self.db.commit()
+            return
         text = pending + payload.decode("utf-8", errors="replace")
         if text.endswith("\n"):
             complete_text, new_pending = text, ""
