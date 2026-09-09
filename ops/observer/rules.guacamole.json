@@ -3,6 +3,7 @@
   "alert_file": "/var/lib/zup-observer/alerts.ndjson",
   "poll_seconds": 15,
   "baseline_minutes": 30,
+  "report_limit": 50,
   "files": [],
   "journals": [
     {

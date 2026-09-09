@@ -121,6 +121,16 @@ class ObserverTest(unittest.TestCase):
         lines = (self.root / "alerts.ndjson").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 2)
 
+    def test_report_is_bounded_and_has_source_health(self):
+        self.log.write_text("2026-09-09 10:00:00 ERROR failed\n", encoding="utf-8")
+        self.observer.scan_once()
+        with mock.patch("builtins.print") as output:
+            self.observer.report(limit=1)
+        report = json.loads(output.call_args.args[0])
+        self.assertEqual(len(report["topIncidents"]), 1)
+        self.assertEqual(report["summary"][0]["incidents"], 1)
+        self.assertEqual(len(report["sources"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

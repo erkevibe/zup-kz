@@ -372,11 +372,26 @@ class Observer:
                 )
         self.db.commit()
 
-    def report(self) -> None:
-        rows = self.db.execute(
-            "SELECT severity,first_seen,last_seen,count,sample FROM incident WHERE state='open' ORDER BY last_seen DESC"
+    def report(self, limit: int | None = None) -> None:
+        chosen_limit = limit or int(self.config.get("report_limit", 50))
+        summary = self.db.execute(
+            "SELECT severity,count(*) AS incidents,sum(count) AS occurrences FROM incident WHERE state='open' GROUP BY severity"
         ).fetchall()
-        print(json.dumps({"generatedAt": utc_now(), "openIncidents": [dict(row) for row in rows]}, ensure_ascii=False))
+        rows = self.db.execute(
+            """SELECT severity,first_seen,last_seen,count,sample FROM incident WHERE state='open'
+               ORDER BY CASE severity WHEN 'FATAL' THEN 0 WHEN 'ERROR' THEN 1 ELSE 2 END,
+                        count DESC, last_seen DESC LIMIT ?""",
+            (chosen_limit,),
+        ).fetchall()
+        sources = self.db.execute(
+            "SELECT source,updated_at FROM checkpoint ORDER BY source"
+        ).fetchall()
+        print(json.dumps({
+            "generatedAt": utc_now(),
+            "summary": [dict(row) for row in summary],
+            "sources": [dict(row) for row in sources],
+            "topIncidents": [dict(row) for row in rows],
+        }, ensure_ascii=False))
 
 
 def load_config(path: str) -> dict:
@@ -388,11 +403,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("once", "run", "report"))
     parser.add_argument("--config", default=os.environ.get("ZUP_OBSERVER_CONFIG", "/etc/zup-observer.json"))
+    parser.add_argument("--limit", type=int)
     args = parser.parse_args()
     observer = Observer(load_config(args.config))
     try:
         if args.command == "report":
-            observer.report()
+            observer.report(args.limit)
             return 0
         if args.command == "once":
             observer.scan_once()
