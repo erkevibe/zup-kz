@@ -3,7 +3,18 @@ import sys
 
 
 expected_key_sets = [
-    {"employeeMapped", "ownSettlementCreated", "foreignSettlementCreated"},
+    {
+        "employeeMapped",
+        "cardCreated",
+        "employmentCreated",
+        "assignmentCreated",
+        "hireEventCreated",
+        "leaveCreated",
+        "sickLeaveCreated",
+        "ownSettlementCreated",
+        "foreignSettlementCreated",
+        "settlementBalanced",
+    },
     {
         "ownSettlementAllowed",
         "foreignSettlementDenied",
