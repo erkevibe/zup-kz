@@ -132,7 +132,7 @@ calculatedOpvAmount(SocialPaymentLine l) =
 
 calculatedOpvrGrossBase(SocialPaymentLine l) =
     payrollAssessmentBase(socialPaymentRun(l), socialPaymentEmployee(l), AssessmentBaseKind.opvr);
-opvrBirthExempt(SocialPaymentLine l) = birthDate(socialPaymentEmployee(l)) <= 1975_01_01;
+opvrBirthExempt(SocialPaymentLine l) = birthDate(socialPaymentEmployee(l)) < 1975_01_01;
 calculatedOpvrExempt(SocialPaymentLine l) =
     opvrBirthExempt(l) OR socialProfileOpvrExempt(socialProfile(l));
 calculatedOpvrBase(SocialPaymentLine l) =
