@@ -10,7 +10,14 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: ./scripts/check.sh
+
+  runtime:
+    needs: static
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -32,24 +39,15 @@ jobs:
         with:
           path: zup-kz
 
-      - name: Check object-scoped lifecycle guards
-        working-directory: zup-kz
-        run: python3 tests/assert_lifecycle_token_scope.py
-
-      - name: Check organization mutation guard coverage
-        working-directory: zup-kz
-        run: python3 tests/assert_organization_guard_coverage.py
-
-      - name: Check operations scripts
-        working-directory: zup-kz
-        run: sh -n scripts/backup-db.sh scripts/restore-drill.sh
+      - name: Read platform revision
+        id: platform
+        run: echo "revision=$(cat zup-kz/platform-revision.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout platform fork
         uses: actions/checkout@v5
         with:
           repository: erkevibe/platform
-          # Last upstream-compatible revision verified by this application.
-          ref: 3639a1304f81d2bfc20e08713337d9453fd66d23
+          ref: ${{ steps.platform.outputs.revision }}
           path: platform
 
       - name: Set up Java 21
@@ -59,17 +57,13 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Build pinned platform artifacts
-        run: >-
-          mvn --batch-mode --file platform/pom.xml
-          -pl :server,:web-compile-maven-plugin -am install -DskipTests
+      - name: Build application with test modules
+        working-directory: zup-kz
+        env:
+          ZUP_BUILD_PROFILES: assemble,embed-server,test-logics
+        run: ./scripts/build.sh ../platform
 
-      - name: Build runnable server
-        run: >-
-          mvn --batch-mode --no-snapshot-updates --file zup-kz/pom.xml
-          clean package -Passemble,embed-server
-
-      - name: Prepare CI settings
+      - name: Prepare isolated CI settings
         working-directory: zup-kz
         run: |
           cp conf/settings.properties.example conf/settings.properties
@@ -77,426 +71,6 @@ jobs:
           sed -i 's/logics.topModule=ZUPKZ/logics.topModule=StatutoryGuardTest/' conf/settings.properties
           printf '\nsettings.enableAPI=1\nlogics.initialAdminPassword=ci-admin-only\n' >> conf/settings.properties
 
-      - name: Smoke-test lsFusion startup
+      - name: Run server regression
         working-directory: zup-kz
-        run: |
-          java -Xms256m -Xmx2g -jar target/lsfusion-server-0.1.0-SNAPSHOT.jar > server.log 2>&1 &
-          server_pid=$!
-          trap 'kill -TERM "$server_pid" 2>/dev/null || true' EXIT
-          curl() { command curl --user admin:ci-admin-only "$@"; }
-
-          for attempt in {1..180}; do
-            if grep -q 'Server has successfully started' server.log; then
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.initialRolePermissionsTest' \
-                --output initial-role-permissions-result.json
-
-              python3 tests/assert_ui_role_setup.py initial-role-permissions-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollFormulaTest' \
-                --output payroll-result.json
-
-              python3 tests/assert_payroll.py payroll-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollLegalScenarioTest' \
-                --output payroll-legal-scenarios-result.json
-
-              python3 tests/assert_payroll_legal_scenarios.py \
-                payroll-legal-scenarios-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.civilContractLegalScenarioTest' \
-                --output civil-contract-legal-scenarios-result.json
-
-              python3 tests/assert_civil_contract_legal_scenarios.py \
-                civil-contract-legal-scenarios-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.incomeTaxBoundaryScenarioTest' \
-                --output income-tax-boundaries-result.json
-
-              python3 tests/assert_income_tax_boundaries.py \
-                income-tax-boundaries-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollClosureWorkflowTest' \
-                --output payroll-closure-workflow-result.json
-
-              python3 tests/assert_payroll_closure_workflow.py \
-                payroll-closure-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollConcurrencySetupTest' \
-                --output payroll-concurrency-setup-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollConcurrentCloseTest' \
-                --output payroll-concurrency-close-1.json &
-              close_pid_1=$!
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollConcurrentCloseTest' \
-                --output payroll-concurrency-close-2.json &
-              close_pid_2=$!
-              wait "$close_pid_1" || true
-              wait "$close_pid_2" || true
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollConcurrencyVerificationTest' \
-                --output payroll-concurrency-result.json
-
-              python3 tests/assert_payroll_concurrency.py payroll-concurrency-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollResetWorkflowTest' \
-                --output payroll-reset-workflow-result.json
-
-              python3 tests/assert_payroll_reset_workflow.py \
-                payroll-reset-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollRecalculationWorkflowTest' \
-                --output payroll-recalculation-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.recalculationLineSnapshotGuardTest' \
-                --output recalculation-line-guard-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.recalculationInputSnapshotGuardTest' \
-                --output recalculation-input-guard-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.recalculationPeriodGuardTest' \
-                --output recalculation-period-guard-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.recalculationWorkflowVerificationTest' \
-                --output recalculation-verification-result.json
-
-              python3 tests/assert_payroll_recalculation_workflow.py \
-                payroll-recalculation-workflow-result.json \
-                recalculation-line-guard-result.json \
-                recalculation-input-guard-result.json \
-                recalculation-verification-result.json \
-                recalculation-period-guard-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.statutoryGuardTest' \
-                --output statutory-guard-result.json
-
-              python3 tests/assert_statutory_guards.py statutory-guard-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.payrollStage0Test' \
-                --output stage0-result.json
-
-              python3 tests/assert_stage0.py stage0-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.hrWorkflowTest' \
-                --output hr-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.employmentLegacyFieldsGuardTest' \
-                --output employment-legacy-guard-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.employmentSourceOfTruthVerificationTest' \
-                --output employment-source-verification-result.json
-
-              python3 tests/assert_hr_workflow.py \
-                hr-workflow-result.json \
-                employment-legacy-guard-result.json \
-                employment-source-verification-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.timeWorkflowTest' \
-                --output time-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.scheduleOverlapGuardTest' \
-                --output schedule-overlap-guard-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.scheduleOverlapGuardVerificationTest' \
-                --output schedule-overlap-verification-result.json
-
-              for action in \
-                scheduleCycleOwnershipGuardTest \
-                scheduleCycleDayOffGuardTest \
-                scheduleCycleDuplicateDayGuardTest \
-                scheduleOrganizationGuardTest \
-                scheduleEmploymentPeriodGuardTest \
-                scheduleValidityPeriodGuardTest \
-                scheduleCycleGapGuardTest \
-                scheduleCycleStartRequiredGuardTest \
-                scheduleCycleStartAfterAssignmentGuardTest \
-                shiftPlannedHoursGuardTest \
-                overnightShiftDurationTest; do
-                curl --fail --silent --show-error \
-                  "http://localhost:7651/exec?action=ZUPKZ.${action}" \
-                  --output "${action}-result.json"
-              done
-
-              python3 tests/assert_time_workflow.py \
-                time-workflow-result.json \
-                schedule-overlap-guard-result.json \
-                schedule-overlap-verification-result.json \
-                scheduleCycleOwnershipGuardTest-result.json \
-                scheduleCycleDayOffGuardTest-result.json \
-                scheduleCycleDuplicateDayGuardTest-result.json \
-                scheduleOrganizationGuardTest-result.json \
-                scheduleEmploymentPeriodGuardTest-result.json \
-                scheduleValidityPeriodGuardTest-result.json \
-                scheduleCycleGapGuardTest-result.json \
-                scheduleCycleStartRequiredGuardTest-result.json \
-                scheduleCycleStartAfterAssignmentGuardTest-result.json \
-                shiftPlannedHoursGuardTest-result.json \
-                overnightShiftDurationTest-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.leaveWorkflowTest' \
-                --output leave-workflow-result.json
-
-              python3 tests/assert_leave_workflow.py leave-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.sickLeaveWorkflowTest' \
-                --output sick-leave-workflow-result.json
-
-              python3 tests/assert_sick_leave_workflow.py sick-leave-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.accessWorkflowTest' \
-                --output access-workflow-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-test:zup-access-ci-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationPolicyTest' \
-                --output cross-organization-policy-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-test:zup-access-ci-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationStatusAttackTest' \
-                --output cross-organization-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-hr:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationMasterDataAttackTest' \
-                --output cross-organization-master-data-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-time:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationDraftAttackTest' \
-                --output cross-organization-draft-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-payroll:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationPayrollAttackTest' \
-                --output cross-organization-payroll-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-chief:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationOwnershipAttackTest' \
-                --output cross-organization-ownership-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-hr:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationDeleteAttackTest' \
-                --output cross-organization-delete-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-hr:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryHrAttackTest' \
-                --output cross-organization-secondary-hr-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-payroll:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryPayrollAttackTest' \
-                --output cross-organization-secondary-payroll-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-chief:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryReportAttackTest' \
-                --output cross-organization-secondary-report-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-chief:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryOwnershipAttackTest' \
-                --output cross-organization-secondary-ownership-attack-result.json
-
-              command curl --fail --silent --show-error \
-                --user zup-access-hr:zup-ui-test-only \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationSecondaryDeleteAttackTest' \
-                --output cross-organization-secondary-delete-attack-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.crossOrganizationVerificationTest' \
-                --output cross-organization-verification-result.json
-
-              for action in \
-                employeeIinFormatGuardTest \
-                organizationBinFormatGuardTest \
-                bankDetailsFormatGuardTest; do
-                curl --fail --silent --show-error \
-                  "http://localhost:7651/exec?action=ZUPKZ.${action}" \
-                  --output "${action}-result.json"
-              done
-
-              python3 tests/assert_access_workflow.py \
-                access-workflow-result.json \
-                cross-organization-policy-result.json \
-                cross-organization-verification-result.json \
-                employeeIinFormatGuardTest-result.json \
-                organizationBinFormatGuardTest-result.json \
-                bankDetailsFormatGuardTest-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.uiRoleSetupTest' \
-                --output ui-role-setup-result.json
-
-              python3 tests/assert_ui_role_setup.py ui-role-setup-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.printWorkflowTest' \
-                --output print-workflow-result.json
-
-              python3 tests/assert_print_workflow.py print-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.employeeCardWorkflowTest' \
-                --output employee-card-workflow-result.json
-
-              python3 tests/assert_employee_card_workflow.py employee-card-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.planningWorkflowTest' \
-                --output planning-workflow-result.json
-
-              python3 tests/assert_planning_workflow.py planning-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.approvalWorkflowTest' \
-                --output approval-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.approvalBlockVerificationTest' \
-                --output approval-block-result.json
-
-              python3 tests/assert_approval_workflow.py \
-                approval-workflow-result.json approval-block-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.archiveWorkflowTest' \
-                --output archive-workflow-result.json
-
-              python3 tests/assert_archive_workflow.py archive-workflow-result.json
-
-              curl --fail --silent --show-error \
-                'http://localhost:7651/exec?action=ZUPKZ.insuranceWorkflowTest' \
-                --output insurance-workflow-result.json
-
-              python3 tests/assert_insurance_workflow.py insurance-workflow-result.json
-
-              for action in \
-                lifecycleGuardSetupTest \
-                timesheetStatusGuardTest \
-                payrollStatusGuardTest \
-                socialStatusGuardTest \
-                payrollSnapshotGuardTest \
-                payrollSnapshotDeleteGuardTest \
-                taxSnapshotGuardTest \
-                personnelEventStatusGuardTest \
-                esutdStatusGuardTest \
-                esutdResponseGuardTest \
-                paymentStatementStatusGuardTest \
-                paymentStatementSnapshotGuardTest \
-                form200StatusGuardTest \
-                form200SnapshotGuardTest \
-                approvalStatusGuardTest \
-                approvalStepStatusGuardTest \
-                archiveStatusGuardTest \
-                archiveDocumentStatusGuardTest \
-                insurancePolicyStatusGuardTest \
-                insurancePolicySnapshotGuardTest \
-                workAccidentStatusGuardTest \
-                insuranceClaimStatusGuardTest \
-                leaveStatusGuardTest \
-                vacationScheduleStatusGuardTest \
-                tripStatusGuardTest \
-                averageStatusGuardTest \
-                civilContractStatusGuardTest \
-                civilActStatusGuardTest \
-                civilLiabilityStatusGuardTest \
-                enforcementOrderStatusGuardTest \
-                enforcementCalculationStatusGuardTest \
-                interimPaymentStatusGuardTest \
-                bankRegisterStatusGuardTest \
-                liabilityStatusGuardTest \
-                recalculationStatusGuardTest \
-                sickLeaveStatusGuardTest \
-                socialTransferStatusGuardTest \
-                lifecycleGuardVerificationTest; do
-                curl --fail --silent --show-error \
-                  "http://localhost:7651/exec?action=ZUPKZ.${action}" \
-                  --output "${action}.json"
-              done
-
-              python3 tests/assert_lifecycle_guards.py \
-                lifecycleGuardSetupTest.json \
-                timesheetStatusGuardTest.json \
-                payrollStatusGuardTest.json \
-                socialStatusGuardTest.json \
-                payrollSnapshotGuardTest.json \
-                payrollSnapshotDeleteGuardTest.json \
-                taxSnapshotGuardTest.json \
-                personnelEventStatusGuardTest.json \
-                esutdStatusGuardTest.json \
-                esutdResponseGuardTest.json \
-                paymentStatementStatusGuardTest.json \
-                paymentStatementSnapshotGuardTest.json \
-                form200StatusGuardTest.json \
-                form200SnapshotGuardTest.json \
-                approvalStatusGuardTest.json \
-                approvalStepStatusGuardTest.json \
-                archiveStatusGuardTest.json \
-                archiveDocumentStatusGuardTest.json \
-                insurancePolicyStatusGuardTest.json \
-                insurancePolicySnapshotGuardTest.json \
-                workAccidentStatusGuardTest.json \
-                insuranceClaimStatusGuardTest.json \
-                leaveStatusGuardTest.json \
-                vacationScheduleStatusGuardTest.json \
-                tripStatusGuardTest.json \
-                averageStatusGuardTest.json \
-                civilContractStatusGuardTest.json \
-                civilActStatusGuardTest.json \
-                civilLiabilityStatusGuardTest.json \
-                enforcementOrderStatusGuardTest.json \
-                enforcementCalculationStatusGuardTest.json \
-                interimPaymentStatusGuardTest.json \
-                bankRegisterStatusGuardTest.json \
-                liabilityStatusGuardTest.json \
-                recalculationStatusGuardTest.json \
-                sickLeaveStatusGuardTest.json \
-                socialTransferStatusGuardTest.json \
-                lifecycleGuardVerificationTest.json
-
-              kill -TERM "$server_pid"
-              wait "$server_pid" || true
-              trap - EXIT
-              exit 0
-            fi
-
-            if ! kill -0 "$server_pid" 2>/dev/null; then
-              cat server.log
-              exit 1
-            fi
-
-            sleep 1
-          done
-
-          cat server.log
-          exit 1
+        run: ./scripts/ci-runtime-regression.sh
