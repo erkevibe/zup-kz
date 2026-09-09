@@ -43,7 +43,71 @@ statutoryGuardTest() {
                                 NOT socialPaymentRegulatoryPack(blockedSocial),
                             futureTaxBlocked =
                                 taxCalculationStatus(blockedTax) == TaxCalculationStatus.draft AND
-                                NOT taxCalculationRegulatoryPack(blockedTax);
+                                NOT taxCalculationRegulatoryPack(blockedTax),
+                            mzp = numericStatutoryValueOn(
+                                statutoryParameterByCode('MZP'), 2026_01_31),
+                            mrp = numericStatutoryValueOn(
+                                statutoryParameterByCode('MRP'), 2026_01_31),
+                            livingMinimum = numericStatutoryValueOn(
+                                statutoryParameterByCode('LIVING_MINIMUM'), 2026_01_31),
+                            overtimeCoefficient = numericStatutoryValueOn(
+                                statutoryParameterByCode('MIN_OVERTIME_COEF'), 2026_01_31),
+                            holidayCoefficient = numericStatutoryValueOn(
+                                statutoryParameterByCode('MIN_HOLIDAY_COEF'), 2026_01_31),
+                            nightCoefficient = numericStatutoryValueOn(
+                                statutoryParameterByCode('MIN_NIGHT_COEF'), 2026_01_31),
+                            sickLeaveCapMrp = numericStatutoryValueOn(
+                                statutoryParameterByCode('SICK_LEAVE_MONTHLY_CAP_MRP'), 2026_01_31),
+                            opvRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('OPV_RATE'), 2026_01_31),
+                            opvMaxMzp = numericStatutoryValueOn(
+                                statutoryParameterByCode('OPV_MAX_MZP'), 2026_01_31),
+                            opvrRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('OPVR_RATE'), 2026_01_31),
+                            opvrMinMzp = numericStatutoryValueOn(
+                                statutoryParameterByCode('OPVR_MIN_MZP'), 2026_01_31),
+                            opvrMaxMzp = numericStatutoryValueOn(
+                                statutoryParameterByCode('OPVR_MAX_MZP'), 2026_01_31),
+                            socialContributionRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('SO_RATE'), 2026_01_31),
+                            socialContributionMinMzp = numericStatutoryValueOn(
+                                statutoryParameterByCode('SO_MIN_MZP'), 2026_01_31),
+                            socialContributionMaxMzp = numericStatutoryValueOn(
+                                statutoryParameterByCode('SO_MAX_MZP'), 2026_01_31),
+                            employeeOsmsRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('VOSMS_RATE'), 2026_01_31),
+                            employeeOsmsMaxMzp = numericStatutoryValueOn(
+                                statutoryParameterByCode('VOSMS_MAX_MZP'), 2026_01_31),
+                            employerOsmsRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('OOSMS_RATE'), 2026_01_31),
+                            employerOsmsMaxMzp = numericStatutoryValueOn(
+                                statutoryParameterByCode('OOSMS_MAX_MZP'), 2026_01_31),
+                            ipnBaseRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('IPN_BASE_RATE'), 2026_01_31),
+                            ipnHighRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('IPN_HIGH_RATE'), 2026_01_31),
+                            ipnThresholdMrp = numericStatutoryValueOn(
+                                statutoryParameterByCode('IPN_THRESHOLD_MRP'), 2026_01_31),
+                            ipnBasicMonthlyMrp = numericStatutoryValueOn(
+                                statutoryParameterByCode('IPN_BASIC_MONTHLY_MRP'), 2026_01_31),
+                            ipnBasicAnnualMrp = numericStatutoryValueOn(
+                                statutoryParameterByCode('IPN_BASIC_ANNUAL_MRP'), 2026_01_31),
+                            ipnSocialStandardMrp = numericStatutoryValueOn(
+                                statutoryParameterByCode('IPN_SOCIAL_STANDARD_MRP'), 2026_01_31),
+                            ipnSocialDisabilityMrp = numericStatutoryValueOn(
+                                statutoryParameterByCode('IPN_SOCIAL_DISABILITY_MRP'), 2026_01_31),
+                            socialTaxRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('SOCIAL_TAX_RATE'), 2026_01_31),
+                            agriculturalSocialTaxRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('SOCIAL_TAX_AGRI_RATE'), 2026_01_31),
+                            enforcementMaxRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('ENFORCEMENT_MAX_RATE'), 2026_01_31),
+                            alimonyOneChildRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('ALIMONY_ONE_CHILD_RATE'), 2026_01_31),
+                            alimonyTwoChildrenRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('ALIMONY_TWO_CHILD_RATE'), 2026_01_31),
+                            alimonyThreeChildrenRate = numericStatutoryValueOn(
+                                statutoryParameterByCode('ALIMONY_THREE_CHILD_RATE'), 2026_01_31);
                     }
                 }
             }
