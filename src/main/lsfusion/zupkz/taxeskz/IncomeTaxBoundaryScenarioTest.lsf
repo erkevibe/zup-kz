@@ -3,6 +3,7 @@ MODULE IncomeTaxBoundaryScenarioTest;
 REQUIRE CivilContractLegalScenarioTest;
 NAMESPACE ZUPKZ;
 
+boundaryEmployee(STRING[12] iinValue) = GROUP AGGR Employee e BY iin(e);
 boundaryLedgerTaxable(Organization org, Employee worker) = GROUP SUM
     taxLedgerTaxableIncome(PersonalTaxLedgerEntry e) IF
     taxLedgerOrganization(e) == org AND taxLedgerEmployee(e) == worker;
@@ -101,7 +102,8 @@ incomeTaxBoundaryScenarioTest() {
 
                     NEW contract = CivilContract {
                         civilContractOrganization(contract) <- org;
-                        civilContractContractor(contract) <- worker;
+                        civilContractContractor(contract) <-
+                            boundaryEmployee('900101870003');
                         civilContractNumber(contract) <- 'LEGAL-MIXED-GPH-2026';
                         civilContractDate(contract) <- 2026_02_01;
                         civilContractFrom(contract) <- 2026_02_01;
@@ -133,14 +135,18 @@ incomeTaxBoundaryScenarioTest() {
                                     progressiveIpn(36762500.00, 36762500.00,
                                         10.000000, 15.000000),
                                 salaryTaxable = ipnTaxableIncome(
-                                    taxCalculationLineByEmployee(taxes, worker)),
+                                    taxCalculationLineByEmployee(taxes,
+                                        boundaryEmployee('900101870003'))),
                                 salaryIpn = ipnAmount(
-                                    taxCalculationLineByEmployee(taxes, worker)),
+                                    taxCalculationLineByEmployee(taxes,
+                                        boundaryEmployee('900101870003'))),
                                 civilTaxable = civilActTaxableIncome(act),
                                 civilIpn = civilActIpn(act),
                                 civilPayable = civilActPayable(act),
-                                combinedTaxable = boundaryLedgerTaxable(org, worker),
-                                combinedIpn = boundaryLedgerIpn(org, worker),
+                                combinedTaxable = boundaryLedgerTaxable(org,
+                                    boundaryEmployee('900101870003')),
+                                combinedIpn = boundaryLedgerIpn(org,
+                                    boundaryEmployee('900101870003')),
                                 opvMaxBase = numericStatutoryValueOn(
                                     statutoryParameterByCode('MZP'), 2026_01_31) *
                                     numericStatutoryValueOn(
