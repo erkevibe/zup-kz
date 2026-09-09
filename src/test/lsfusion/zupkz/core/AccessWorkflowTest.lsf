@@ -130,9 +130,15 @@ employeeCabinetHire() = GROUP LAST PersonnelEvent e IF
     eventEmployment(e) == employeeCabinetEmployment() AND orderNumber(e) == 'CABINET-HIRE-001' ORDER e;
 employeeCabinetLeave() = GROUP LAST LeaveDocument l IF
     leaveAssignment(l) == employeeCabinetAssignment() AND leaveNumber(l) == 'CABINET-LEAVE-001' ORDER l;
-employeeCabinetSickLeave() = GROUP LAST SickLeaveDocument d IF
+employeeCabinetLegacySickLeave() = GROUP LAST SickLeaveDocument d IF
     sickLeaveAssignment(d) == employeeCabinetAssignment() AND
     sickLeaveNumber(d) == 'CABINET-SICK-001' ORDER d;
+employeeCabinetSickAverage() = GROUP LAST AverageEarningsDocument d IF
+    averageAssignment(d) == employeeCabinetAssignment() AND
+    averageNumber(d) == 'CABINET-AVG-SICK-002' ORDER d;
+employeeCabinetSickLeave() = GROUP LAST SickLeaveDocument d IF
+    sickLeaveAssignment(d) == employeeCabinetAssignment() AND
+    sickLeaveNumber(d) == 'CABINET-SICK-002' ORDER d;
 
 employeeCabinetSetupTest() {
     IF NOT employeeCabinetOwnEmployee() THEN NEW own = Employee {
@@ -240,17 +246,47 @@ employeeCabinetSetupTest() {
         leaveApprovedAt(leave) <- currentDateTime();
         leaveApprovedBy(leave) <- currentUser() AS CustomUser;
     }
+    IF sickLeaveStatus(employeeCabinetLegacySickLeave()) == SickLeaveStatus.approved THEN
+        cancelSickLeave(employeeCabinetLegacySickLeave());
+    IF NOT employeeCabinetSickAverage() THEN NEW average = AverageEarningsDocument {
+        averageNumber(average) <- 'CABINET-AVG-SICK-002';
+        averageAssignment(average) <- employeeCabinetAssignment();
+        averageEventKind(average) <- AverageEarningsEventKind.sickLeave;
+        averageMode(average) <- AverageEarningsMode.daily;
+        averageEventFrom(average) <- 2026_10_05;
+        averageEventTo(average) <- 2026_10_07;
+        averagePeriodFrom(average) <- 2025_10_01;
+        averagePeriodTo(average) <- 2026_09_30;
+        averageEventWorkDays(average) <- 3.00;
+        averageStatus(average) <- AverageEarningsStatus.baseCollected;
+        NEW base = AverageEarningsBaseLine {
+            baseAverageDocument(base) <- average;
+            baseEarnings(base) <- 420000.00;
+            baseWorkedDays(base) <- 21.00;
+            baseIncreaseCoefficient(base) <- 1.000000;
+            baseIncluded(base) <- TRUE;
+            baseNote(base) <- 'Учебная база среднего заработка для UI';
+            calculateAverageEarnings(average);
+        }
+    }
     IF NOT employeeCabinetSickLeave() THEN NEW sick = SickLeaveDocument {
-        sickLeaveNumber(sick) <- 'CABINET-SICK-001';
+        sickLeaveNumber(sick) <- 'CABINET-SICK-002';
         sickLeaveIssueDate(sick) <- 2026_10_07;
         sickLeaveMedicalOrganization(sick) <- 'Учебная поликлиника';
         sickLeaveAssignment(sick) <- employeeCabinetAssignment();
         sickLeaveFrom(sick) <- 2026_10_05;
         sickLeaveTo(sick) <- 2026_10_07;
         sickLeaveReason(sick) <- SickLeaveReason.illness;
-        sickLeaveStatus(sick) <- SickLeaveStatus.approved;
-        sickLeaveApprovedAt(sick) <- currentDateTime();
-        sickLeaveApprovedBy(sick) <- currentUser() AS CustomUser;
+        sickLeaveAverage(sick) <- employeeCabinetSickAverage();
+        sickLeaveStatus(sick) <- SickLeaveStatus.draft;
+        NEW benefit = SickLeaveBenefitLine {
+            sickBenefitDocument(benefit) <- sick;
+            sickBenefitMonth(benefit) <- 2026_10_05;
+            sickBenefitWorkDays(benefit) <- 3.00;
+            sickBenefitNote(benefit) <- 'Учебный UI-сценарий';
+            calculateSickLeave(sick);
+            approveSickLeave(sick);
+        }
     }
     IF NOT employeeCabinetRun() THEN NEW run = PayrollRun {
         payrollOrganization(run) <- employeeCabinetOrganization();

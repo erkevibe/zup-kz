@@ -4,6 +4,12 @@ REQUIRE Authentication, HREmployeeCard, HRLeave, PayrollSickLeave, PayrollSettle
 NAMESPACE ZUPKZ;
 
 currentCabinetEmployee() = employeeByUser(currentUser() AS CustomUser);
+cabinetGenderName 'Пол' (Employee worker) = caption(gender(worker));
+cabinetCitizenshipCode 'Гражданство' (Employee worker) = citizenshipCode(worker);
+cabinetLeaveKindName 'Вид отпуска' (LeaveDocument leave) = caption(leaveKind(leave));
+cabinetLeaveStatusName 'Статус' (LeaveDocument leave) = caption(leaveStatus(leave));
+cabinetSickLeaveReasonName 'Причина' (SickLeaveDocument sick) = caption(sickLeaveReason(sick));
+cabinetSickLeaveStatusName 'Статус' (SickLeaveDocument sick) = caption(sickLeaveStatus(sick));
 
 FORM employeeCabinetUsers 'Учётные записи сотрудников'
     OBJECTS worker = Employee
@@ -14,19 +20,20 @@ FORM employeeCabinetUsers 'Учётные записи сотрудников'
 
 FORM employeeCabinet 'Кабинет сотрудника'
     OBJECTS worker = Employee
-    PROPERTIES(worker) READONLY employeeFullName, iin, birthDate, gender, citizenshipCode
+    PROPERTIES(worker) READONLY employeeFullName, iin, birthDate,
+                                cabinetGenderName, cabinetCitizenshipCode
     FILTERS worker == currentCabinetEmployee()
 
     OBJECTS card = EmployeeCard
-    PROPERTIES(card) READONLY cardOrganizationName, personnelNumber, phone, email,
-                          registeredAddress, residentialAddress
+    PROPERTIES(card) READONLY cardOrganizationName, personnelNumber
+    PROPERTIES(card) PANEL READONLY phone, email, registeredAddress, residentialAddress
     FILTERS cardEmployee(card) == worker
 
     OBJECTS contract = Employment
     PROPERTIES(contract) READONLY employmentOrganizationName, employmentDepartmentName,
-                              employmentPositionName, employmentSalary, hireDate,
-                              contractNumber, contractDate, employmentKindName,
-                              contractTermKindName, contractEndDate, workPlace, workConditions
+                              employmentPositionName, employmentSalary, hireDate, contractNumber
+    PROPERTIES(contract) PANEL READONLY contractDate, employmentKindName,
+                                    contractTermKindName, contractEndDate, workPlace, workConditions
     FILTERS employee(contract) == worker
 
     OBJECTS assignment = EmploymentAssignment
@@ -42,14 +49,16 @@ FORM employeeCabinet 'Кабинет сотрудника'
             eventStatus(event) == PersonnelEventStatus.posted
 
     OBJECTS leave = LeaveDocument
-    PROPERTIES(leave) READONLY leaveNumber, leaveKind, leaveDateFrom, leaveDateTo,
-                           leaveCalendarDays, leaveChargedDays, leaveGrossAmount, leaveStatus
+    PROPERTIES(leave) READONLY leaveNumber, cabinetLeaveKindName, leaveDateFrom, leaveDateTo,
+                           leaveCalendarDays, leaveChargedDays, leaveGrossAmount,
+                           cabinetLeaveStatusName
     FILTERS employee(employment(leaveAssignment(leave))) == worker,
             leaveStatus(leave) == LeaveStatus.approved
 
     OBJECTS sick = SickLeaveDocument
     PROPERTIES(sick) READONLY sickLeaveNumber, sickLeaveIssueDate, sickLeaveFrom,
-                          sickLeaveTo, sickLeaveReason, sickLeaveGrossAmount, sickLeaveStatus
+                          sickLeaveTo, cabinetSickLeaveReasonName, sickLeaveGrossAmount,
+                          cabinetSickLeaveStatusName
     FILTERS employee(employment(sickLeaveAssignment(sick))) == worker,
             sickLeaveStatus(sick) == SickLeaveStatus.approved
 
@@ -64,21 +73,52 @@ FORM employeeCabinet 'Кабинет сотрудника'
 ;
 
 DESIGN employeeCabinet {
+    PROPERTY(employeeFullName(worker)) { charWidth = 28; }
+    PROPERTY(iin(worker)) { charWidth = 13; }
+    PROPERTY(birthDate(worker)) { charWidth = 11; }
+    PROPERTY(cabinetGenderName(worker)) { charWidth = 10; }
+    PROPERTY(cabinetCitizenshipCode(worker)) { charWidth = 12; }
     MOVE BOX(worker) FIRST {
         caption = 'Мои данные';
-        height = 115;
+        height = 105;
         flex = 0;
     }
     NEW cabinetDetails AFTER BOX(worker) {
         tabbed = TRUE;
         NEW cardsTab {
             caption = 'Контакты';
-            MOVE BOX(card) { caption = 'Данные по организациям'; }
+            MOVE BOX(card) {
+                caption = 'Данные по организациям';
+                PROPERTY(cardOrganizationName(card)) { charWidth = 28; }
+                PROPERTY(personnelNumber(card)) { charWidth = 14; }
+                PROPERTY(phone(card)) { charWidth = 18; }
+                PROPERTY(email(card)) { charWidth = 28; }
+                PROPERTY(registeredAddress(card)) { charWidth = 36; wrap = TRUE; }
+                PROPERTY(residentialAddress(card)) { charWidth = 36; wrap = TRUE; }
+            }
         }
         NEW contractsTab {
             caption = 'Работа';
-            MOVE BOX(contract) { caption = 'Трудовые договоры'; }
-            MOVE BOX(assignment) { caption = 'Назначения и оклад'; }
+            MOVE BOX(contract) {
+                caption = 'Трудовые договоры';
+                PROPERTY(employmentOrganizationName(contract)) { charWidth = 24; }
+                PROPERTY(employmentDepartmentName(contract)) { charWidth = 26; }
+                PROPERTY(employmentPositionName(contract)) { charWidth = 30; }
+                PROPERTY(employmentSalary(contract)) { charWidth = 13; }
+                PROPERTY(hireDate(contract)) { charWidth = 11; }
+                PROPERTY(contractNumber(contract)) { charWidth = 18; }
+                PROPERTY(contractDate(contract)) { charWidth = 11; }
+                PROPERTY(employmentKindName(contract)) { charWidth = 24; }
+                PROPERTY(contractTermKindName(contract)) { charWidth = 24; }
+                PROPERTY(contractEndDate(contract)) { charWidth = 11; }
+                PROPERTY(workPlace(contract)) { charWidth = 20; }
+                PROPERTY(workConditions(contract)) { charWidth = 36; wrap = TRUE; }
+            }
+            MOVE BOX(assignment) {
+                caption = 'Назначения и оклад';
+                PROPERTY(assignmentStaffCode(assignment)) { charWidth = 20; }
+                PROPERTY(assignmentPositionName(assignment)) { charWidth = 32; }
+            }
         }
         NEW eventsTab {
             caption = 'Кадровая история';
