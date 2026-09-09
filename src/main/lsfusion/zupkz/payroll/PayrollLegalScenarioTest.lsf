@@ -73,15 +73,15 @@ payrollLegalScenarioTest() {
             payrollPeriodTo(run) <- 2026_01_31;
             payrollRunStatus(run) <- PayrollRunStatus.draft;
 
-            createLegalScenarioWorker(run, '910101300001', 'Резидент', 1991_01_01,
+            createLegalScenarioWorker(run, '910101990001', 'Резидент', 1991_01_01,
                 500000.00, TRUE, TRUE, IpnSocialDeductionKind.none);
-            createLegalScenarioWorker(run, '920202300002', 'Нерезидент', 1992_02_02,
+            createLegalScenarioWorker(run, '920202990002', 'Нерезидент', 1992_02_02,
                 500000.00, NULL, NULL, IpnSocialDeductionKind.none);
-            createLegalScenarioWorker(run, '930303300003', 'Инвалидность I–II', 1993_03_03,
+            createLegalScenarioWorker(run, '930303990003', 'Инвалидность I–II', 1993_03_03,
                 500000.00, TRUE, TRUE, IpnSocialDeductionKind.disabilityOneTwo);
-            createLegalScenarioWorker(run, '750101300004', 'Граница ОПВР', 1975_01_01,
+            createLegalScenarioWorker(run, '750101990004', 'Граница ОПВР', 1975_01_01,
                 500000.00, TRUE, TRUE, IpnSocialDeductionKind.none);
-            createLegalScenarioWorker(run, '741231300005', 'До границы ОПВР', 1974_12_31,
+            createLegalScenarioWorker(run, '741231990005', 'До границы ОПВР', 1974_12_31,
                 500000.00, TRUE, TRUE, IpnSocialDeductionKind.none);
 
             payrollRunStatus(run) <- PayrollRunStatus.calculated;
@@ -100,50 +100,50 @@ payrollLegalScenarioTest() {
                     EXPORT JSON FROM
                         scenarioCount = legalScenarioLineCount(social),
                         residentOpv = opvAmount(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('910101300001'))),
+                            social, legalScenarioEmployee('910101990001'))),
                         residentOpvr = opvrAmount(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('910101300001'))),
+                            social, legalScenarioEmployee('910101990001'))),
                         residentSo = soAmount(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('910101300001'))),
+                            social, legalScenarioEmployee('910101990001'))),
                         residentVosms = vosmsAmount(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('910101300001'))),
+                            social, legalScenarioEmployee('910101990001'))),
                         residentOosms = oosmsAmount(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('910101300001'))),
+                            social, legalScenarioEmployee('910101990001'))),
                         residentBasicDeduction = ipnBasicDeduction(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('910101300001'))),
+                            taxes, legalScenarioEmployee('910101990001'))),
                         residentTaxableIncome = ipnTaxableIncome(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('910101300001'))),
+                            taxes, legalScenarioEmployee('910101990001'))),
                         residentIpn = ipnAmount(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('910101300001'))),
+                            taxes, legalScenarioEmployee('910101990001'))),
                         nonresidentRecorded = NOT taxCalculationResident(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('920202300002'))),
+                            taxes, legalScenarioEmployee('920202990002'))),
                         nonresidentBasicDeduction = ipnBasicDeduction(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('920202300002'))),
+                            taxes, legalScenarioEmployee('920202990002'))),
                         nonresidentSocialDeduction = ipnSocialDeduction(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('920202300002'))),
+                            taxes, legalScenarioEmployee('920202990002'))),
                         nonresidentTaxableIncome = ipnTaxableIncome(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('920202300002'))),
+                            taxes, legalScenarioEmployee('920202990002'))),
                         nonresidentIpn = ipnAmount(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('920202300002'))),
+                            taxes, legalScenarioEmployee('920202990002'))),
                         disabilityBasicDeduction = ipnBasicDeduction(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('930303300003'))),
+                            taxes, legalScenarioEmployee('930303990003'))),
                         disabilitySocialDeduction = ipnSocialDeduction(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('930303300003'))),
+                            taxes, legalScenarioEmployee('930303990003'))),
                         disabilityTaxableIncome = ipnTaxableIncome(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('930303300003'))),
+                            taxes, legalScenarioEmployee('930303990003'))),
                         disabilityIpn = ipnAmount(taxCalculationLineByEmployee(
-                            taxes, legalScenarioEmployee('930303300003'))),
+                            taxes, legalScenarioEmployee('930303990003'))),
                         disabilityDeductionCodes = taxCalculationDeductionCodes(
                             taxCalculationLineByEmployee(taxes,
-                                legalScenarioEmployee('930303300003'))),
+                                legalScenarioEmployee('930303990003'))),
                         opvrBoundaryIncluded = NOT opvrExempt(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('750101300004'))),
+                            social, legalScenarioEmployee('750101990004'))),
                         opvrBoundaryAmount = opvrAmount(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('750101300004'))),
+                            social, legalScenarioEmployee('750101990004'))),
                         opvrBeforeBoundaryExempt = opvrExempt(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('741231300005'))),
+                            social, legalScenarioEmployee('741231990005'))),
                         opvrBeforeBoundaryAmount = opvrAmount(socialPaymentLineByEmployee(
-                            social, legalScenarioEmployee('741231300005'))),
+                            social, legalScenarioEmployee('741231990005'))),
                         regulatoryPack = packCode(socialPaymentRegulatoryPack(social));
                 }
             }
