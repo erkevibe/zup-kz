@@ -107,6 +107,27 @@ jobs:
                 payroll-closure-workflow-result.json
 
               curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollConcurrencySetupTest' \
+                --output payroll-concurrency-setup-result.json
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollConcurrentCloseTest' \
+                --output payroll-concurrency-close-1.json &
+              close_pid_1=$!
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollConcurrentCloseTest' \
+                --output payroll-concurrency-close-2.json &
+              close_pid_2=$!
+              wait "$close_pid_1" || true
+              wait "$close_pid_2" || true
+
+              curl --fail --silent --show-error \
+                'http://localhost:7651/exec?action=ZUPKZ.payrollConcurrencyVerificationTest' \
+                --output payroll-concurrency-result.json
+
+              python3 tests/assert_payroll_concurrency.py payroll-concurrency-result.json
+
+              curl --fail --silent --show-error \
                 'http://localhost:7651/exec?action=ZUPKZ.payrollResetWorkflowTest' \
                 --output payroll-reset-workflow-result.json
 

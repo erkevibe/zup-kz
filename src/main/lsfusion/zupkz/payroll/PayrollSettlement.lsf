@@ -109,6 +109,10 @@ CONSTRAINT DROPPED(PayrollSettlementLine l IS PayrollSettlementLine) AND
 
 settlementLineByEmployee(PayrollRun run, Employee worker) =
     GROUP AGGR PayrollSettlementLine l BY settlementPayrollRun(l), settlementEmployee(l);
+payrollSettlementEmployeeLineCount(PayrollRun run, Employee worker) = GROUP SUM 1 IF
+    settlementPayrollRun(PayrollSettlementLine l) == run AND settlementEmployee(l) == worker;
+CONSTRAINT payrollSettlementEmployeeLineCount(PayrollRun run, Employee worker) > 1
+    MESSAGE 'В закрытом расчёте сотрудник может присутствовать только один раз';
 payrollAccruedByEmployee(PayrollRun run, Employee worker) =
     GROUP SUM calculationAmount(PayrollLine l)
     IF linePayrollRun(l) == run AND
