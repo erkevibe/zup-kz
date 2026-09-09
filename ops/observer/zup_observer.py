@@ -26,7 +26,6 @@ SECRET_PATTERNS = (
     re.compile(r"\b\d{12}\b"),
     re.compile(r"\bKZ\d{18}\b", re.I),
 )
-TIMESTAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}[T ][0-9:.+-]+|\d{2} [A-Z][a-z]{2} \d{4})")
 PROCESS_MARKER = "ZUP_PROCESS "
 
 
@@ -261,7 +260,10 @@ class Observer:
         records: list[str] = []
         current: list[str] = []
         for line in text.splitlines():
-            continuation = bool(current) and (line.startswith((" ", "\t", "at ", "Caused by:")) or not TIMESTAMP_RE.match(line))
+            continuation = bool(current) and (
+                line.startswith((" ", "\t", "at ", "Caused by:", "Suppressed:", "... "))
+                or bool(re.match(r"^[A-Za-z0-9_.$]+(?:Exception|Error):", line))
+            )
             if current and not continuation:
                 records.append("\n".join(current))
                 current = []

@@ -57,6 +57,11 @@ class ObserverTest(unittest.TestCase):
         self.assertIn("IllegalStateException", row[0])
         self.assertEqual(self.count("raw_event"), 1)
 
+    def test_unprefixed_application_lines_remain_separate_events(self):
+        self.log.write_text("request accepted\nrequest completed\n", encoding="utf-8")
+        self.observer.scan_once()
+        self.assertEqual(self.count("raw_event"), 2)
+
     def test_incident_fingerprint_groups_variable_ids(self):
         self.log.write_text(
             "2026-09-09 10:00:00 ERROR request id=123 failed\n"
