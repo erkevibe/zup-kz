@@ -1,0 +1,37 @@
+[Unit]
+Description=Guacamole loss-aware log observer
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=ZUP_OBSERVER_CONFIG=/etc/zup-observer-guacamole.json
+ExecStart=/usr/bin/python3 /opt/zup-observer/zup_observer.py run --config ${ZUP_OBSERVER_CONFIG}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+UMask=0077
+ReadWritePaths=/var/lib/zup-observer
+
+[Install]
+WantedBy=multi-user.target

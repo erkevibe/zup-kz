@@ -1,0 +1,66 @@
+{
+  "database": "/var/lib/zup-observer/observer.db",
+  "alert_file": "/var/lib/zup-observer/alerts.ndjson",
+  "poll_seconds": 15,
+  "baseline_minutes": 30,
+  "report_limit": 50,
+  "files": [
+    {
+      "name": "lsfusion",
+      "globs": ["/srv/zup-kz/logs/*.log"]
+    },
+    {
+      "name": "tomcat",
+      "globs": ["/opt/zup-web/tomcat/logs/*.log"]
+    },
+    {
+      "name": "postgresql",
+      "globs": ["/var/log/postgresql/postgresql-17-main.log"]
+    }
+  ],
+  "journals": [
+    {
+      "name": "host-journal",
+      "units": []
+    }
+  ],
+  "commands": [],
+  "processes": {
+    "hr": {
+      "starts": ["prepared"],
+      "transitions": {
+        "prepared": ["posted", "cancelled"],
+        "posted": ["esutd-sent", "cancelled"],
+        "esutd-sent": ["esutd-accepted", "esutd-rejected"],
+        "esutd-rejected": ["esutd-sent", "cancelled"],
+        "esutd-accepted": ["cancelled"],
+        "cancelled": []
+      }
+    },
+    "approval": {
+      "starts": ["submitted"],
+      "transitions": {
+        "submitted": ["approved-step", "rejected", "cancelled"],
+        "approved-step": ["approved-step", "completed", "rejected", "cancelled"],
+        "completed": ["cancelled"],
+        "rejected": [],
+        "cancelled": []
+      }
+    },
+    "payroll": {
+      "starts": ["timesheet"],
+      "transitions": {
+        "timesheet": ["calculated"],
+        "calculated": ["social-calculated", "recalculated", "reopened"],
+        "social-calculated": ["tax-calculated", "recalculated"],
+        "tax-calculated": ["enforcement-calculated", "closed", "recalculated"],
+        "enforcement-calculated": ["closed", "recalculated"],
+        "closed": ["statement", "reopened"],
+        "statement": ["paid", "reopened"],
+        "paid": ["reopened"],
+        "recalculated": ["social-calculated", "tax-calculated", "closed"],
+        "reopened": ["calculated"]
+      }
+    }
+  }
+}
