@@ -403,7 +403,6 @@ payrollFormulaTest() {
                                 bankRegisterAmount2026 = totalBankRegisterAmount(bankRegister),
                                 bankRegisterAccepted2026 =
                                     bankRegisterStatus(bankRegister) == BankRegisterStatus.accepted,
-                                currentEmployeeIban2026 = paymentAccountIban(paymentAccount),
                                 opvLiability2026 = liabilityLineAmount(
                                     liabilityLineByKind(liabilities, PayrollLiabilityKind.opv)),
                                 totalPayrollLiability2026 = totalPayrollLiability(liabilities),
@@ -651,6 +650,10 @@ formulaBankRegisterLine() = GROUP LAST SalaryBankRegisterLine l IF
     bankRegisterLineRegister(l) == formulaBankRegister() ORDER l;
 formulaBankRegisterLineCount() = GROUP SUM 1 IF
     bankRegisterLineRegister(SalaryBankRegisterLine l) == formulaBankRegister();
+formulaPaymentAccount() = GROUP LAST EmployeePaymentAccount a IF
+    iin(paymentAccountEmployee(a)) == '900101300000' AND
+    paymentAccountOrganization(a) == bankRegisterOrganization(formulaBankRegister())
+    ORDER a;
 
 bankRegisterLineSnapshotTamperTest() {
     bankRegisterLineAmount(formulaBankRegisterLine()) <- 1.00;
@@ -691,6 +694,8 @@ bankRegisterSnapshotVerificationTest() {
             formulaBankRegisterLine()) == 'KZ000000000000000002',
         bankRegisterLineIinPreserved = bankRegisterLineIin(
             formulaBankRegisterLine()) == '900101300000',
+        currentPaymentAccountChanged = paymentAccountIban(
+            formulaPaymentAccount()) == 'KZ000000000000000009',
         bankRegisterLineCountPreserved = formulaBankRegisterLineCount() == 1,
         bankRegisterTotalPreserved = totalBankRegisterAmount(formulaBankRegister()) == 67274.64;
 }

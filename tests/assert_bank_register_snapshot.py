@@ -16,6 +16,7 @@ for name in (
     "bankRegisterLineAmountPreserved",
     "bankRegisterLineIbanPreserved",
     "bankRegisterLineIinPreserved",
+    "currentPaymentAccountChanged",
     "bankRegisterLineCountPreserved",
     "bankRegisterTotalPreserved",
 ):
