@@ -183,8 +183,6 @@ assert actual["outsideSchedulePaymentDue"] == "2026-07-16"
 assert actual["payrollMarkedPaid2026"] is True
 assert actual["latePaymentDetected2026"] is True
 assert actual["bankRegisterAccepted2026"] is True
-assert actual["bankRegisterEmployeeIin2026"] == "900101300000"
-assert actual["bankRegisterEmployeeIban2026"] == "KZ000000000000000002"
 assert actual["currentEmployeeIban2026"] == "KZ000000000000000009"
 assert actual["liabilitiesPaid2026"] is True
 assert actual["latestPayrollPaymentDate2026"] == "2026-02-10"

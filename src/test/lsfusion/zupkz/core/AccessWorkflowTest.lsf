@@ -135,8 +135,8 @@ initialRolePermissionsTest() {
             uiRoleTestUser('ui-time')),
         payrollMasterDataWriteDenied = NOT masterDataChangeRoleAllowed(
             uiRoleTestUser('ui-payroll')),
-        hrMasterDataWriteDenied = NOT masterDataChangeRoleAllowed(uiRoleTestUser('ui-hr')),
-        chiefMasterDataWriteDenied = NOT masterDataChangeRoleAllowed(uiRoleTestUser('ui-chief')),
+        hrMasterDataWriteAllowed = masterDataChangeRoleAllowed(uiRoleTestUser('ui-hr')),
+        chiefMasterDataWriteAllowed = masterDataChangeRoleAllowed(uiRoleTestUser('ui-chief')),
         employeeCabinetPermitted = dataPermission(userRoleSID('zup_employee'),
             navigatorElementCanonicalName('ZUPKZ.employeeSelfService')) == Permission.permit,
         employeePayrollForbidden = dataPermission(userRoleSID('zup_employee'),

@@ -15,6 +15,7 @@ for name in (
     "bankRegisterHeaderPreserved",
     "bankRegisterLineAmountPreserved",
     "bankRegisterLineIbanPreserved",
+    "bankRegisterLineIinPreserved",
     "bankRegisterLineCountPreserved",
     "bankRegisterTotalPreserved",
 ):

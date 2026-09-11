@@ -99,6 +99,7 @@ until grep -q 'Server has successfully started' "$server_log"; do
     sleep 1
 done
 
+check uiRoleSetupTest ui-role-setup-result.json tests/assert_ui_role_setup.py
 check initialRolePermissionsTest initial-role-permissions-result.json tests/assert_ui_role_setup.py
 check payrollFormulaTest payroll-result.json tests/assert_payroll.py
 request bankRegisterLineSnapshotTamperTest bank-register-line-tamper-result.json
@@ -244,7 +245,6 @@ python3 tests/assert_access_workflow.py \
     employeeIinFormatGuardTest-result.json organizationBinFormatGuardTest-result.json \
     bankDetailsFormatGuardTest-result.json
 
-check uiRoleSetupTest ui-role-setup-result.json tests/assert_ui_role_setup.py
 request employeeCabinetSetupTest employee-cabinet-setup-result.json
 request employeeCabinetAccessTest employee-cabinet-access-result.json
 request employeeCabinetFixtureVerificationTest employee-cabinet-verification-result.json

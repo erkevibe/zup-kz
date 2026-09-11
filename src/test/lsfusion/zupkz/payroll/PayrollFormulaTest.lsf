@@ -403,10 +403,6 @@ payrollFormulaTest() {
                                 bankRegisterAmount2026 = totalBankRegisterAmount(bankRegister),
                                 bankRegisterAccepted2026 =
                                     bankRegisterStatus(bankRegister) == BankRegisterStatus.accepted,
-                                bankRegisterEmployeeIin2026 = bankRegisterLineIin(
-                                    bankRegisterLineByRegister(bankRegister)),
-                                bankRegisterEmployeeIban2026 = bankRegisterLineIban(
-                                    bankRegisterLineByRegister(bankRegister)),
                                 currentEmployeeIban2026 = paymentAccountIban(paymentAccount),
                                 opvLiability2026 = liabilityLineAmount(
                                     liabilityLineByKind(liabilities, PayrollLiabilityKind.opv)),
@@ -693,6 +689,8 @@ bankRegisterSnapshotVerificationTest() {
             formulaBankRegisterLine()) == 67274.64,
         bankRegisterLineIbanPreserved = bankRegisterLineIban(
             formulaBankRegisterLine()) == 'KZ000000000000000002',
+        bankRegisterLineIinPreserved = bankRegisterLineIin(
+            formulaBankRegisterLine()) == '900101300000',
         bankRegisterLineCountPreserved = formulaBankRegisterLineCount() == 1,
         bankRegisterTotalPreserved = totalBankRegisterAmount(formulaBankRegister()) == 67274.64;
 }
