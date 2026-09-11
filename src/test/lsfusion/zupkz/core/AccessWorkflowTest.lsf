@@ -41,6 +41,8 @@ roleSecurityEmployee() = GROUP LAST Employee e IF iin(e) == '960606300006' ORDER
 hiddenOnlySecurityEmployee() = GROUP LAST Employee e IF iin(e) == '970707300007' ORDER e;
 legacyMigrationEmployee() = GROUP LAST Employee e IF iin(e) == '980808300008' ORDER e;
 legacyMigrationAmbiguousEmployee() = GROUP LAST Employee e IF iin(e) == '990909300009' ORDER e;
+legacyMigrationExistingEmployee() = GROUP LAST Employee e IF iin(e) == '971010300010' ORDER e;
+legacyMigrationIncompleteEmployee() = GROUP LAST Employee e IF iin(e) == '961111300011' ORDER e;
 hiddenEmployeeAssignedPaymentAccountCount() = GROUP SUM 1 IF
     paymentAccountOrganization(EmployeePaymentAccount account) == accessAssignedOrganization() AND
     paymentAccountEmployee(account) == hiddenOnlySecurityEmployee();
@@ -936,6 +938,40 @@ legacyPaymentAccountMigrationTest() {
             hireDate(contractB) <- 2024_02_01;
         }
     }
+    IF NOT legacyMigrationExistingEmployee() THEN NEW existing = Employee {
+        iin(existing) <- '971010300010';
+        lastName(existing) <- 'Миграция';
+        firstName(existing) <- 'УжеПеренесён';
+        salaryBankName(existing) <- 'Старый банк';
+        salaryBankBic(existing) <- 'BANKKZKA';
+        salaryIban(existing) <- 'KZ000000000000000071';
+        NEW contractExisting = Employment {
+            employee(contractExisting) <- existing;
+            organization(contractExisting) <- accessAssignedOrganization();
+            contractNumber(contractExisting) <- 'LEGACY-MIGRATION-EXISTING';
+            hireDate(contractExisting) <- 2024_04_01;
+        }
+        NEW accountExisting = EmployeePaymentAccount {
+            paymentAccountOrganization(accountExisting) <- accessAssignedOrganization();
+            paymentAccountEmployee(accountExisting) <- existing;
+            paymentAccountBankName(accountExisting) <- 'Новый банк';
+            paymentAccountBic(accountExisting) <- 'BANKKZKA';
+            paymentAccountIban(accountExisting) <- 'KZ000000000000000072';
+            paymentAccountValidFrom(accountExisting) <- 2024_04_01;
+        }
+    }
+    IF NOT legacyMigrationIncompleteEmployee() THEN NEW incomplete = Employee {
+        iin(incomplete) <- '961111300011';
+        lastName(incomplete) <- 'Миграция';
+        firstName(incomplete) <- 'НеполныеРеквизиты';
+        salaryBankName(incomplete) <- 'Только название банка';
+        NEW contractIncomplete = Employment {
+            employee(contractIncomplete) <- incomplete;
+            organization(contractIncomplete) <- accessAssignedOrganization();
+            contractNumber(contractIncomplete) <- 'LEGACY-MIGRATION-INCOMPLETE';
+            hireDate(contractIncomplete) <- 2024_05_01;
+        }
+    }
     APPLY;
     migrateLegacyPaymentAccounts();
     EXPORT JSON FROM
@@ -947,7 +983,15 @@ legacyPaymentAccountMigrationTest() {
         ambiguousLegacyNotMigrated = NOT employeePaymentAccountCount(
             legacyMigrationAmbiguousEmployee()),
         ambiguousLegacyReported = legacyPaymentAccountMigrationConflict(
-            legacyMigrationAmbiguousEmployee());
+            legacyMigrationAmbiguousEmployee()),
+        existingAccountNotDuplicated = employeePaymentAccountCount(
+            legacyMigrationExistingEmployee()) == 1,
+        existingAccountReported = legacyPaymentAccountMigrationConflict(
+            legacyMigrationExistingEmployee()),
+        incompleteLegacyNotMigrated = NOT employeePaymentAccountCount(
+            legacyMigrationIncompleteEmployee()),
+        incompleteLegacyReported = legacyPaymentAccountIncomplete(
+            legacyMigrationIncompleteEmployee());
 }
 
 paymentAccountSecurityVerificationTest() {

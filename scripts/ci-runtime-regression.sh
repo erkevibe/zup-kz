@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+umask 077
 
 server_log=${ZUP_SERVER_LOG:-server.log}
 server_jar=${ZUP_SERVER_JAR:-target/lsfusion-server-0.1.0-SNAPSHOT.jar}
@@ -12,6 +13,7 @@ request_timeout=${ZUP_TEST_REQUEST_TIMEOUT:-600}
 run_id=${ZUP_TEST_RUN_ID:-${GITHUB_RUN_ID:-local-runtime}}
 action_manifest=${ZUP_ACTION_MANIFEST:-runtime-action-manifest.tsv}
 server_pid=
+run_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 if [ ! -f "$server_jar" ]; then
     echo "Runtime JAR not found: $server_jar" >&2
@@ -26,10 +28,15 @@ fi
 printf 'run_id\tstarted_at\tfinished_at\tuser\taction\texpectation\tresult\toutput\tsha256\n' > "$action_manifest"
 
 cleanup() {
+    exit_status=$?
     if [ -n "$server_pid" ]; then
         kill -TERM "$server_pid" 2>/dev/null || true
         wait "$server_pid" 2>/dev/null || true
     fi
+    finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    printf '%s\t%s\t%s\t-\tfinal-run\tverification\tFAIL\t-\t-\n' \
+        "$run_id" "$run_started_at" "$finished_at" >> "$action_manifest"
+    return "$exit_status"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -77,7 +84,21 @@ check() {
     output=$2
     assertion=$3
     request "$action" "$output"
-    python3 "$assertion" "$output"
+    assertion_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    assertion_name=$(basename "$assertion" .py)
+    if python3 "$assertion" "$output"; then
+        assertion_finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        printf '%s\t%s\t%s\t-\t%s\tassertion\tPASS\t%s\t%s\n' \
+            "$run_id" "$assertion_started_at" "$assertion_finished_at" \
+            "$assertion_name" "$output" "$(sha256sum "$output" | cut -d' ' -f1)" \
+            >> "$action_manifest"
+    else
+        assertion_finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        printf '%s\t%s\t%s\t-\t%s\tassertion\tFAIL\t%s\t-\n' \
+            "$run_id" "$assertion_started_at" "$assertion_finished_at" \
+            "$assertion_name" "$output" >> "$action_manifest"
+        return 1
+    fi
 }
 
 java -Xms256m -Xmx2g -Dhttp.port="$http_port" -Drmi.port="$rmi_port" \
@@ -290,5 +311,8 @@ python3 tests/assert_lifecycle_guards.py \
 kill -TERM "$server_pid"
 wait "$server_pid" || true
 server_pid=
+finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+printf '%s\t%s\t%s\t-\tfinal-run\tverification\tPASS\t-\t-\n' \
+    "$run_id" "$run_started_at" "$finished_at" >> "$action_manifest"
 trap - EXIT HUP INT TERM
 echo RUNTIME_REGRESSION_OK

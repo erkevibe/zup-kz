@@ -94,18 +94,25 @@ employeePaymentAccountCount(Employee worker) = GROUP SUM 1 IF
     paymentAccountEmployee(EmployeePaymentAccount account) == worker;
 legacyPaymentAccountComplete(Employee worker) = salaryBankName(worker) AND
     salaryBankBic(worker) AND salaryIban(worker);
+legacyPaymentAccountHasData(Employee worker) = salaryBankName(worker) OR
+    salaryBankBic(worker) OR salaryIban(worker);
+legacyPaymentAccountIncomplete(Employee worker) = legacyPaymentAccountHasData(worker) AND
+    NOT legacyPaymentAccountComplete(worker);
 legacyPaymentAccountMigrationCandidate(Employee worker) =
     legacyPaymentAccountComplete(worker) AND legacyPaymentOrganization(worker) AND
     NOT legacyPaymentOtherOrganizationCount(worker) AND
     NOT employeePaymentAccountCount(worker);
 legacyPaymentAccountMigrationConflict(Employee worker) =
-    legacyPaymentAccountComplete(worker) AND legacyPaymentOrganization(worker) AND
-    legacyPaymentOtherOrganizationCount(worker) AND
-    NOT employeePaymentAccountCount(worker);
+    legacyPaymentAccountComplete(worker) AND
+    (NOT legacyPaymentOrganization(worker) OR
+     legacyPaymentOtherOrganizationCount(worker) OR
+     employeePaymentAccountCount(worker));
 legacyPaymentAccountMigrationCandidateCount() = GROUP SUM 1 IF
     legacyPaymentAccountMigrationCandidate(Employee worker);
 legacyPaymentAccountMigrationConflictCount() = GROUP SUM 1 IF
     legacyPaymentAccountMigrationConflict(Employee worker);
+legacyPaymentAccountIncompleteCount() = GROUP SUM 1 IF
+    legacyPaymentAccountIncomplete(Employee worker);
 legacyPaymentAccountMigrationRoleAllowed() =
     has(currentUser() AS CustomUser, userRoleSID('admin')) OR
     has(currentUser() AS CustomUser, userRoleSID('zup_hr')) OR
@@ -126,8 +133,9 @@ migrateLegacyPaymentAccounts 'Перенести старые банковски
             }
         }
         APPLY;
-        IF legacyPaymentAccountMigrationConflictCount() THEN
-            MESSAGE 'Часть сотрудников работает в нескольких организациях: задайте их зарплатные счета отдельно по каждой организации';
+        IF legacyPaymentAccountMigrationConflictCount() OR
+           legacyPaymentAccountIncompleteCount() THEN
+            MESSAGE 'Перенос завершён частично: проверьте счётчики конфликтов и неполных старых реквизитов и задайте счета вручную';
         ELSE
             MESSAGE 'Старые банковские реквизиты перенесены в регистр зарплатных счетов';
     }
@@ -469,7 +477,8 @@ FORM employeePaymentAccounts 'Зарплатные счета сотрудник
                   paymentAccountBankName, paymentAccountBic, paymentAccountIban,
                   paymentAccountValidFrom, paymentAccountValidTo
     PROPERTIES() READONLY legacyPaymentAccountMigrationCandidateCount,
-                          legacyPaymentAccountMigrationConflictCount
+                          legacyPaymentAccountMigrationConflictCount,
+                          legacyPaymentAccountIncompleteCount
     PROPERTIES() migrateLegacyPaymentAccounts TOOLBAR SHOWIF legacyPaymentAccountMigrationRoleAllowed()
 ;
 

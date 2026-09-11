@@ -54,6 +54,10 @@ assert actual["singleOrganizationLegacyMigrated"] is True
 assert actual["migrationPreservedEffectiveDate"] is True
 assert actual["ambiguousLegacyNotMigrated"] is True
 assert actual["ambiguousLegacyReported"] is True
+assert actual["existingAccountNotDuplicated"] is True
+assert actual["existingAccountReported"] is True
+assert actual["incompleteLegacyNotMigrated"] is True
+assert actual["incompleteLegacyReported"] is True
 assert actual["employeeIinFormatRejected"] is True
 assert actual["organizationBinFormatRejected"] is True
 assert actual["bankDetailsFormatRejected"] is True
