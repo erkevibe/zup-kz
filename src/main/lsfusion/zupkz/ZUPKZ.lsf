@@ -21,6 +21,7 @@ NAVIGATOR {
         NEW departments;
         NEW positions;
         NEW employees;
+        NEW employeePaymentAccounts;
         NEW staffPositions;
     }
 

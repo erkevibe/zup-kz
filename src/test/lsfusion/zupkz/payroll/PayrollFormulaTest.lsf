@@ -16,9 +16,14 @@ payrollFormulaTest() {
             firstName(worker) <- 'Работник';
             middleName(worker) <- 'Первый';
             birthDate(worker) <- 1990_01_01;
-            salaryBankName(worker) <- 'Тестовый банк';
-            salaryBankBic(worker) <- 'TESTKZKA';
-            salaryIban(worker) <- 'KZ000000000000000002';
+            NEW paymentAccount = EmployeePaymentAccount {
+                paymentAccountOrganization(paymentAccount) <- org;
+                paymentAccountEmployee(paymentAccount) <- worker;
+                paymentAccountBankName(paymentAccount) <- 'Тестовый банк';
+                paymentAccountBic(paymentAccount) <- 'TESTKZKA';
+                paymentAccountIban(paymentAccount) <- 'KZ000000000000000002';
+                paymentAccountValidFrom(paymentAccount) <- 2026_01_01;
+            }
             NEW contractor = Employee {
                 iin(contractor) <- '920202300000';
                 lastName(contractor) <- 'Тестов';
@@ -190,6 +195,9 @@ payrollFormulaTest() {
                                                                                 bankRegisterExternalId(bankRegister) <- 'BANK-EXT-1';
                                                                                 sendBankRegister(bankRegister);
                                                                                 acceptBankRegister(bankRegister);
+                                                                                paymentAccountIban(paymentAccount) <-
+                                                                                    'KZ000000000000000009';
+                                                                                APPLY;
 
                                                                                 NEW liabilities = PayrollLiabilityDocument {
                                                                                     liabilityPayrollRun(liabilities) <- run;
@@ -395,8 +403,6 @@ payrollFormulaTest() {
                                 bankRegisterAmount2026 = totalBankRegisterAmount(bankRegister),
                                 bankRegisterAccepted2026 =
                                     bankRegisterStatus(bankRegister) == BankRegisterStatus.accepted,
-                                bankRegisterEmployeeIin2026 = bankRegisterLineIin(
-                                    bankRegisterLineByRegister(bankRegister)),
                                 opvLiability2026 = liabilityLineAmount(
                                     liabilityLineByKind(liabilities, PayrollLiabilityKind.opv)),
                                 totalPayrollLiability2026 = totalPayrollLiability(liabilities),
@@ -636,4 +642,60 @@ payrollFormulaTest() {
     }
     }
     }
+}
+
+formulaBankRegister() = GROUP LAST SalaryBankRegister r IF
+    bankRegisterNumber(r) == 'BANK-2026-01' ORDER r;
+formulaBankRegisterLine() = GROUP LAST SalaryBankRegisterLine l IF
+    bankRegisterLineRegister(l) == formulaBankRegister() ORDER l;
+formulaBankRegisterLineCount() = GROUP SUM 1 IF
+    bankRegisterLineRegister(SalaryBankRegisterLine l) == formulaBankRegister();
+formulaPaymentAccount() = GROUP LAST EmployeePaymentAccount a IF
+    iin(paymentAccountEmployee(a)) == '900101300000' AND
+    paymentAccountOrganization(a) == bankRegisterOrganization(formulaBankRegister())
+    ORDER a;
+
+bankRegisterLineSnapshotTamperTest() {
+    bankRegisterLineAmount(formulaBankRegisterLine()) <- 1.00;
+    APPLY;
+    EXPORT JSON FROM lineSnapshotTamperRejected = canceled();
+}
+
+bankRegisterHeaderSnapshotTamperTest() {
+    bankRegisterNumber(formulaBankRegister()) <- 'BANK-ATTACK';
+    APPLY;
+    EXPORT JSON FROM headerSnapshotTamperRejected = canceled();
+}
+
+bankRegisterLineSnapshotDeleteTest() {
+    DELETE SalaryBankRegisterLine l WHERE l == formulaBankRegisterLine();
+    APPLY;
+    EXPORT JSON FROM lineSnapshotDeleteRejected = canceled();
+}
+
+bankRegisterLineSnapshotInsertTest() {
+    NEW injected = SalaryBankRegisterLine {
+        bankRegisterLineRegister(injected) <- formulaBankRegister();
+        bankRegisterLineIin(injected) <- '000000000000';
+        bankRegisterLineIban(injected) <- 'KZ000000000000000099';
+        bankRegisterLineAmount(injected) <- 999999.00;
+    }
+    APPLY;
+    EXPORT JSON FROM lineSnapshotInsertRejected = canceled();
+}
+
+bankRegisterSnapshotVerificationTest() {
+    EXPORT JSON FROM
+        bankRegisterHeaderPreserved = bankRegisterNumber(formulaBankRegister()) ==
+            'BANK-2026-01',
+        bankRegisterLineAmountPreserved = bankRegisterLineAmount(
+            formulaBankRegisterLine()) == 67274.64,
+        bankRegisterLineIbanPreserved = bankRegisterLineIban(
+            formulaBankRegisterLine()) == 'KZ000000000000000002',
+        bankRegisterLineIinPreserved = bankRegisterLineIin(
+            formulaBankRegisterLine()) == '900101300000',
+        currentPaymentAccountChanged = paymentAccountIban(
+            formulaPaymentAccount()) == 'KZ000000000000000009',
+        bankRegisterLineCountPreserved = formulaBankRegisterLineCount() == 1,
+        bankRegisterTotalPreserved = totalBankRegisterAmount(formulaBankRegister()) == 67274.64;
 }

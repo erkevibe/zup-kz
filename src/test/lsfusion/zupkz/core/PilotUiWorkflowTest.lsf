@@ -718,9 +718,14 @@ pilotUiDataSetupTest() {
                         citizenshipCode(worker) <- 'KAZ';
                         personalDataConsentDate(worker) <- 2026_07_20;
                         personalDataPurpose(worker) <- 'Кадровый учёт и расчёт заработной платы';
-                        salaryBankName(worker) <- 'Тестовый банк';
-                        salaryBankBic(worker) <- 'TESTKZKX';
-                        salaryIban(worker) <- 'KZ000000000000000001';
+                        NEW paymentAccount = EmployeePaymentAccount {
+                            paymentAccountOrganization(paymentAccount) <- pilotUiOrganization();
+                            paymentAccountEmployee(paymentAccount) <- worker;
+                            paymentAccountBankName(paymentAccount) <- 'Тестовый банк';
+                            paymentAccountBic(paymentAccount) <- 'TESTKZKX';
+                            paymentAccountIban(paymentAccount) <- 'KZ000000000000000001';
+                            paymentAccountValidFrom(paymentAccount) <- 2026_01_01;
+                        }
                         NEW card = EmployeeCard {
                             cardEmployee(card) <- worker;
                             cardOrganization(card) <- pilotUiOrganization();
@@ -861,9 +866,14 @@ pilotUiRoleJourneySetupTest() {
         citizenshipCode(worker) <- 'KAZ';
         personalDataConsentDate(worker) <- 2026_05_25;
         personalDataPurpose(worker) <- 'Синтетический сквозной ролевой UI-тест';
-        salaryBankName(worker) <- 'Тестовый банк';
-        salaryBankBic(worker) <- 'TESTKZKX';
-        salaryIban(worker) <- 'KZ000000000000000004';
+        NEW paymentAccount = EmployeePaymentAccount {
+            paymentAccountOrganization(paymentAccount) <- pilotUiOrganization();
+            paymentAccountEmployee(paymentAccount) <- worker;
+            paymentAccountBankName(paymentAccount) <- 'Тестовый банк';
+            paymentAccountBic(paymentAccount) <- 'TESTKZKX';
+            paymentAccountIban(paymentAccount) <- 'KZ000000000000000004';
+            paymentAccountValidFrom(paymentAccount) <- 2026_01_01;
+        }
         NEW contract = Employment {
             employee(contract) <- worker;
             organization(contract) <- pilotUiOrganization();
