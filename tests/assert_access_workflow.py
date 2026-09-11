@@ -40,6 +40,16 @@ assert actual["hiddenNoticeDeletePreserved"] is True
 assert actual["hiddenEnforcementPreserved"] is True
 assert actual["hiddenPaymentPreserved"] is True
 assert actual["hiddenReportPreserved"] is True
+assert actual["created"] is True
+assert actual["organizationAOldSelected"] is True
+assert actual["organizationANewSelected"] is True
+assert actual["organizationBSelected"] is True
+assert actual["noAccountBeforeValidity"] is True
+assert actual["paymentAccountOverlapRejected"] is True
+assert actual["timekeeperEmployeeWritePreserved"] is True
+assert actual["timekeeperOrganizationWritePreserved"] is True
+assert actual["payrollAccountWritePreserved"] is True
+assert actual["payrollDepartmentWritePreserved"] is True
 assert actual["employeeIinFormatRejected"] is True
 assert actual["organizationBinFormatRejected"] is True
 assert actual["bankDetailsFormatRejected"] is True

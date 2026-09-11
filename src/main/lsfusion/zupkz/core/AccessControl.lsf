@@ -14,6 +14,21 @@ NAMESPACE ZUPKZ;
 employeeAllowed(Employee worker) = GROUP MAX organizationAllowed(organization(Employment contract))
     IF employee(contract) == worker;
 
+masterDataChangeRoleAllowed(CustomUser user) =
+    has(user, userRoleSID('admin')) OR has(user, userRoleSID('zup_hr')) OR
+    has(user, userRoleSID('zup_chief_accountant'));
+masterDataChangeRoleAllowed() = masterDataChangeRoleAllowed(currentUser() AS CustomUser);
+
+employeeDeniedOrganizationCount(CustomUser user, Employee worker) = GROUP SUM 1 IF
+    employee(Employment contract) == worker AND
+    NOT userOrganizationAllowed(user, organization(contract));
+employeeMasterDataChangeAllowed(CustomUser user, Employee worker) =
+    has(user, userRoleSID('admin')) OR
+    ((has(user, userRoleSID('zup_hr')) OR has(user, userRoleSID('zup_chief_accountant'))) AND
+     NOT employeeDeniedOrganizationCount(user, worker));
+employeeMasterDataChangeAllowed(Employee worker) =
+    employeeMasterDataChangeAllowed(currentUser() AS CustomUser, worker);
+
 // Единый серверный предикат для изменений организационных данных. Проверяем
 // и новое, и предыдущее владение: это не позволяет "перетащить" чужой объект
 // в доступную организацию, изменить его реквизиты или удалить его через API.
@@ -24,30 +39,34 @@ organizationContentChanged(Organization org) =
     CHANGED(payrollBankName(org)) OR CHANGED(payrollBankBic(org)) OR
     CHANGED(payrollIban(org));
 CONSTRAINT organizationContentChanged(Organization org) AND
-           NOT organizationChangeAllowed(org)
+           (NOT organizationChangeAllowed(org) OR NOT masterDataChangeRoleAllowed())
     MESSAGE 'Нет доступа к изменению этой организации';
 CONSTRAINT DROPPED(Organization org IS Organization) AND
-           NOT PREV(organizationChangeAllowed(org))
+           (NOT masterDataChangeRoleAllowed() OR NOT PREV(organizationChangeAllowed(org)))
     MESSAGE 'Нет доступа к удалению этой организации';
 
 departmentContentChanged(Department d) =
     CHANGED(organization(d)) OR CHANGED(code(d)) OR CHANGED(name(d));
 CONSTRAINT departmentContentChanged(Department d) AND
-           (organizationChangeDenied(organization(d)) OR
+           (NOT masterDataChangeRoleAllowed() OR
+            organizationChangeDenied(organization(d)) OR
             organizationChangeDenied(PREV(organization(d))))
     MESSAGE 'Нет доступа к изменению подразделения этой организации';
 CONSTRAINT DROPPED(Department d IS Department) AND
-           organizationChangeDenied(PREV(organization(d)))
+           (NOT masterDataChangeRoleAllowed() OR
+            organizationChangeDenied(PREV(organization(d))))
     MESSAGE 'Нет доступа к удалению подразделения этой организации';
 
 positionContentChanged(Position p) =
     CHANGED(organization(p)) OR CHANGED(code(p)) OR CHANGED(name(p));
 CONSTRAINT positionContentChanged(Position p) AND
-           (organizationChangeDenied(organization(p)) OR
+           (NOT masterDataChangeRoleAllowed() OR
+            organizationChangeDenied(organization(p)) OR
             organizationChangeDenied(PREV(organization(p))))
     MESSAGE 'Нет доступа к изменению должности этой организации';
 CONSTRAINT DROPPED(Position p IS Position) AND
-           organizationChangeDenied(PREV(organization(p)))
+           (NOT masterDataChangeRoleAllowed() OR
+            organizationChangeDenied(PREV(organization(p))))
     MESSAGE 'Нет доступа к удалению должности этой организации';
 
 staffPositionContentChanged(StaffPosition s) =
@@ -55,12 +74,26 @@ staffPositionContentChanged(StaffPosition s) =
     CHANGED(staffCode(s)) OR CHANGED(validFrom(s)) OR CHANGED(validTo(s)) OR
     CHANGED(plannedFTE(s)) OR CHANGED(salaryMin(s)) OR CHANGED(salaryMax(s));
 CONSTRAINT staffPositionContentChanged(StaffPosition s) AND
-           (organizationChangeDenied(organization(s)) OR
+           (NOT masterDataChangeRoleAllowed() OR
+            organizationChangeDenied(organization(s)) OR
             organizationChangeDenied(PREV(organization(s))))
     MESSAGE 'Нет доступа к изменению штатной единицы этой организации';
 CONSTRAINT DROPPED(StaffPosition s IS StaffPosition) AND
-           organizationChangeDenied(PREV(organization(s)))
+           (NOT masterDataChangeRoleAllowed() OR
+            organizationChangeDenied(PREV(organization(s))))
     MESSAGE 'Нет доступа к удалению штатной единицы этой организации';
+
+employeeContentChanged(Employee e) =
+    CHANGED(iin(e)) OR CHANGED(lastName(e)) OR CHANGED(firstName(e)) OR
+    CHANGED(middleName(e)) OR CHANGED(birthDate(e)) OR CHANGED(gender(e)) OR
+    CHANGED(citizenshipCode(e)) OR CHANGED(personalDataConsentDate(e)) OR
+    CHANGED(personalDataPurpose(e)) OR CHANGED(employeeUser(e)) OR
+    CHANGED(salaryBankName(e)) OR CHANGED(salaryBankBic(e)) OR CHANGED(salaryIban(e));
+CONSTRAINT employeeContentChanged(Employee e) AND NOT employeeMasterDataChangeAllowed(e)
+    MESSAGE 'Нет доступа к изменению общих данных сотрудника';
+CONSTRAINT DROPPED(Employee e IS Employee) AND
+           NOT PREV(employeeMasterDataChangeAllowed(e))
+    MESSAGE 'Нет доступа к удалению общих данных сотрудника';
 
 employmentContentChanged(Employment e) =
     CHANGED(employee(e)) OR CHANGED(organization(e)) OR CHANGED(department(e)) OR
@@ -524,6 +557,8 @@ EXTEND FORM departments FILTERS organizationAllowed(organization(d));
 EXTEND FORM positions FILTERS organizationAllowed(organization(p));
 EXTEND FORM staffPositions FILTERS organizationAllowed(organization(s));
 EXTEND FORM employees FILTERS employeeAllowed(e);
+EXTEND FORM employeePaymentAccounts
+    FILTERS organizationAllowed(paymentAccountOrganization(a));
 EXTEND FORM employeeCards FILTERS organizationAllowed(cardOrganization(c));
 EXTEND FORM employeePersonalCard FILTERS organizationAllowed(cardOrganization(c));
 EXTEND FORM employments FILTERS organizationAllowed(organization(e));

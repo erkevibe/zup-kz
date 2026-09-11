@@ -3,9 +3,9 @@ MODULE PayrollPayments;
 REQUIRE PayrollSettlement, Utils;
 NAMESPACE ZUPKZ;
 
-// Первый банковский контур хранит один действующий зарплатный счёт сотрудника
-// и один счёт работодателя. Историю счетов добавим, когда появится реальный
-// сценарий смены зарплатного проекта.
+// Legacy-реквизиты сохраняются только для контролируемой миграции наполненных баз.
+// Банковский реестр их не использует: у совместителя могут быть разные счета у
+// разных работодателей.
 salaryBankName 'Банк зарплатного проекта' = DATA STRING[150] (Employee);
 salaryBankBic 'БИК банка' = DATA STRING[20] (Employee);
 salaryIban 'Зарплатный IBAN' = DATA STRING[34] (Employee);
@@ -24,6 +24,62 @@ CONSTRAINT salaryBankBic(Employee e) AND NOT validBic(salaryBankBic(e))
     MESSAGE 'БИК банка сотрудника должен содержать 8 или 11 латинских букв и цифр';
 CONSTRAINT payrollBankBic(Organization o) AND NOT validBic(payrollBankBic(o))
     MESSAGE 'БИК банка организации должен содержать 8 или 11 латинских букв и цифр';
+
+CLASS EmployeePaymentAccount 'Зарплатный счёт сотрудника';
+
+paymentAccountOrganization 'Организация' = DATA Organization (EmployeePaymentAccount);
+paymentAccountEmployee 'Сотрудник' = DATA Employee (EmployeePaymentAccount);
+paymentAccountBankName 'Банк' = DATA STRING[150] (EmployeePaymentAccount);
+paymentAccountBic 'БИК' = DATA STRING[20] (EmployeePaymentAccount);
+paymentAccountIban 'IBAN' = DATA STRING[34] (EmployeePaymentAccount);
+paymentAccountValidFrom 'Действует с' = DATA DATE (EmployeePaymentAccount);
+paymentAccountValidTo 'Действует по' = DATA DATE (EmployeePaymentAccount);
+
+CONSTRAINT paymentAccountValidTo(EmployeePaymentAccount a) < paymentAccountValidFrom(a)
+    MESSAGE 'Дата окончания зарплатного счёта не может быть раньше даты начала';
+CONSTRAINT paymentAccountIban(EmployeePaymentAccount a) AND
+           NOT validKzIban(paymentAccountIban(a))
+    MESSAGE 'IBAN зарплатного счёта должен содержать 20 символов и иметь формат KZ00XXXXXXXXXXXXXXXX';
+CONSTRAINT paymentAccountBic(EmployeePaymentAccount a) AND
+           NOT validBic(paymentAccountBic(a))
+    MESSAGE 'БИК зарплатного счёта должен содержать 8 или 11 латинских букв и цифр';
+CONSTRAINT (paymentAccountOrganization(EmployeePaymentAccount a) OR
+            paymentAccountEmployee(a) OR paymentAccountBankName(a) OR
+            paymentAccountBic(a) OR paymentAccountIban(a) OR
+            paymentAccountValidFrom(a) OR paymentAccountValidTo(a)) AND
+           (NOT paymentAccountOrganization(a) OR NOT paymentAccountEmployee(a) OR
+            NOT paymentAccountBankName(a) OR NOT paymentAccountBic(a) OR
+            NOT paymentAccountIban(a) OR NOT paymentAccountValidFrom(a))
+    MESSAGE 'Заполните организацию, сотрудника, банк, БИК, IBAN и дату начала зарплатного счёта';
+
+overlappingPaymentAccountCount(EmployeePaymentAccount account) = GROUP SUM 1 IF
+    paymentAccountOrganization(EmployeePaymentAccount other) ==
+        paymentAccountOrganization(account) AND
+    paymentAccountEmployee(other) == paymentAccountEmployee(account) AND
+    paymentAccountValidFrom(other) <=
+        (IF paymentAccountValidTo(account) THEN paymentAccountValidTo(account) ELSE 9999_12_31) AND
+    (IF paymentAccountValidTo(other) THEN paymentAccountValidTo(other) ELSE 9999_12_31) >=
+        paymentAccountValidFrom(account);
+CONSTRAINT paymentAccountOrganization(EmployeePaymentAccount a) AND
+           paymentAccountEmployee(a) AND paymentAccountValidFrom(a) AND
+           overlappingPaymentAccountCount(a) > 1
+    MESSAGE 'Периоды зарплатных счетов сотрудника в одной организации не должны пересекаться';
+
+employeePaymentAccountOn(Organization org, Employee worker, DATE date) =
+    GROUP LAST EmployeePaymentAccount a
+    IF paymentAccountOrganization(a) == org AND paymentAccountEmployee(a) == worker AND
+       paymentAccountValidFrom(a) <= date AND
+       (NOT paymentAccountValidTo(a) OR paymentAccountValidTo(a) >= date)
+    ORDER paymentAccountValidFrom(a), a;
+employeePaymentAccountCountOn(Organization org, Employee worker, DATE date) = GROUP SUM 1 IF
+    paymentAccountOrganization(EmployeePaymentAccount a) == org AND
+    paymentAccountEmployee(a) == worker AND paymentAccountValidFrom(a) <= date AND
+    (NOT paymentAccountValidTo(a) OR paymentAccountValidTo(a) >= date);
+
+paymentAccountOrganizationName 'Организация' (EmployeePaymentAccount a) =
+    name(paymentAccountOrganization(a));
+paymentAccountEmployeeName 'Сотрудник' (EmployeePaymentAccount a) =
+    employeeFullName(paymentAccountEmployee(a));
 
 CLASS BankRegisterStatus 'Статус банковского реестра' {
     draft 'Черновик',
@@ -75,8 +131,16 @@ bankRegisterLinePurpose 'Назначение платежа' = DATA STRING[250]
 
 missingBankEmployeeDataCount(PaymentStatement statement) = GROUP SUM 1
     IF paymentLineStatement(PaymentStatementLine l) == statement AND
-       (NOT iin(paymentLineEmployee(l)) OR NOT salaryBankBic(paymentLineEmployee(l)) OR
-        NOT salaryIban(paymentLineEmployee(l)));
+       (employeePaymentAccountCountOn(
+            payrollOrganization(paymentStatementPayrollRun(statement)), paymentLineEmployee(l),
+            paymentStatementDate(statement)) != 1 OR
+        NOT iin(paymentLineEmployee(l)) OR
+        NOT paymentAccountBic(employeePaymentAccountOn(
+            payrollOrganization(paymentStatementPayrollRun(statement)), paymentLineEmployee(l),
+            paymentStatementDate(statement))) OR
+        NOT paymentAccountIban(employeePaymentAccountOn(
+            payrollOrganization(paymentStatementPayrollRun(statement)), paymentLineEmployee(l),
+            paymentStatementDate(statement))));
 
 generateBankRegister 'Сформировать реестр' (SalaryBankRegister r) {
     IF bankRegisterStatus(r) AND bankRegisterStatus(r) != BankRegisterStatus.draft THEN
@@ -89,7 +153,7 @@ generateBankRegister 'Сформировать реестр' (SalaryBankRegister
             NOT payrollIban(bankRegisterOrganization(r)) THEN
         MESSAGE 'Заполните банковские реквизиты организации';
     ELSE IF missingBankEmployeeDataCount(bankRegisterStatement(r)) THEN
-        MESSAGE 'Заполните ИИН, БИК и зарплатный IBAN сотрудников';
+        MESSAGE 'Для даты выплаты задайте один действующий зарплатный счёт этой организации и заполните ИИН, БИК и IBAN сотрудника';
     ELSE {
         FOR paymentLineStatement(PaymentStatementLine p) == bankRegisterStatement(r) DO {
             NEW l = SalaryBankRegisterLine {
@@ -97,9 +161,15 @@ generateBankRegister 'Сформировать реестр' (SalaryBankRegister
                 bankRegisterLinePayment(l) <- p;
                 bankRegisterLineEmployee(l) <- paymentLineEmployee(p);
                 bankRegisterLineIin(l) <- iin(paymentLineEmployee(p));
-                bankRegisterLineBankName(l) <- salaryBankName(paymentLineEmployee(p));
-                bankRegisterLineBic(l) <- salaryBankBic(paymentLineEmployee(p));
-                bankRegisterLineIban(l) <- salaryIban(paymentLineEmployee(p));
+                bankRegisterLineBankName(l) <- paymentAccountBankName(employeePaymentAccountOn(
+                    bankRegisterOrganization(r), paymentLineEmployee(p),
+                    paymentStatementDate(bankRegisterStatement(r))));
+                bankRegisterLineBic(l) <- paymentAccountBic(employeePaymentAccountOn(
+                    bankRegisterOrganization(r), paymentLineEmployee(p),
+                    paymentStatementDate(bankRegisterStatement(r))));
+                bankRegisterLineIban(l) <- paymentAccountIban(employeePaymentAccountOn(
+                    bankRegisterOrganization(r), paymentLineEmployee(p),
+                    paymentStatementDate(bankRegisterStatement(r))));
                 bankRegisterLineAmount(l) <- paymentLineAmount(p);
                 bankRegisterLinePurpose(l) <- 'Заработная плата за расчётный период';
             }
@@ -310,6 +380,14 @@ FORM salaryBankRegisterLines 'Строки банковских реестров
                   bankRegisterLinePurpose
 ;
 
+FORM employeePaymentAccounts 'Зарплатные счета сотрудников'
+    OBJECTS a = EmployeePaymentAccount
+    PROPERTIES(a) READONLY paymentAccountOrganizationName, paymentAccountEmployeeName
+    PROPERTIES(a) paymentAccountOrganization, paymentAccountEmployee,
+                  paymentAccountBankName, paymentAccountBic, paymentAccountIban,
+                  paymentAccountValidFrom, paymentAccountValidTo
+;
+
 FORM payrollLiabilityDocuments 'Перечисление налогов и социальных платежей'
     OBJECTS d = PayrollLiabilityDocument
     PROPERTIES(d) liabilityPayrollRun, liabilityNumber, liabilityPaymentDate,
@@ -324,10 +402,6 @@ FORM payrollLiabilityLines 'Строки обязательных платеже
     OBJECTS l = PayrollLiabilityLine
     PROPERTIES(l) liabilityLineDocument, liabilityLineKind, liabilityLineAmount,
                   liabilityLineDueDate, liabilityLineLegalSource
-;
-
-EXTEND FORM employees
-    PROPERTIES(e) salaryBankName, salaryBankBic, salaryIban
 ;
 
 EXTEND FORM organizations

@@ -16,9 +16,14 @@ payrollFormulaTest() {
             firstName(worker) <- 'Работник';
             middleName(worker) <- 'Первый';
             birthDate(worker) <- 1990_01_01;
-            salaryBankName(worker) <- 'Тестовый банк';
-            salaryBankBic(worker) <- 'TESTKZKA';
-            salaryIban(worker) <- 'KZ000000000000000002';
+            NEW paymentAccount = EmployeePaymentAccount {
+                paymentAccountOrganization(paymentAccount) <- org;
+                paymentAccountEmployee(paymentAccount) <- worker;
+                paymentAccountBankName(paymentAccount) <- 'Тестовый банк';
+                paymentAccountBic(paymentAccount) <- 'TESTKZKA';
+                paymentAccountIban(paymentAccount) <- 'KZ000000000000000002';
+                paymentAccountValidFrom(paymentAccount) <- 2026_01_01;
+            }
             NEW contractor = Employee {
                 iin(contractor) <- '920202300000';
                 lastName(contractor) <- 'Тестов';
@@ -190,6 +195,9 @@ payrollFormulaTest() {
                                                                                 bankRegisterExternalId(bankRegister) <- 'BANK-EXT-1';
                                                                                 sendBankRegister(bankRegister);
                                                                                 acceptBankRegister(bankRegister);
+                                                                                paymentAccountIban(paymentAccount) <-
+                                                                                    'KZ000000000000000009';
+                                                                                APPLY;
 
                                                                                 NEW liabilities = PayrollLiabilityDocument {
                                                                                     liabilityPayrollRun(liabilities) <- run;
@@ -397,6 +405,9 @@ payrollFormulaTest() {
                                     bankRegisterStatus(bankRegister) == BankRegisterStatus.accepted,
                                 bankRegisterEmployeeIin2026 = bankRegisterLineIin(
                                     bankRegisterLineByRegister(bankRegister)),
+                                bankRegisterEmployeeIban2026 = bankRegisterLineIban(
+                                    bankRegisterLineByRegister(bankRegister)),
+                                currentEmployeeIban2026 = paymentAccountIban(paymentAccount),
                                 opvLiability2026 = liabilityLineAmount(
                                     liabilityLineByKind(liabilities, PayrollLiabilityKind.opv)),
                                 totalPayrollLiability2026 = totalPayrollLiability(liabilities),

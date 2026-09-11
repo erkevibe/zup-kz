@@ -137,12 +137,21 @@ request_as zup-access-chief:zup-ui-test-only crossOrganizationSecondaryReportAtt
 request_as zup-access-chief:zup-ui-test-only crossOrganizationSecondaryOwnershipAttackTest cross-organization-secondary-ownership-attack-result.json
 request_as zup-access-hr:zup-ui-test-only crossOrganizationSecondaryDeleteAttackTest cross-organization-secondary-delete-attack-result.json
 request crossOrganizationVerificationTest cross-organization-verification-result.json
+request paymentAccountSecuritySetupTest payment-account-security-setup-result.json
+request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperMasterDataAttackTest \
+    same-organization-timekeeper-master-data-attack-result.json
+request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollMasterDataAttackTest \
+    same-organization-payroll-master-data-attack-result.json
+request paymentAccountOverlapGuardTest payment-account-overlap-guard-result.json
+request paymentAccountSecurityVerificationTest payment-account-security-verification-result.json
 for action in employeeIinFormatGuardTest organizationBinFormatGuardTest bankDetailsFormatGuardTest; do
     request "$action" "$action-result.json"
 done
 python3 tests/assert_access_workflow.py \
     access-workflow-result.json cross-organization-policy-result.json \
     cross-organization-verification-result.json \
+    payment-account-security-setup-result.json payment-account-overlap-guard-result.json \
+    payment-account-security-verification-result.json \
     employeeIinFormatGuardTest-result.json organizationBinFormatGuardTest-result.json \
     bankDetailsFormatGuardTest-result.json
 

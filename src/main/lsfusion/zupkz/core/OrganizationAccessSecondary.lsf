@@ -597,6 +597,23 @@ salaryBankRegisterLineSecondaryContentChanged(SalaryBankRegisterLine o) =
     CHANGED(bankRegisterLinePurpose(o));
 @protectSecondaryOrganizationObject(salaryBankRegisterLine, SalaryBankRegisterLine, salaryBankRegisterLineAccessOrganization);
 
+employeePaymentAccountAccessOrganization(EmployeePaymentAccount o) = paymentAccountOrganization(o);
+employeePaymentAccountSecondaryContentChanged(EmployeePaymentAccount o) =
+    CHANGED(paymentAccountOrganization(o)) OR
+    CHANGED(paymentAccountEmployee(o)) OR
+    CHANGED(paymentAccountBankName(o)) OR
+    CHANGED(paymentAccountBic(o)) OR
+    CHANGED(paymentAccountIban(o)) OR
+    CHANGED(paymentAccountValidFrom(o)) OR
+    CHANGED(paymentAccountValidTo(o));
+@protectSecondaryOrganizationObject(employeePaymentAccount, EmployeePaymentAccount, employeePaymentAccountAccessOrganization);
+CONSTRAINT employeePaymentAccountSecondaryContentChanged(EmployeePaymentAccount o) AND
+           NOT masterDataChangeRoleAllowed()
+    MESSAGE 'Нет доступа к изменению зарплатного счёта сотрудника этой организации';
+CONSTRAINT DROPPED(EmployeePaymentAccount o IS EmployeePaymentAccount) AND
+           NOT masterDataChangeRoleAllowed()
+    MESSAGE 'Нет доступа к удалению зарплатного счёта сотрудника этой организации';
+
 payrollLiabilityDocumentAccessOrganization(PayrollLiabilityDocument o) = payrollOrganization(liabilityPayrollRun(o));
 payrollLiabilityDocumentSecondaryContentChanged(PayrollLiabilityDocument o) =
     CHANGED(liabilityPayrollRun(o)) OR
