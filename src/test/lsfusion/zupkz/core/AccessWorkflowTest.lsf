@@ -38,6 +38,15 @@ accessHiddenForm200() = GROUP LAST Form200Declaration d IF
     form200Version(d) == 'ACCESS-HIDDEN-FORM-200' ORDER d;
 paymentSecurityEmployee() = GROUP LAST Employee e IF iin(e) == '950505300005' ORDER e;
 roleSecurityEmployee() = GROUP LAST Employee e IF iin(e) == '960606300006' ORDER e;
+hiddenOnlySecurityEmployee() = GROUP LAST Employee e IF iin(e) == '970707300007' ORDER e;
+legacyMigrationEmployee() = GROUP LAST Employee e IF iin(e) == '980808300008' ORDER e;
+legacyMigrationAmbiguousEmployee() = GROUP LAST Employee e IF iin(e) == '990909300009' ORDER e;
+hiddenEmployeeAssignedPaymentAccountCount() = GROUP SUM 1 IF
+    paymentAccountOrganization(EmployeePaymentAccount account) == accessAssignedOrganization() AND
+    paymentAccountEmployee(account) == hiddenOnlySecurityEmployee();
+hiddenEmployeeInjectedEmploymentCount() = GROUP SUM 1 IF
+    employee(Employment contract) == hiddenOnlySecurityEmployee() AND
+    contractNumber(contract) == 'SECURITY-HIDDEN-INJECT';
 paymentSecurityAccountAFirst() = GROUP LAST EmployeePaymentAccount a IF
     paymentAccountEmployee(a) == paymentSecurityEmployee() AND
     paymentAccountOrganization(a) == accessAssignedOrganization() AND
@@ -126,8 +135,8 @@ initialRolePermissionsTest() {
             uiRoleTestUser('ui-time')),
         payrollMasterDataWriteDenied = NOT masterDataChangeRoleAllowed(
             uiRoleTestUser('ui-payroll')),
-        hrMasterDataWriteAllowed = masterDataChangeRoleAllowed(uiRoleTestUser('ui-hr')),
-        chiefMasterDataWriteAllowed = masterDataChangeRoleAllowed(uiRoleTestUser('ui-chief')),
+        hrMasterDataWriteDenied = NOT masterDataChangeRoleAllowed(uiRoleTestUser('ui-hr')),
+        chiefMasterDataWriteDenied = NOT masterDataChangeRoleAllowed(uiRoleTestUser('ui-chief')),
         employeeCabinetPermitted = dataPermission(userRoleSID('zup_employee'),
             navigatorElementCanonicalName('ZUPKZ.employeeSelfService')) == Permission.permit,
         employeePayrollForbidden = dataPermission(userRoleSID('zup_employee'),
@@ -716,6 +725,18 @@ paymentAccountSecuritySetupTest() {
         }
     }
     APPLY;
+    IF NOT hiddenOnlySecurityEmployee() THEN NEW hiddenWorker = Employee {
+        iin(hiddenWorker) <- '970707300007';
+        lastName(hiddenWorker) <- 'Скрытый';
+        firstName(hiddenWorker) <- 'Сотрудник';
+        NEW hiddenContract = Employment {
+            employee(hiddenContract) <- hiddenWorker;
+            organization(hiddenContract) <- accessHiddenOrganization();
+            contractNumber(hiddenContract) <- 'SECURITY-HIDDEN-ONLY';
+            hireDate(hiddenContract) <- 2026_01_01;
+        }
+    }
+    APPLY;
     EXPORT JSON FROM
         created = paymentSecurityEmployee() IS Employee,
         organizationAOldSelected = paymentAccountIban(employeePaymentAccountOn(
@@ -731,14 +752,22 @@ paymentAccountSecuritySetupTest() {
             accessAssignedOrganization(), paymentSecurityEmployee(), 2025_12_31) == 0;
 }
 
-sameOrganizationTimekeeperMasterDataAttackTest() {
+sameOrganizationTimekeeperEmployeeAttackTest() {
     lastName(roleSecurityEmployee()) <- 'АТАКА ТАБЕЛЬЩИКА';
+    APPLY;
+}
+
+sameOrganizationTimekeeperOrganizationAttackTest() {
     name(accessAssignedOrganization()) <- 'АТАКА ТАБЕЛЬЩИКА';
     APPLY;
 }
 
-sameOrganizationPayrollMasterDataAttackTest() {
+sameOrganizationPayrollPaymentAccountAttackTest() {
     paymentAccountIban(paymentSecurityAccountASecond()) <- 'KZ000000000000000099';
+    APPLY;
+}
+
+sameOrganizationPayrollDepartmentAttackTest() {
     name(accessAssignedDepartment()) <- 'АТАКА РАСЧЁТЧИКА';
     APPLY;
 }
@@ -760,6 +789,51 @@ sameOrganizationPayrollPersonnelAttackTest() {
 
 sameOrganizationPayrollTaxesAttackTest() {
     form200CorrectionNumber(accessAssignedForm200()) <- 77;
+    APPLY;
+}
+
+crossOrganizationPaymentAccountReadTest() {
+    EXPORT JSON FROM
+        assignedPaymentAccountReadAllowed = allowedPaymentAccountIban(
+            paymentSecurityAccountASecond()) == 'KZ000000000000000012',
+        hiddenPaymentAccountReadBlocked = NOT allowedPaymentAccountIban(
+            paymentSecurityAccountB());
+}
+
+crossOrganizationPaymentAccountMutationAttackTest() {
+    paymentAccountIban(paymentSecurityAccountB()) <- 'KZ000000000000000098';
+    APPLY;
+}
+
+crossOrganizationPaymentAccountReparentAttackTest() {
+    paymentAccountOrganization(paymentSecurityAccountB()) <- accessAssignedOrganization();
+    APPLY;
+}
+
+crossOrganizationPaymentAccountDeleteAttackTest() {
+    DELETE EmployeePaymentAccount account WHERE account == paymentSecurityAccountB();
+    APPLY;
+}
+
+crossOrganizationHiddenEmployeePaymentAccountAttackTest() {
+    NEW account = EmployeePaymentAccount {
+        paymentAccountOrganization(account) <- accessAssignedOrganization();
+        paymentAccountEmployee(account) <- hiddenOnlySecurityEmployee();
+        paymentAccountBankName(account) <- 'Недопустимый банк';
+        paymentAccountBic(account) <- 'BANKKZKA';
+        paymentAccountIban(account) <- 'KZ000000000000000097';
+        paymentAccountValidFrom(account) <- 2026_01_01;
+    }
+    APPLY;
+}
+
+crossOrganizationHiddenEmployeeEmploymentAttackTest() {
+    NEW contract = Employment {
+        employee(contract) <- hiddenOnlySecurityEmployee();
+        organization(contract) <- accessAssignedOrganization();
+        contractNumber(contract) <- 'SECURITY-HIDDEN-INJECT';
+        hireDate(contract) <- 2026_01_01;
+    }
     APPLY;
 }
 
@@ -796,7 +870,13 @@ paymentAccountOverlapGuardTest() {
     EXPORT JSON FROM paymentAccountOverlapRejected = canceled();
 }
 
-paymentAccountSecurityVerificationTest() {
+paymentAccountOverlapEditGuardTest() {
+    paymentAccountValidFrom(paymentSecurityAccountASecond()) <- 2026_06_30;
+    APPLY;
+    EXPORT JSON FROM paymentAccountOverlapEditRejected = canceled();
+}
+
+verticalRoleAttackVerificationTest() {
     EXPORT JSON FROM
         timekeeperEmployeeWritePreserved = lastName(roleSecurityEmployee()) == 'Ролевой',
         timekeeperOrganizationWritePreserved = name(accessAssignedOrganization()) == 'Доступ A изменён',
@@ -804,12 +884,74 @@ paymentAccountSecurityVerificationTest() {
             'KZ000000000000000012',
         payrollDepartmentWritePreserved = name(accessAssignedDepartment()) == 'Доступное подразделение',
         timekeeperPayrollAttackRejected = payrollNumber(accessAssignedPayrollRun()) ==
-            'ACCESS-ASSIGNED-PAYROLL-OK',
+            'ACCESS-ASSIGNED-PAYROLL',
         payrollWorkingTimeAttackRejected = timesheetNumber(accessAssignedTimesheet()) ==
-            'ACCESS-ASSIGNED-TIME-OK',
+            'ACCESS-ASSIGNED-TIME',
         payrollPersonnelAttackRejected = archiveCaseTitle(accessAssignedArchiveCase()) ==
-            'Доступное архивное дело HR',
-        payrollTaxesAttackRejected = form200CorrectionNumber(accessAssignedForm200()) == 1,
+            'Доступное архивное дело',
+        payrollTaxesAttackRejected = NOT form200CorrectionNumber(accessAssignedForm200()),
+        hiddenPaymentAccountMutationRejected = paymentAccountIban(paymentSecurityAccountB()) ==
+            'KZ000000000000000021',
+        hiddenPaymentAccountReparentRejected = paymentAccountOrganization(
+            paymentSecurityAccountB()) == accessHiddenOrganization(),
+        hiddenPaymentAccountDeleteRejected = paymentSecurityAccountB() IS EmployeePaymentAccount,
+        hiddenEmployeePaymentAccountRejected = NOT hiddenEmployeeAssignedPaymentAccountCount(),
+        hiddenEmployeeEmploymentRejected = NOT hiddenEmployeeInjectedEmploymentCount(),
+        overlapEditStatePreserved = paymentAccountValidFrom(
+            paymentSecurityAccountASecond()) == 2026_07_01;
+}
+
+legacyPaymentAccountMigrationTest() {
+    IF NOT legacyMigrationEmployee() THEN NEW worker = Employee {
+        iin(worker) <- '980808300008';
+        lastName(worker) <- 'Миграция';
+        firstName(worker) <- 'ОднаОрганизация';
+        salaryBankName(worker) <- 'Старый банк';
+        salaryBankBic(worker) <- 'BANKKZKA';
+        salaryIban(worker) <- 'KZ000000000000000081';
+        NEW contract = Employment {
+            employee(contract) <- worker;
+            organization(contract) <- accessAssignedOrganization();
+            contractNumber(contract) <- 'LEGACY-MIGRATION-ONE';
+            hireDate(contract) <- 2024_03_15;
+        }
+    }
+    IF NOT legacyMigrationAmbiguousEmployee() THEN NEW ambiguous = Employee {
+        iin(ambiguous) <- '990909300009';
+        lastName(ambiguous) <- 'Миграция';
+        firstName(ambiguous) <- 'ДвеОрганизации';
+        salaryBankName(ambiguous) <- 'Неоднозначный банк';
+        salaryBankBic(ambiguous) <- 'BANKKZKA';
+        salaryIban(ambiguous) <- 'KZ000000000000000091';
+        NEW contractA = Employment {
+            employee(contractA) <- ambiguous;
+            organization(contractA) <- accessAssignedOrganization();
+            contractNumber(contractA) <- 'LEGACY-MIGRATION-A';
+            hireDate(contractA) <- 2024_01_01;
+        }
+        NEW contractB = Employment {
+            employee(contractB) <- ambiguous;
+            organization(contractB) <- accessHiddenOrganization();
+            contractNumber(contractB) <- 'LEGACY-MIGRATION-B';
+            hireDate(contractB) <- 2024_02_01;
+        }
+    }
+    APPLY;
+    migrateLegacyPaymentAccounts();
+    EXPORT JSON FROM
+        singleOrganizationLegacyMigrated = paymentAccountIban(employeePaymentAccountOn(
+            accessAssignedOrganization(), legacyMigrationEmployee(), 2024_03_15)) ==
+            'KZ000000000000000081',
+        migrationPreservedEffectiveDate = paymentAccountValidFrom(employeePaymentAccountOn(
+            accessAssignedOrganization(), legacyMigrationEmployee(), 2024_03_15)) == 2024_03_15,
+        ambiguousLegacyNotMigrated = NOT employeePaymentAccountCount(
+            legacyMigrationAmbiguousEmployee()),
+        ambiguousLegacyReported = legacyPaymentAccountMigrationConflict(
+            legacyMigrationAmbiguousEmployee());
+}
+
+paymentAccountSecurityVerificationTest() {
+    EXPORT JSON FROM
         timekeeperOwnDomainAllowed = timesheetNumber(accessAssignedTimesheet()) ==
             'ACCESS-ASSIGNED-TIME-OK',
         payrollOwnDomainAllowed = payrollNumber(accessAssignedPayrollRun()) ==

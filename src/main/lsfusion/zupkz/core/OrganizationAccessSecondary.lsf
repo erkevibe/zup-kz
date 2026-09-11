@@ -610,6 +610,11 @@ employeePaymentAccountSecondaryContentChanged(EmployeePaymentAccount o) =
     CHANGED(paymentAccountValidTo(o));
 @protectSecondaryOrganizationObject(employeePaymentAccount, EmployeePaymentAccount, employeePaymentAccountAccessOrganization, masterDataChangeRoleAllowed);
 CONSTRAINT employeePaymentAccountSecondaryContentChanged(EmployeePaymentAccount o) AND
+           paymentAccountOrganization(o) AND paymentAccountEmployee(o) AND
+           NOT employeeOrganizationReferenceAllowed(
+               paymentAccountEmployee(o), paymentAccountOrganization(o))
+    MESSAGE 'Сотрудник связан с недоступной организацией и не может быть назначен зарплатному счёту';
+CONSTRAINT employeePaymentAccountSecondaryContentChanged(EmployeePaymentAccount o) AND
            NOT masterDataChangeRoleAllowed()
     MESSAGE 'Нет доступа к изменению зарплатного счёта сотрудника этой организации';
 CONSTRAINT DROPPED(EmployeePaymentAccount o IS EmployeePaymentAccount) AND

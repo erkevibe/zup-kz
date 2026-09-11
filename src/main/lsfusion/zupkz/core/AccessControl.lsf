@@ -13,6 +13,9 @@ NAMESPACE ZUPKZ;
 
 employeeAllowed(Employee worker) = GROUP MAX organizationAllowed(organization(Employment contract))
     IF employee(contract) == worker;
+allowedPaymentAccountIban(EmployeePaymentAccount account) =
+    paymentAccountIban(account)
+    IF organizationAllowed(paymentAccountOrganization(account));
 
 masterDataChangeRoleAllowed(CustomUser user) =
     has(user, userRoleSID('admin')) OR has(user, userRoleSID('zup_hr')) OR
@@ -41,12 +44,28 @@ taxesReportsChangeRoleAllowed() = taxesReportsChangeRoleAllowed(currentUser() AS
 employeeDeniedOrganizationCount(CustomUser user, Employee worker) = GROUP SUM 1 IF
     employee(Employment contract) == worker AND
     NOT userOrganizationAllowed(user, organization(contract));
-employeeMasterDataChangeAllowed(CustomUser user, Employee worker) =
+employeeBelongsToOrganization(Employee worker, Organization org) = GROUP MAX 1 IF
+    employee(Employment contract) == worker AND organization(contract) == org;
+employeeOrganizationReferenceAllowed(CustomUser user, Employee worker, Organization org) =
     has(user, userRoleSID('admin')) OR
-    ((has(user, userRoleSID('zup_hr')) OR has(user, userRoleSID('zup_chief_accountant'))) AND
-     NOT employeeDeniedOrganizationCount(user, worker));
+    (userOrganizationAllowed(user, org) AND
+     (employeeBelongsToOrganization(worker, org) OR
+      NOT employeeDeniedOrganizationCount(user, worker)));
+employeeOrganizationReferenceAllowed(Employee worker, Organization org) =
+    employeeOrganizationReferenceAllowed(currentUser() AS CustomUser, worker, org);
+employeeMasterDataChangeAllowed(CustomUser user, Employee worker) =
+    has(user, userRoleSID('admin'));
 employeeMasterDataChangeAllowed(Employee worker) =
     employeeMasterDataChangeAllowed(currentUser() AS CustomUser, worker);
+// Employee — глобальная идентичность, которая может одновременно участвовать в
+// договорах разных организаций. Пока нет отдельного workflow согласования общей
+// карточки, кадровые роли меняют только организационные документы, а общие поля
+// сотрудника — администратор. Это закрывает межорганизационную запись через API.
+// Общая карточка сотрудника может быть связана сразу с несколькими организациями.
+// Удаление поэтому разрешаем только администратору: кадровик одной организации
+// не должен удалить карточку, используемую другой организацией.
+employeeMasterDataDeleteAllowed() =
+    has(currentUser() AS CustomUser, userRoleSID('admin'));
 
 // Единый серверный предикат для изменений организационных данных. Проверяем
 // и новое, и предыдущее владение: это не позволяет "перетащить" чужой объект
@@ -111,7 +130,7 @@ employeeContentChanged(Employee e) =
 CONSTRAINT employeeContentChanged(Employee e) AND NOT employeeMasterDataChangeAllowed(e)
     MESSAGE 'Нет доступа к изменению общих данных сотрудника';
 CONSTRAINT DROPPED(Employee e IS Employee) AND
-           NOT PREV(employeeMasterDataChangeAllowed(e))
+           NOT employeeMasterDataDeleteAllowed()
     MESSAGE 'Нет доступа к удалению общих данных сотрудника';
 
 employmentContentChanged(Employment e) =
@@ -123,7 +142,9 @@ employmentContentChanged(Employment e) =
 CONSTRAINT employmentContentChanged(Employment e) AND
            (NOT personnelChangeRoleAllowed() OR
             organizationChangeDenied(organization(e)) OR
-            organizationChangeDenied(PREV(organization(e))))
+            organizationChangeDenied(PREV(organization(e))) OR
+            ((CHANGED(employee(e)) OR CHANGED(organization(e))) AND
+             NOT employeeOrganizationReferenceAllowed(employee(e), organization(e))))
     MESSAGE 'Нет доступа к изменению трудового договора этой организации';
 CONSTRAINT DROPPED(Employment e IS Employment) AND
            (NOT personnelChangeRoleAllowed() OR

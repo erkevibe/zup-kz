@@ -648,3 +648,51 @@ payrollFormulaTest() {
     }
     }
 }
+
+formulaBankRegister() = GROUP LAST SalaryBankRegister r IF
+    bankRegisterNumber(r) == 'BANK-2026-01' ORDER r;
+formulaBankRegisterLine() = GROUP LAST SalaryBankRegisterLine l IF
+    bankRegisterLineRegister(l) == formulaBankRegister() ORDER l;
+formulaBankRegisterLineCount() = GROUP SUM 1 IF
+    bankRegisterLineRegister(SalaryBankRegisterLine l) == formulaBankRegister();
+
+bankRegisterLineSnapshotTamperTest() {
+    bankRegisterLineAmount(formulaBankRegisterLine()) <- 1.00;
+    APPLY;
+    EXPORT JSON FROM lineSnapshotTamperRejected = canceled();
+}
+
+bankRegisterHeaderSnapshotTamperTest() {
+    bankRegisterNumber(formulaBankRegister()) <- 'BANK-ATTACK';
+    APPLY;
+    EXPORT JSON FROM headerSnapshotTamperRejected = canceled();
+}
+
+bankRegisterLineSnapshotDeleteTest() {
+    DELETE SalaryBankRegisterLine l WHERE l == formulaBankRegisterLine();
+    APPLY;
+    EXPORT JSON FROM lineSnapshotDeleteRejected = canceled();
+}
+
+bankRegisterLineSnapshotInsertTest() {
+    NEW injected = SalaryBankRegisterLine {
+        bankRegisterLineRegister(injected) <- formulaBankRegister();
+        bankRegisterLineIin(injected) <- '000000000000';
+        bankRegisterLineIban(injected) <- 'KZ000000000000000099';
+        bankRegisterLineAmount(injected) <- 999999.00;
+    }
+    APPLY;
+    EXPORT JSON FROM lineSnapshotInsertRejected = canceled();
+}
+
+bankRegisterSnapshotVerificationTest() {
+    EXPORT JSON FROM
+        bankRegisterHeaderPreserved = bankRegisterNumber(formulaBankRegister()) ==
+            'BANK-2026-01',
+        bankRegisterLineAmountPreserved = bankRegisterLineAmount(
+            formulaBankRegisterLine()) == 67274.64,
+        bankRegisterLineIbanPreserved = bankRegisterLineIban(
+            formulaBankRegisterLine()) == 'KZ000000000000000002',
+        bankRegisterLineCountPreserved = formulaBankRegisterLineCount() == 1,
+        bankRegisterTotalPreserved = totalBankRegisterAmount(formulaBankRegister()) == 67274.64;
+}

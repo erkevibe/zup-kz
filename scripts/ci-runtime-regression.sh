@@ -9,7 +9,21 @@ websocket_port=${ZUP_TEST_WEBSOCKET_PORT:-8887}
 endpoint=${ZUP_TEST_ENDPOINT:-http://localhost:$http_port/exec}
 admin_credentials=${ZUP_TEST_ADMIN_CREDENTIALS:-admin:ci-admin-only}
 request_timeout=${ZUP_TEST_REQUEST_TIMEOUT:-600}
+run_id=${ZUP_TEST_RUN_ID:-${GITHUB_RUN_ID:-local-runtime}}
+action_manifest=${ZUP_ACTION_MANIFEST:-runtime-action-manifest.tsv}
 server_pid=
+
+if [ ! -f "$server_jar" ]; then
+    echo "Runtime JAR not found: $server_jar" >&2
+    exit 1
+fi
+newer_logic=$(find src/main/lsfusion src/test/lsfusion -type f -name '*.lsf' -newer "$server_jar" -print -quit)
+if [ -n "$newer_logic" ]; then
+    echo "Runtime JAR is stale; rebuild after changing: $newer_logic" >&2
+    exit 1
+fi
+
+printf 'run_id\tstarted_at\tfinished_at\tuser\taction\texpectation\tresult\toutput\tsha256\n' > "$action_manifest"
 
 cleanup() {
     if [ -n "$server_pid" ]; then
@@ -23,9 +37,35 @@ request_as() {
     credentials=$1
     action=$2
     output=$3
-    curl --fail --silent --show-error --connect-timeout 10 \
+    request_user=${credentials%%:*}
+    started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    case "$action" in
+        *Attack*|*Guard*|*Tamper*|*SnapshotDelete*|*SnapshotInsert*)
+            expectation=expected-negative
+            ;;
+        *Setup*|*Verification*)
+            expectation=verification
+            ;;
+        *)
+            expectation=positive
+            ;;
+    esac
+    if curl --fail --silent --show-error --connect-timeout 10 \
         --max-time "$request_timeout" --user "$credentials" \
-        "$endpoint?action=ZUPKZ.$action" --output "$output"
+        "$endpoint?action=ZUPKZ.$action" --output "$output"; then
+        finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        output_hash=$(sha256sum "$output" | cut -d' ' -f1)
+        printf '%s\t%s\t%s\t%s\t%s\t%s\tPASS\t%s\t%s\n' \
+            "$run_id" "$started_at" "$finished_at" "$request_user" "$action" \
+            "$expectation" "$output" "$output_hash" >> "$action_manifest"
+    else
+        request_rc=$?
+        finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        printf '%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t%s\t-\n' \
+            "$run_id" "$started_at" "$finished_at" "$request_user" "$action" \
+            "$expectation" "$output" >> "$action_manifest"
+        return "$request_rc"
+    fi
 }
 
 request() {
@@ -61,6 +101,15 @@ done
 
 check initialRolePermissionsTest initial-role-permissions-result.json tests/assert_ui_role_setup.py
 check payrollFormulaTest payroll-result.json tests/assert_payroll.py
+request bankRegisterLineSnapshotTamperTest bank-register-line-tamper-result.json
+request bankRegisterHeaderSnapshotTamperTest bank-register-header-tamper-result.json
+request bankRegisterLineSnapshotDeleteTest bank-register-line-delete-result.json
+request bankRegisterLineSnapshotInsertTest bank-register-line-insert-result.json
+request bankRegisterSnapshotVerificationTest bank-register-snapshot-verification-result.json
+python3 tests/assert_bank_register_snapshot.py \
+    bank-register-line-tamper-result.json bank-register-header-tamper-result.json \
+    bank-register-line-delete-result.json bank-register-line-insert-result.json \
+    bank-register-snapshot-verification-result.json
 check payrollLegalScenarioTest payroll-legal-scenarios-result.json tests/assert_payroll_legal_scenarios.py
 check civilContractLegalScenarioTest civil-contract-legal-scenarios-result.json tests/assert_civil_contract_legal_scenarios.py
 check incomeTaxBoundaryScenarioTest income-tax-boundaries-result.json tests/assert_income_tax_boundaries.py
@@ -138,10 +187,14 @@ request_as zup-access-chief:zup-ui-test-only crossOrganizationSecondaryOwnership
 request_as zup-access-hr:zup-ui-test-only crossOrganizationSecondaryDeleteAttackTest cross-organization-secondary-delete-attack-result.json
 request crossOrganizationVerificationTest cross-organization-verification-result.json
 request paymentAccountSecuritySetupTest payment-account-security-setup-result.json
-request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperMasterDataAttackTest \
-    same-organization-timekeeper-master-data-attack-result.json
-request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollMasterDataAttackTest \
-    same-organization-payroll-master-data-attack-result.json
+request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperEmployeeAttackTest \
+    same-organization-timekeeper-employee-attack-result.json
+request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperOrganizationAttackTest \
+    same-organization-timekeeper-organization-attack-result.json
+request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollPaymentAccountAttackTest \
+    same-organization-payroll-account-attack-result.json
+request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollDepartmentAttackTest \
+    same-organization-payroll-department-attack-result.json
 request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperPayrollAttackTest \
     same-organization-timekeeper-payroll-attack-result.json
 request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollWorkingTimeAttackTest \
@@ -150,6 +203,26 @@ request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollPersonnelA
     same-organization-payroll-personnel-attack-result.json
 request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollTaxesAttackTest \
     same-organization-payroll-taxes-attack-result.json
+request_as zup-access-hr:zup-ui-test-only crossOrganizationPaymentAccountReadTest \
+    cross-organization-payment-account-read-result.json
+request_as zup-access-hr:zup-ui-test-only crossOrganizationPaymentAccountMutationAttackTest \
+    cross-organization-payment-account-mutation-result.json
+request_as zup-access-hr:zup-ui-test-only crossOrganizationPaymentAccountReparentAttackTest \
+    cross-organization-payment-account-reparent-result.json
+request_as zup-access-hr:zup-ui-test-only crossOrganizationPaymentAccountDeleteAttackTest \
+    cross-organization-payment-account-delete-result.json
+request_as zup-access-hr:zup-ui-test-only crossOrganizationHiddenEmployeePaymentAccountAttackTest \
+    cross-organization-hidden-employee-account-result.json
+request_as zup-access-hr:zup-ui-test-only crossOrganizationHiddenEmployeeEmploymentAttackTest \
+    cross-organization-hidden-employee-employment-result.json
+request paymentAccountOverlapGuardTest payment-account-overlap-guard-result.json
+request paymentAccountOverlapEditGuardTest payment-account-overlap-edit-guard-result.json
+request verticalRoleAttackVerificationTest vertical-role-attack-verification-result.json
+python3 tests/assert_vertical_role_attacks.py \
+    cross-organization-payment-account-read-result.json \
+    payment-account-overlap-guard-result.json \
+    payment-account-overlap-edit-guard-result.json \
+    vertical-role-attack-verification-result.json
 request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperAllowedTest \
     same-organization-timekeeper-allowed-result.json
 request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollAllowedTest \
@@ -158,7 +231,7 @@ request_as zup-access-hr:zup-ui-test-only sameOrganizationHrAllowedTest \
     same-organization-hr-allowed-result.json
 request_as zup-access-chief:zup-ui-test-only sameOrganizationChiefTaxAllowedTest \
     same-organization-chief-tax-allowed-result.json
-request paymentAccountOverlapGuardTest payment-account-overlap-guard-result.json
+request legacyPaymentAccountMigrationTest legacy-payment-account-migration-result.json
 request paymentAccountSecurityVerificationTest payment-account-security-verification-result.json
 for action in employeeIinFormatGuardTest organizationBinFormatGuardTest bankDetailsFormatGuardTest; do
     request "$action" "$action-result.json"
@@ -167,7 +240,7 @@ python3 tests/assert_access_workflow.py \
     access-workflow-result.json cross-organization-policy-result.json \
     cross-organization-verification-result.json \
     payment-account-security-setup-result.json payment-account-overlap-guard-result.json \
-    payment-account-security-verification-result.json \
+    payment-account-security-verification-result.json legacy-payment-account-migration-result.json \
     employeeIinFormatGuardTest-result.json organizationBinFormatGuardTest-result.json \
     bankDetailsFormatGuardTest-result.json
 

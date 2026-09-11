@@ -75,3 +75,26 @@ jobs:
       - name: Run server regression
         working-directory: zup-kz
         run: ./scripts/ci-runtime-regression.sh
+
+      - name: Prepare runtime evidence manifest
+        if: always()
+        working-directory: zup-kz
+        run: |
+          git rev-parse HEAD > runtime-candidate-sha.txt
+          cp platform-revision.txt runtime-platform-sha.txt
+          find . -maxdepth 1 -type f \( -name '*.json' -o -name '*.log' -o -name '*.tsv' \) -print0 \
+            | sort -z | xargs -0 -r sha256sum > runtime-evidence.sha256
+
+      - name: Upload synthetic runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-evidence-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            zup-kz/*.json
+            zup-kz/*.log
+            zup-kz/*.tsv
+            zup-kz/runtime-*.txt
+            zup-kz/runtime-evidence.sha256
