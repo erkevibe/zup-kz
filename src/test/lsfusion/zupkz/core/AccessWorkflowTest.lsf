@@ -12,6 +12,16 @@ accessHiddenDeleteDepartment() = GROUP LAST Department d IF
     code(d) == 'ACCESS-HIDDEN-DELETE' ORDER d;
 accessAssignedDepartment() = GROUP LAST Department d IF
     code(d) == 'ACCESS-ASSIGNED-DEPT' ORDER d;
+accessAssignedTimesheet() = GROUP LAST Timesheet t IF
+    timesheetNumber(t) == 'ACCESS-ASSIGNED-TIME' OR
+    timesheetNumber(t) == 'ACCESS-ASSIGNED-TIME-OK' ORDER t;
+accessAssignedPayrollRun() = GROUP LAST PayrollRun r IF
+    payrollNumber(r) == 'ACCESS-ASSIGNED-PAYROLL' OR
+    payrollNumber(r) == 'ACCESS-ASSIGNED-PAYROLL-OK' ORDER r;
+accessAssignedArchiveCase() = GROUP LAST ArchiveCase c IF
+    archiveCaseIndex(c) == 'ACCESS-ASSIGNED-ARCHIVE' ORDER c;
+accessAssignedForm200() = GROUP LAST Form200Declaration d IF
+    form200Version(d) == 'ACCESS-ASSIGNED-FORM-200' ORDER d;
 accessHiddenPayrollRun() = GROUP LAST PayrollRun r IF
     payrollNumber(r) == 'ACCESS-HIDDEN-PAYROLL' ORDER r;
 accessHiddenArchiveCase() = GROUP LAST ArchiveCase c IF
@@ -622,6 +632,35 @@ paymentAccountSecuritySetupTest() {
         name(department) <- 'Доступное подразделение';
     }
     APPLY;
+    IF NOT accessAssignedTimesheet() THEN NEW timesheet = Timesheet {
+        timesheetOrganization(timesheet) <- accessAssignedOrganization();
+        timesheetNumber(timesheet) <- 'ACCESS-ASSIGNED-TIME';
+        timesheetPeriodFrom(timesheet) <- 2026_02_01;
+        timesheetPeriodTo(timesheet) <- 2026_02_28;
+        timesheetStatus(timesheet) <- TimesheetStatus.draft;
+    }
+    IF NOT accessAssignedPayrollRun() THEN NEW run = PayrollRun {
+        payrollOrganization(run) <- accessAssignedOrganization();
+        payrollNumber(run) <- 'ACCESS-ASSIGNED-PAYROLL';
+        payrollPeriodFrom(run) <- 2026_02_01;
+        payrollPeriodTo(run) <- 2026_02_28;
+        payrollRunStatus(run) <- PayrollRunStatus.draft;
+    }
+    IF NOT accessAssignedArchiveCase() THEN NEW archive = ArchiveCase {
+        archiveCaseOrganization(archive) <- accessAssignedOrganization();
+        archiveCaseIndex(archive) <- 'ACCESS-ASSIGNED-ARCHIVE';
+        archiveCaseYear(archive) <- 2026;
+        archiveCaseTitle(archive) <- 'Доступное архивное дело';
+        archiveCaseStatus(archive) <- ArchiveCaseStatus.open;
+    }
+    IF NOT accessAssignedForm200() THEN NEW declaration = Form200Declaration {
+        form200Organization(declaration) <- accessAssignedOrganization();
+        form200PeriodStart(declaration) <- 2026_04_01;
+        form200Kind(declaration) <- Form200Kind.initial;
+        form200Version(declaration) <- 'ACCESS-ASSIGNED-FORM-200';
+        form200Status(declaration) <- Form200Status.draft;
+    }
+    APPLY;
     IF NOT roleSecurityEmployee() THEN NEW roleWorker = Employee {
         iin(roleWorker) <- '960606300006';
         lastName(roleWorker) <- 'Ролевой';
@@ -704,6 +743,46 @@ sameOrganizationPayrollMasterDataAttackTest() {
     APPLY;
 }
 
+sameOrganizationTimekeeperPayrollAttackTest() {
+    payrollNumber(accessAssignedPayrollRun()) <- 'АТАКА ТАБЕЛЬЩИКА НА ЗАРПЛАТУ';
+    APPLY;
+}
+
+sameOrganizationPayrollWorkingTimeAttackTest() {
+    timesheetNumber(accessAssignedTimesheet()) <- 'АТАКА РАСЧЁТЧИКА НА ТАБЕЛЬ';
+    APPLY;
+}
+
+sameOrganizationPayrollPersonnelAttackTest() {
+    archiveCaseTitle(accessAssignedArchiveCase()) <- 'АТАКА РАСЧЁТЧИКА НА КАДРЫ';
+    APPLY;
+}
+
+sameOrganizationPayrollTaxesAttackTest() {
+    form200CorrectionNumber(accessAssignedForm200()) <- 77;
+    APPLY;
+}
+
+sameOrganizationTimekeeperAllowedTest() {
+    timesheetNumber(accessAssignedTimesheet()) <- 'ACCESS-ASSIGNED-TIME-OK';
+    APPLY;
+}
+
+sameOrganizationPayrollAllowedTest() {
+    payrollNumber(accessAssignedPayrollRun()) <- 'ACCESS-ASSIGNED-PAYROLL-OK';
+    APPLY;
+}
+
+sameOrganizationHrAllowedTest() {
+    archiveCaseTitle(accessAssignedArchiveCase()) <- 'Доступное архивное дело HR';
+    APPLY;
+}
+
+sameOrganizationChiefTaxAllowedTest() {
+    form200CorrectionNumber(accessAssignedForm200()) <- 1;
+    APPLY;
+}
+
 paymentAccountOverlapGuardTest() {
     NEW overlapping = EmployeePaymentAccount {
         paymentAccountOrganization(overlapping) <- accessAssignedOrganization();
@@ -723,7 +802,21 @@ paymentAccountSecurityVerificationTest() {
         timekeeperOrganizationWritePreserved = name(accessAssignedOrganization()) == 'Доступ A изменён',
         payrollAccountWritePreserved = paymentAccountIban(paymentSecurityAccountASecond()) ==
             'KZ000000000000000012',
-        payrollDepartmentWritePreserved = name(accessAssignedDepartment()) == 'Доступное подразделение';
+        payrollDepartmentWritePreserved = name(accessAssignedDepartment()) == 'Доступное подразделение',
+        timekeeperPayrollAttackRejected = payrollNumber(accessAssignedPayrollRun()) ==
+            'ACCESS-ASSIGNED-PAYROLL-OK',
+        payrollWorkingTimeAttackRejected = timesheetNumber(accessAssignedTimesheet()) ==
+            'ACCESS-ASSIGNED-TIME-OK',
+        payrollPersonnelAttackRejected = archiveCaseTitle(accessAssignedArchiveCase()) ==
+            'Доступное архивное дело HR',
+        payrollTaxesAttackRejected = form200CorrectionNumber(accessAssignedForm200()) == 1,
+        timekeeperOwnDomainAllowed = timesheetNumber(accessAssignedTimesheet()) ==
+            'ACCESS-ASSIGNED-TIME-OK',
+        payrollOwnDomainAllowed = payrollNumber(accessAssignedPayrollRun()) ==
+            'ACCESS-ASSIGNED-PAYROLL-OK',
+        hrOwnDomainAllowed = archiveCaseTitle(accessAssignedArchiveCase()) ==
+            'Доступное архивное дело HR',
+        chiefTaxesDomainAllowed = form200CorrectionNumber(accessAssignedForm200()) == 1;
 }
 
 employeeIinFormatGuardTest() {

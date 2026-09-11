@@ -50,6 +50,14 @@ assert actual["timekeeperEmployeeWritePreserved"] is True
 assert actual["timekeeperOrganizationWritePreserved"] is True
 assert actual["payrollAccountWritePreserved"] is True
 assert actual["payrollDepartmentWritePreserved"] is True
+assert actual["timekeeperPayrollAttackRejected"] is True
+assert actual["payrollWorkingTimeAttackRejected"] is True
+assert actual["payrollPersonnelAttackRejected"] is True
+assert actual["payrollTaxesAttackRejected"] is True
+assert actual["timekeeperOwnDomainAllowed"] is True
+assert actual["payrollOwnDomainAllowed"] is True
+assert actual["hrOwnDomainAllowed"] is True
+assert actual["chiefTaxesDomainAllowed"] is True
 assert actual["employeeIinFormatRejected"] is True
 assert actual["organizationBinFormatRejected"] is True
 assert actual["bankDetailsFormatRejected"] is True

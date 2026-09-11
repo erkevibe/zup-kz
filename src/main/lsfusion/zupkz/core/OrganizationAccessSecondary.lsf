@@ -5,13 +5,15 @@ NAMESPACE ZUPKZ;
 
 // Серверная граница для вторичных документов и строк. UI-фильтры отвечают
 // только за удобство: эти constraints также действуют для Action API и APPLY.
-META protectSecondaryOrganizationObject(code, objectClass, organizationProperty)
+META protectSecondaryOrganizationObject(code, objectClass, organizationProperty, rolePredicate)
     CONSTRAINT code##SecondaryContentChanged(objectClass o) AND
-               (organizationChangeDenied(organizationProperty(o)) OR
+               (NOT rolePredicate() OR
+                organizationChangeDenied(organizationProperty(o)) OR
                 organizationChangeDenied(PREV(organizationProperty(o))))
         MESSAGE 'Нет доступа к изменению данных этой организации';
     CONSTRAINT DROPPED(objectClass o IS objectClass) AND
-               organizationChangeDenied(PREV(organizationProperty(o)))
+               (NOT rolePredicate() OR
+                organizationChangeDenied(PREV(organizationProperty(o))))
         MESSAGE 'Нет доступа к удалению данных этой организации';
 END
 
@@ -23,7 +25,7 @@ leaveEntitlementSecondaryContentChanged(LeaveEntitlement o) =
     CHANGED(entitlementBasicDays(o)) OR
     CHANGED(entitlementAdditionalDays(o)) OR
     CHANGED(entitlementNote(o));
-@protectSecondaryOrganizationObject(leaveEntitlement, LeaveEntitlement, leaveEntitlementAccessOrganization);
+@protectSecondaryOrganizationObject(leaveEntitlement, LeaveEntitlement, leaveEntitlementAccessOrganization, personnelChangeRoleAllowed);
 
 leaveDocumentAccessOrganization(LeaveDocument o) = organization(employment(leaveAssignment(o)));
 leaveDocumentSecondaryContentChanged(LeaveDocument o) =
@@ -44,7 +46,7 @@ leaveDocumentSecondaryContentChanged(LeaveDocument o) =
     CHANGED(leaveApprovedBy(o)) OR
     CHANGED(leaveCancelledAt(o)) OR
     CHANGED(leaveCancelledBy(o));
-@protectSecondaryOrganizationObject(leaveDocument, LeaveDocument, leaveDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(leaveDocument, LeaveDocument, leaveDocumentAccessOrganization, personnelChangeRoleAllowed);
 
 vacationScheduleAccessOrganization(VacationSchedule o) = vacationScheduleOrganization(o);
 vacationScheduleSecondaryContentChanged(VacationSchedule o) =
@@ -58,7 +60,7 @@ vacationScheduleSecondaryContentChanged(VacationSchedule o) =
     CHANGED(vacationScheduleApprovedBy(o)) OR
     CHANGED(vacationScheduleCancelledAt(o)) OR
     CHANGED(vacationScheduleCancelledBy(o));
-@protectSecondaryOrganizationObject(vacationSchedule, VacationSchedule, vacationScheduleAccessOrganization);
+@protectSecondaryOrganizationObject(vacationSchedule, VacationSchedule, vacationScheduleAccessOrganization, personnelChangeRoleAllowed);
 
 vacationScheduleLineAccessOrganization(VacationScheduleLine o) = vacationScheduleOrganization(vacationLineSchedule(o));
 vacationScheduleLineSecondaryContentChanged(VacationScheduleLine o) =
@@ -73,7 +75,7 @@ vacationScheduleLineSecondaryContentChanged(VacationScheduleLine o) =
     CHANGED(vacationLineOpinionDate(o)) OR
     CHANGED(vacationLineNote(o)) OR
     CHANGED(vacationLineLeave(o));
-@protectSecondaryOrganizationObject(vacationScheduleLine, VacationScheduleLine, vacationScheduleLineAccessOrganization);
+@protectSecondaryOrganizationObject(vacationScheduleLine, VacationScheduleLine, vacationScheduleLineAccessOrganization, personnelChangeRoleAllowed);
 
 businessTripDocumentAccessOrganization(BusinessTripDocument o) = tripOrganization(o);
 businessTripDocumentSecondaryContentChanged(BusinessTripDocument o) =
@@ -101,7 +103,7 @@ businessTripDocumentSecondaryContentChanged(BusinessTripDocument o) =
     CHANGED(tripApprovedBy(o)) OR
     CHANGED(tripCancelledAt(o)) OR
     CHANGED(tripCancelledBy(o));
-@protectSecondaryOrganizationObject(businessTripDocument, BusinessTripDocument, businessTripDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(businessTripDocument, BusinessTripDocument, businessTripDocumentAccessOrganization, personnelChangeRoleAllowed);
 
 personnelNoticeAccessOrganization(PersonnelNotice o) = personnelNoticeOrganization(o);
 personnelNoticeSecondaryContentChanged(PersonnelNotice o) =
@@ -123,7 +125,7 @@ personnelNoticeSecondaryContentChanged(PersonnelNotice o) =
     CHANGED(personnelNoticeCancelledAt(o)) OR
     CHANGED(personnelNoticeEvent(o)) OR
     CHANGED(personnelNoticeVacationLine(o));
-@protectSecondaryOrganizationObject(personnelNotice, PersonnelNotice, personnelNoticeAccessOrganization);
+@protectSecondaryOrganizationObject(personnelNotice, PersonnelNotice, personnelNoticeAccessOrganization, personnelChangeRoleAllowed);
 
 approvalRequestAccessOrganization(ApprovalRequest o) = approvalOrganization(o);
 approvalRequestSecondaryContentChanged(ApprovalRequest o) =
@@ -138,7 +140,7 @@ approvalRequestSecondaryContentChanged(ApprovalRequest o) =
     CHANGED(approvalSubmittedAt(o)) OR
     CHANGED(approvalCompletedAt(o)) OR
     CHANGED(approvalComment(o));
-@protectSecondaryOrganizationObject(approvalRequest, ApprovalRequest, approvalRequestAccessOrganization);
+@protectSecondaryOrganizationObject(approvalRequest, ApprovalRequest, approvalRequestAccessOrganization, personnelChangeRoleAllowed);
 
 approvalStepAccessOrganization(ApprovalStep o) = approvalOrganization(approvalStepRequest(o));
 approvalStepSecondaryContentChanged(ApprovalStep o) =
@@ -150,7 +152,7 @@ approvalStepSecondaryContentChanged(ApprovalStep o) =
     CHANGED(approvalStepDecidedBy(o)) OR
     CHANGED(approvalStepDecidedAt(o)) OR
     CHANGED(approvalStepComment(o));
-@protectSecondaryOrganizationObject(approvalStep, ApprovalStep, approvalStepAccessOrganization);
+@protectSecondaryOrganizationObject(approvalStep, ApprovalStep, approvalStepAccessOrganization, personnelChangeRoleAllowed);
 
 personnelNotificationAccessOrganization(PersonnelNotification o) = notificationOrganization(o);
 personnelNotificationSecondaryContentChanged(PersonnelNotification o) =
@@ -162,7 +164,7 @@ personnelNotificationSecondaryContentChanged(PersonnelNotification o) =
     CHANGED(notificationText(o)) OR
     CHANGED(notificationCreatedAt(o)) OR
     CHANGED(notificationReadAt(o));
-@protectSecondaryOrganizationObject(personnelNotification, PersonnelNotification, personnelNotificationAccessOrganization);
+@protectSecondaryOrganizationObject(personnelNotification, PersonnelNotification, personnelNotificationAccessOrganization, personnelChangeRoleAllowed);
 
 archiveCaseAccessOrganization(ArchiveCase o) = archiveCaseOrganization(o);
 archiveCaseSecondaryContentChanged(ArchiveCase o) =
@@ -176,7 +178,7 @@ archiveCaseSecondaryContentChanged(ArchiveCase o) =
     CHANGED(archiveCaseTransferDate(o)) OR
     CHANGED(archiveCaseTransferAct(o)) OR
     CHANGED(archiveCaseStatus(o));
-@protectSecondaryOrganizationObject(archiveCase, ArchiveCase, archiveCaseAccessOrganization);
+@protectSecondaryOrganizationObject(archiveCase, ArchiveCase, archiveCaseAccessOrganization, personnelChangeRoleAllowed);
 
 archiveDocumentAccessOrganization(ArchiveDocument o) = archiveCaseOrganization(archiveDocumentCase(o));
 archiveDocumentSecondaryContentChanged(ArchiveDocument o) =
@@ -211,7 +213,7 @@ archiveDocumentSecondaryContentChanged(ArchiveDocument o) =
     CHANGED(archiveSourceVacationSchedule(o)) OR
     CHANGED(archiveSourceBusinessTrip(o)) OR
     CHANGED(archiveSourcePersonnelNotice(o));
-@protectSecondaryOrganizationObject(archiveDocument, ArchiveDocument, archiveDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(archiveDocument, ArchiveDocument, archiveDocumentAccessOrganization, personnelChangeRoleAllowed);
 
 accidentInsurancePolicyAccessOrganization(AccidentInsurancePolicy o) = insurancePolicyOrganization(o);
 accidentInsurancePolicySecondaryContentChanged(AccidentInsurancePolicy o) =
@@ -232,7 +234,7 @@ accidentInsurancePolicySecondaryContentChanged(AccidentInsurancePolicy o) =
     CHANGED(insurancePolicyCancelledAt(o)) OR
     CHANGED(insurancePolicyTerminationDate(o)) OR
     CHANGED(insurancePolicyTerminationReason(o));
-@protectSecondaryOrganizationObject(accidentInsurancePolicy, AccidentInsurancePolicy, accidentInsurancePolicyAccessOrganization);
+@protectSecondaryOrganizationObject(accidentInsurancePolicy, AccidentInsurancePolicy, accidentInsurancePolicyAccessOrganization, personnelChangeRoleAllowed);
 
 workAccidentAccessOrganization(WorkAccident o) = workAccidentOrganization(o);
 workAccidentSecondaryContentChanged(WorkAccident o) =
@@ -258,7 +260,7 @@ workAccidentSecondaryContentChanged(WorkAccident o) =
     CHANGED(workAccidentLostWorkDays(o)) OR
     CHANGED(workAccidentStatus(o)) OR
     CHANGED(workAccidentClosedAt(o));
-@protectSecondaryOrganizationObject(workAccident, WorkAccident, workAccidentAccessOrganization);
+@protectSecondaryOrganizationObject(workAccident, WorkAccident, workAccidentAccessOrganization, personnelChangeRoleAllowed);
 
 accidentInsuranceClaimAccessOrganization(AccidentInsuranceClaim o) = workAccidentOrganization(insuranceClaimAccident(o));
 accidentInsuranceClaimSecondaryContentChanged(AccidentInsuranceClaim o) =
@@ -275,7 +277,7 @@ accidentInsuranceClaimSecondaryContentChanged(AccidentInsuranceClaim o) =
     CHANGED(insuranceClaimSubmittedAt(o)) OR
     CHANGED(insuranceClaimDecidedAt(o)) OR
     CHANGED(insuranceClaimPaidDate(o));
-@protectSecondaryOrganizationObject(accidentInsuranceClaim, AccidentInsuranceClaim, accidentInsuranceClaimAccessOrganization);
+@protectSecondaryOrganizationObject(accidentInsuranceClaim, AccidentInsuranceClaim, accidentInsuranceClaimAccessOrganization, personnelChangeRoleAllowed);
 
 payrollTimeSummaryAccessOrganization(PayrollTimeSummary o) = payrollOrganization(summaryPayrollRun(o));
 payrollTimeSummarySecondaryContentChanged(PayrollTimeSummary o) =
@@ -290,7 +292,7 @@ payrollTimeSummarySecondaryContentChanged(PayrollTimeSummary o) =
     CHANGED(summaryWeekendHours(o)) OR
     CHANGED(summaryBusinessTripHours(o)) OR
     CHANGED(summaryAbsenceHours(o));
-@protectSecondaryOrganizationObject(payrollTimeSummary, PayrollTimeSummary, payrollTimeSummaryAccessOrganization);
+@protectSecondaryOrganizationObject(payrollTimeSummary, PayrollTimeSummary, payrollTimeSummaryAccessOrganization, payrollChangeRoleAllowed);
 
 payrollLineAccessOrganization(PayrollLine o) = payrollOrganization(linePayrollRun(o));
 payrollLineSecondaryContentChanged(PayrollLine o) =
@@ -305,7 +307,7 @@ payrollLineSecondaryContentChanged(PayrollLine o) =
     CHANGED(calculationCoefficient(o)) OR
     CHANGED(calculationAmount(o)) OR
     CHANGED(calculationNote(o));
-@protectSecondaryOrganizationObject(payrollLine, PayrollLine, payrollLineAccessOrganization);
+@protectSecondaryOrganizationObject(payrollLine, PayrollLine, payrollLineAccessOrganization, payrollChangeRoleAllowed);
 
 averageEarningsDocumentAccessOrganization(AverageEarningsDocument o) = organization(employment(averageAssignment(o)));
 averageEarningsDocumentSecondaryContentChanged(AverageEarningsDocument o) =
@@ -323,7 +325,7 @@ averageEarningsDocumentSecondaryContentChanged(AverageEarningsDocument o) =
     CHANGED(averageDailyHours(o)) OR
     CHANGED(averageStatus(o)) OR
     CHANGED(averageCalculatedAt(o));
-@protectSecondaryOrganizationObject(averageEarningsDocument, AverageEarningsDocument, averageEarningsDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(averageEarningsDocument, AverageEarningsDocument, averageEarningsDocumentAccessOrganization, payrollChangeRoleAllowed);
 
 averageEarningsBaseLineAccessOrganization(AverageEarningsBaseLine o) = organization(employment(averageAssignment(baseAverageDocument(o))));
 averageEarningsBaseLineSecondaryContentChanged(AverageEarningsBaseLine o) =
@@ -335,7 +337,7 @@ averageEarningsBaseLineSecondaryContentChanged(AverageEarningsBaseLine o) =
     CHANGED(baseIncreaseCoefficient(o)) OR
     CHANGED(baseIncluded(o)) OR
     CHANGED(baseNote(o));
-@protectSecondaryOrganizationObject(averageEarningsBaseLine, AverageEarningsBaseLine, averageEarningsBaseLineAccessOrganization);
+@protectSecondaryOrganizationObject(averageEarningsBaseLine, AverageEarningsBaseLine, averageEarningsBaseLineAccessOrganization, payrollChangeRoleAllowed);
 
 payrollRecalculationAccessOrganization(PayrollRecalculation o) = payrollOrganization(recalculationTargetRun(o));
 payrollRecalculationSecondaryContentChanged(PayrollRecalculation o) =
@@ -346,7 +348,7 @@ payrollRecalculationSecondaryContentChanged(PayrollRecalculation o) =
     CHANGED(recalculationReason(o)) OR
     CHANGED(recalculationStatus(o)) OR
     CHANGED(recalculationCalculatedAt(o));
-@protectSecondaryOrganizationObject(payrollRecalculation, PayrollRecalculation, payrollRecalculationAccessOrganization);
+@protectSecondaryOrganizationObject(payrollRecalculation, PayrollRecalculation, payrollRecalculationAccessOrganization, payrollChangeRoleAllowed);
 
 payrollRecalculationLineAccessOrganization(PayrollRecalculationLine o) = payrollOrganization(recalculationTargetRun(lineRecalculation(o)));
 payrollRecalculationLineSecondaryContentChanged(PayrollRecalculationLine o) =
@@ -356,7 +358,7 @@ payrollRecalculationLineSecondaryContentChanged(PayrollRecalculationLine o) =
     CHANGED(lineCorrectedAmount(o)) OR
     CHANGED(lineRecalculationNote(o)) OR
     CHANGED(lineRecalculationInput(o));
-@protectSecondaryOrganizationObject(payrollRecalculationLine, PayrollRecalculationLine, payrollRecalculationLineAccessOrganization);
+@protectSecondaryOrganizationObject(payrollRecalculationLine, PayrollRecalculationLine, payrollRecalculationLineAccessOrganization, payrollChangeRoleAllowed);
 
 interimPaymentAccessOrganization(InterimPayment o) = organization(employment(interimPaymentAssignment(o)));
 interimPaymentSecondaryContentChanged(InterimPayment o) =
@@ -371,7 +373,7 @@ interimPaymentSecondaryContentChanged(InterimPayment o) =
     CHANGED(interimPaymentPaidDate(o)) OR
     CHANGED(interimPaymentReason(o)) OR
     CHANGED(interimPaymentStatus(o));
-@protectSecondaryOrganizationObject(interimPayment, InterimPayment, interimPaymentAccessOrganization);
+@protectSecondaryOrganizationObject(interimPayment, InterimPayment, interimPaymentAccessOrganization, payrollChangeRoleAllowed);
 
 sickLeaveDocumentAccessOrganization(SickLeaveDocument o) = organization(employment(sickLeaveAssignment(o)));
 sickLeaveDocumentSecondaryContentChanged(SickLeaveDocument o) =
@@ -394,7 +396,7 @@ sickLeaveDocumentSecondaryContentChanged(SickLeaveDocument o) =
     CHANGED(sickLeaveApprovedBy(o)) OR
     CHANGED(sickLeaveCancelledAt(o)) OR
     CHANGED(sickLeaveCancelledBy(o));
-@protectSecondaryOrganizationObject(sickLeaveDocument, SickLeaveDocument, sickLeaveDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(sickLeaveDocument, SickLeaveDocument, sickLeaveDocumentAccessOrganization, personnelChangeRoleAllowed);
 
 sickLeaveBenefitLineAccessOrganization(SickLeaveBenefitLine o) = organization(employment(sickLeaveAssignment(sickBenefitDocument(o))));
 sickLeaveBenefitLineSecondaryContentChanged(SickLeaveBenefitLine o) =
@@ -403,7 +405,7 @@ sickLeaveBenefitLineSecondaryContentChanged(SickLeaveBenefitLine o) =
     CHANGED(sickBenefitWorkDays(o)) OR
     CHANGED(sickBenefitMissedHours(o)) OR
     CHANGED(sickBenefitNote(o));
-@protectSecondaryOrganizationObject(sickLeaveBenefitLine, SickLeaveBenefitLine, sickLeaveBenefitLineAccessOrganization);
+@protectSecondaryOrganizationObject(sickLeaveBenefitLine, SickLeaveBenefitLine, sickLeaveBenefitLineAccessOrganization, payrollChangeRoleAllowed);
 
 enforcementOrderAccessOrganization(EnforcementOrder o) = enforcementOrganization(o);
 enforcementOrderSecondaryContentChanged(EnforcementOrder o) =
@@ -428,14 +430,14 @@ enforcementOrderSecondaryContentChanged(EnforcementOrder o) =
     CHANGED(enforcementProceedingNumber(o)) OR
     CHANGED(enforcementBasis(o)) OR
     CHANGED(enforcementLegalSource(o));
-@protectSecondaryOrganizationObject(enforcementOrder, EnforcementOrder, enforcementOrderAccessOrganization);
+@protectSecondaryOrganizationObject(enforcementOrder, EnforcementOrder, enforcementOrderAccessOrganization, taxesReportsChangeRoleAllowed);
 
 enforcementCalculationDocumentAccessOrganization(EnforcementCalculationDocument o) = payrollOrganization(enforcementPayrollRun(o));
 enforcementCalculationDocumentSecondaryContentChanged(EnforcementCalculationDocument o) =
     CHANGED(enforcementTaxCalculation(o)) OR
     CHANGED(enforcementCalculationStatus(o)) OR
     CHANGED(enforcementCalculatedAt(o));
-@protectSecondaryOrganizationObject(enforcementCalculationDocument, EnforcementCalculationDocument, enforcementCalculationDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(enforcementCalculationDocument, EnforcementCalculationDocument, enforcementCalculationDocumentAccessOrganization, taxesReportsChangeRoleAllowed);
 
 enforcementCalculationLineAccessOrganization(EnforcementCalculationLine o) = payrollOrganization(enforcementPayrollRun(enforcementCalculationDocument(o)));
 enforcementCalculationLineSecondaryContentChanged(EnforcementCalculationLine o) =
@@ -455,7 +457,7 @@ enforcementCalculationLineSecondaryContentChanged(EnforcementCalculationLine o) 
     CHANGED(enforcementSavedMethod(o)) OR
     CHANGED(enforcementSavedFixedAmount(o)) OR
     CHANGED(enforcementSavedDebt(o));
-@protectSecondaryOrganizationObject(enforcementCalculationLine, EnforcementCalculationLine, enforcementCalculationLineAccessOrganization);
+@protectSecondaryOrganizationObject(enforcementCalculationLine, EnforcementCalculationLine, enforcementCalculationLineAccessOrganization, taxesReportsChangeRoleAllowed);
 
 civilContractAccessOrganization(CivilContract o) = civilContractOrganization(o);
 civilContractSecondaryContentChanged(CivilContract o) =
@@ -468,7 +470,7 @@ civilContractSecondaryContentChanged(CivilContract o) =
     CHANGED(civilContractSubject(o)) OR
     CHANGED(civilContractAmount(o)) OR
     CHANGED(civilContractStatus(o));
-@protectSecondaryOrganizationObject(civilContract, CivilContract, civilContractAccessOrganization);
+@protectSecondaryOrganizationObject(civilContract, CivilContract, civilContractAccessOrganization, payrollChangeRoleAllowed);
 
 civilContractActAccessOrganization(CivilContractAct o) = civilContractOrganization(civilActContract(o));
 civilContractActSecondaryContentChanged(CivilContractAct o) =
@@ -504,7 +506,7 @@ civilContractActSecondaryContentChanged(CivilContractAct o) =
     CHANGED(civilActRegulatoryPack(o)) OR
     CHANGED(civilActTaxLedgerEntry(o)) OR
     CHANGED(civilActTaxReversalLedgerEntry(o));
-@protectSecondaryOrganizationObject(civilContractAct, CivilContractAct, civilContractActAccessOrganization);
+@protectSecondaryOrganizationObject(civilContractAct, CivilContractAct, civilContractActAccessOrganization, payrollChangeRoleAllowed);
 
 civilLiabilityDocumentAccessOrganization(CivilLiabilityDocument o) = civilContractOrganization(civilActContract(civilLiabilityAct(o)));
 civilLiabilityDocumentSecondaryContentChanged(CivilLiabilityDocument o) =
@@ -515,7 +517,7 @@ civilLiabilityDocumentSecondaryContentChanged(CivilLiabilityDocument o) =
     CHANGED(civilLiabilityPaymentDate(o)) OR
     CHANGED(civilLiabilityBankReference(o)) OR
     CHANGED(civilLiabilityPaidAt(o));
-@protectSecondaryOrganizationObject(civilLiabilityDocument, CivilLiabilityDocument, civilLiabilityDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(civilLiabilityDocument, CivilLiabilityDocument, civilLiabilityDocumentAccessOrganization, taxesReportsChangeRoleAllowed);
 
 civilLiabilityLineAccessOrganization(CivilLiabilityLine o) = civilContractOrganization(civilActContract(civilLiabilityAct(civilLiabilityLineDocument(o))));
 civilLiabilityLineSecondaryContentChanged(CivilLiabilityLine o) =
@@ -531,7 +533,7 @@ civilLiabilityLineSecondaryContentChanged(CivilLiabilityLine o) =
     CHANGED(civilLiabilityLineAmount(o)) OR
     CHANGED(civilLiabilityLineDueDate(o)) OR
     CHANGED(civilLiabilityLineLegalSource(o));
-@protectSecondaryOrganizationObject(civilLiabilityLine, CivilLiabilityLine, civilLiabilityLineAccessOrganization);
+@protectSecondaryOrganizationObject(civilLiabilityLine, CivilLiabilityLine, civilLiabilityLineAccessOrganization, taxesReportsChangeRoleAllowed);
 
 payrollSettlementLineAccessOrganization(PayrollSettlementLine o) = payrollOrganization(settlementPayrollRun(o));
 payrollSettlementLineSecondaryContentChanged(PayrollSettlementLine o) =
@@ -549,7 +551,7 @@ payrollSettlementLineSecondaryContentChanged(PayrollSettlementLine o) =
     CHANGED(settlementEnforcement(o)) OR
     CHANGED(settlementPayable(o)) OR
     CHANGED(settlementClosedAt(o));
-@protectSecondaryOrganizationObject(payrollSettlementLine, PayrollSettlementLine, payrollSettlementLineAccessOrganization);
+@protectSecondaryOrganizationObject(payrollSettlementLine, PayrollSettlementLine, payrollSettlementLineAccessOrganization, payrollChangeRoleAllowed);
 
 paymentStatementAccessOrganization(PaymentStatement o) = payrollOrganization(paymentStatementPayrollRun(o));
 paymentStatementSecondaryContentChanged(PaymentStatement o) =
@@ -562,7 +564,7 @@ paymentStatementSecondaryContentChanged(PaymentStatement o) =
     CHANGED(paymentStatementCalculatedAt(o)) OR
     CHANGED(paymentStatementApprovedAt(o)) OR
     CHANGED(paymentStatementPaidAt(o));
-@protectSecondaryOrganizationObject(paymentStatement, PaymentStatement, paymentStatementAccessOrganization);
+@protectSecondaryOrganizationObject(paymentStatement, PaymentStatement, paymentStatementAccessOrganization, payrollChangeRoleAllowed);
 
 paymentStatementLineAccessOrganization(PaymentStatementLine o) = payrollOrganization(paymentStatementPayrollRun(paymentLineStatement(o)));
 paymentStatementLineSecondaryContentChanged(PaymentStatementLine o) =
@@ -570,7 +572,7 @@ paymentStatementLineSecondaryContentChanged(PaymentStatementLine o) =
     CHANGED(paymentLineSettlement(o)) OR
     CHANGED(paymentLineAmountDue(o)) OR
     CHANGED(paymentLineAmount(o));
-@protectSecondaryOrganizationObject(paymentStatementLine, PaymentStatementLine, paymentStatementLineAccessOrganization);
+@protectSecondaryOrganizationObject(paymentStatementLine, PaymentStatementLine, paymentStatementLineAccessOrganization, payrollChangeRoleAllowed);
 
 salaryBankRegisterAccessOrganization(SalaryBankRegister o) = bankRegisterOrganization(o);
 salaryBankRegisterSecondaryContentChanged(SalaryBankRegister o) =
@@ -582,7 +584,7 @@ salaryBankRegisterSecondaryContentChanged(SalaryBankRegister o) =
     CHANGED(bankRegisterAcceptedAt(o)) OR
     CHANGED(bankRegisterExternalId(o)) OR
     CHANGED(bankRegisterRejectionReason(o));
-@protectSecondaryOrganizationObject(salaryBankRegister, SalaryBankRegister, salaryBankRegisterAccessOrganization);
+@protectSecondaryOrganizationObject(salaryBankRegister, SalaryBankRegister, salaryBankRegisterAccessOrganization, payrollChangeRoleAllowed);
 
 salaryBankRegisterLineAccessOrganization(SalaryBankRegisterLine o) = bankRegisterOrganization(bankRegisterLineRegister(o));
 salaryBankRegisterLineSecondaryContentChanged(SalaryBankRegisterLine o) =
@@ -595,7 +597,7 @@ salaryBankRegisterLineSecondaryContentChanged(SalaryBankRegisterLine o) =
     CHANGED(bankRegisterLineIban(o)) OR
     CHANGED(bankRegisterLineAmount(o)) OR
     CHANGED(bankRegisterLinePurpose(o));
-@protectSecondaryOrganizationObject(salaryBankRegisterLine, SalaryBankRegisterLine, salaryBankRegisterLineAccessOrganization);
+@protectSecondaryOrganizationObject(salaryBankRegisterLine, SalaryBankRegisterLine, salaryBankRegisterLineAccessOrganization, payrollChangeRoleAllowed);
 
 employeePaymentAccountAccessOrganization(EmployeePaymentAccount o) = paymentAccountOrganization(o);
 employeePaymentAccountSecondaryContentChanged(EmployeePaymentAccount o) =
@@ -606,7 +608,7 @@ employeePaymentAccountSecondaryContentChanged(EmployeePaymentAccount o) =
     CHANGED(paymentAccountIban(o)) OR
     CHANGED(paymentAccountValidFrom(o)) OR
     CHANGED(paymentAccountValidTo(o));
-@protectSecondaryOrganizationObject(employeePaymentAccount, EmployeePaymentAccount, employeePaymentAccountAccessOrganization);
+@protectSecondaryOrganizationObject(employeePaymentAccount, EmployeePaymentAccount, employeePaymentAccountAccessOrganization, masterDataChangeRoleAllowed);
 CONSTRAINT employeePaymentAccountSecondaryContentChanged(EmployeePaymentAccount o) AND
            NOT masterDataChangeRoleAllowed()
     MESSAGE 'Нет доступа к изменению зарплатного счёта сотрудника этой организации';
@@ -623,7 +625,7 @@ payrollLiabilityDocumentSecondaryContentChanged(PayrollLiabilityDocument o) =
     CHANGED(liabilityPaymentDate(o)) OR
     CHANGED(liabilityBankReference(o)) OR
     CHANGED(liabilityPaidAt(o));
-@protectSecondaryOrganizationObject(payrollLiabilityDocument, PayrollLiabilityDocument, payrollLiabilityDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(payrollLiabilityDocument, PayrollLiabilityDocument, payrollLiabilityDocumentAccessOrganization, taxesReportsChangeRoleAllowed);
 
 payrollLiabilityLineAccessOrganization(PayrollLiabilityLine o) = payrollOrganization(liabilityPayrollRun(liabilityLineDocument(o)));
 payrollLiabilityLineSecondaryContentChanged(PayrollLiabilityLine o) =
@@ -632,7 +634,7 @@ payrollLiabilityLineSecondaryContentChanged(PayrollLiabilityLine o) =
     CHANGED(liabilityLineAmount(o)) OR
     CHANGED(liabilityLineDueDate(o)) OR
     CHANGED(liabilityLineLegalSource(o));
-@protectSecondaryOrganizationObject(payrollLiabilityLine, PayrollLiabilityLine, payrollLiabilityLineAccessOrganization);
+@protectSecondaryOrganizationObject(payrollLiabilityLine, PayrollLiabilityLine, payrollLiabilityLineAccessOrganization, taxesReportsChangeRoleAllowed);
 
 socialPaymentProfileAccessOrganization(SocialPaymentProfile o) = socialProfileOrganization(o);
 socialPaymentProfileSecondaryContentChanged(SocialPaymentProfile o) =
@@ -647,7 +649,7 @@ socialPaymentProfileSecondaryContentChanged(SocialPaymentProfile o) =
     CHANGED(socialProfileOosmsExempt(o)) OR
     CHANGED(socialProfileBasis(o)) OR
     CHANGED(socialProfileLegalSource(o));
-@protectSecondaryOrganizationObject(socialPaymentProfile, SocialPaymentProfile, socialPaymentProfileAccessOrganization);
+@protectSecondaryOrganizationObject(socialPaymentProfile, SocialPaymentProfile, socialPaymentProfileAccessOrganization, taxesReportsChangeRoleAllowed);
 
 socialPaymentDocumentAccessOrganization(SocialPaymentDocument o) = payrollOrganization(socialPaymentPayrollRun(o));
 socialPaymentDocumentSecondaryContentChanged(SocialPaymentDocument o) =
@@ -655,7 +657,7 @@ socialPaymentDocumentSecondaryContentChanged(SocialPaymentDocument o) =
     CHANGED(socialPaymentStatus(o)) OR
     CHANGED(socialPaymentCalculatedAt(o)) OR
     CHANGED(socialPaymentRegulatoryPack(o));
-@protectSecondaryOrganizationObject(socialPaymentDocument, SocialPaymentDocument, socialPaymentDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(socialPaymentDocument, SocialPaymentDocument, socialPaymentDocumentAccessOrganization, taxesReportsChangeRoleAllowed);
 
 socialPaymentLineAccessOrganization(SocialPaymentLine o) = payrollOrganization(socialPaymentPayrollRun(socialPaymentDocument(o)));
 socialPaymentLineSecondaryContentChanged(SocialPaymentLine o) =
@@ -695,7 +697,7 @@ socialPaymentLineSecondaryContentChanged(SocialPaymentLine o) =
     CHANGED(oosmsExempt(o)) OR
     CHANGED(oosmsBase(o)) OR
     CHANGED(oosmsAmount(o));
-@protectSecondaryOrganizationObject(socialPaymentLine, SocialPaymentLine, socialPaymentLineAccessOrganization);
+@protectSecondaryOrganizationObject(socialPaymentLine, SocialPaymentLine, socialPaymentLineAccessOrganization, taxesReportsChangeRoleAllowed);
 
 employeeTaxProfileAccessOrganization(EmployeeTaxProfile o) = taxProfileOrganization(o);
 employeeTaxProfileSecondaryContentChanged(EmployeeTaxProfile o) =
@@ -712,7 +714,7 @@ employeeTaxProfileSecondaryContentChanged(EmployeeTaxProfile o) =
     CHANGED(taxProfileSocialDeduction(o)) OR
     CHANGED(taxProfileBasis(o)) OR
     CHANGED(taxProfileLegalSource(o));
-@protectSecondaryOrganizationObject(employeeTaxProfile, EmployeeTaxProfile, employeeTaxProfileAccessOrganization);
+@protectSecondaryOrganizationObject(employeeTaxProfile, EmployeeTaxProfile, employeeTaxProfileAccessOrganization, taxesReportsChangeRoleAllowed);
 
 organizationTaxProfileAccessOrganization(OrganizationTaxProfile o) = organizationTaxProfileOrganization(o);
 organizationTaxProfileSecondaryContentChanged(OrganizationTaxProfile o) =
@@ -723,7 +725,7 @@ organizationTaxProfileSecondaryContentChanged(OrganizationTaxProfile o) =
     CHANGED(organizationTaxProfileSocialTaxRate(o)) OR
     CHANGED(organizationTaxProfileBasis(o)) OR
     CHANGED(organizationTaxProfileLegalSource(o));
-@protectSecondaryOrganizationObject(organizationTaxProfile, OrganizationTaxProfile, organizationTaxProfileAccessOrganization);
+@protectSecondaryOrganizationObject(organizationTaxProfile, OrganizationTaxProfile, organizationTaxProfileAccessOrganization, taxesReportsChangeRoleAllowed);
 
 taxCalculationDocumentAccessOrganization(TaxCalculationDocument o) = payrollOrganization(taxCalculationPayrollRun(o));
 taxCalculationDocumentSecondaryContentChanged(TaxCalculationDocument o) =
@@ -732,7 +734,7 @@ taxCalculationDocumentSecondaryContentChanged(TaxCalculationDocument o) =
     CHANGED(taxCalculationStatus(o)) OR
     CHANGED(taxCalculationCalculatedAt(o)) OR
     CHANGED(taxCalculationRegulatoryPack(o));
-@protectSecondaryOrganizationObject(taxCalculationDocument, TaxCalculationDocument, taxCalculationDocumentAccessOrganization);
+@protectSecondaryOrganizationObject(taxCalculationDocument, TaxCalculationDocument, taxCalculationDocumentAccessOrganization, taxesReportsChangeRoleAllowed);
 
 taxCalculationLineAccessOrganization(TaxCalculationLine o) = payrollOrganization(taxCalculationPayrollRun(taxCalculationDocument(o)));
 taxCalculationLineSecondaryContentChanged(TaxCalculationLine o) =
@@ -751,7 +753,7 @@ taxCalculationLineSecondaryContentChanged(TaxCalculationLine o) =
     CHANGED(ipnTaxableIncome(o)) OR
     CHANGED(ipnAmount(o)) OR
     CHANGED(socialTaxAmount(o));
-@protectSecondaryOrganizationObject(taxCalculationLine, TaxCalculationLine, taxCalculationLineAccessOrganization);
+@protectSecondaryOrganizationObject(taxCalculationLine, TaxCalculationLine, taxCalculationLineAccessOrganization, taxesReportsChangeRoleAllowed);
 
 personalTaxLedgerEntryAccessOrganization(PersonalTaxLedgerEntry o) = taxLedgerOrganization(o);
 personalTaxLedgerEntrySecondaryContentChanged(PersonalTaxLedgerEntry o) =
@@ -763,7 +765,7 @@ personalTaxLedgerEntrySecondaryContentChanged(PersonalTaxLedgerEntry o) =
     CHANGED(taxLedgerTaxableIncome(o)) OR
     CHANGED(taxLedgerIpn(o)) OR
     CHANGED(taxLedgerReversalOf(o));
-@protectSecondaryOrganizationObject(personalTaxLedgerEntry, PersonalTaxLedgerEntry, personalTaxLedgerEntryAccessOrganization);
+@protectSecondaryOrganizationObject(personalTaxLedgerEntry, PersonalTaxLedgerEntry, personalTaxLedgerEntryAccessOrganization, taxesReportsChangeRoleAllowed);
 
 socialTransferRegisterAccessOrganization(SocialTransferRegister o) = socialTransferOrganization(o);
 socialTransferRegisterSecondaryContentChanged(SocialTransferRegister o) =
@@ -778,7 +780,7 @@ socialTransferRegisterSecondaryContentChanged(SocialTransferRegister o) =
     CHANGED(socialTransferAcceptedAt(o)) OR
     CHANGED(socialTransferExternalId(o)) OR
     CHANGED(socialTransferRejectionReason(o));
-@protectSecondaryOrganizationObject(socialTransferRegister, SocialTransferRegister, socialTransferRegisterAccessOrganization);
+@protectSecondaryOrganizationObject(socialTransferRegister, SocialTransferRegister, socialTransferRegisterAccessOrganization, taxesReportsChangeRoleAllowed);
 
 socialTransferRegisterLineAccessOrganization(SocialTransferRegisterLine o) = socialTransferOrganization(socialTransferLineRegister(o));
 socialTransferRegisterLineSecondaryContentChanged(SocialTransferRegisterLine o) =
@@ -792,7 +794,7 @@ socialTransferRegisterLineSecondaryContentChanged(SocialTransferRegisterLine o) 
     CHANGED(socialTransferLineBirthDate(o)) OR
     CHANGED(socialTransferLinePeriod(o)) OR
     CHANGED(socialTransferLineAmount(o));
-@protectSecondaryOrganizationObject(socialTransferRegisterLine, SocialTransferRegisterLine, socialTransferRegisterLineAccessOrganization);
+@protectSecondaryOrganizationObject(socialTransferRegisterLine, SocialTransferRegisterLine, socialTransferRegisterLineAccessOrganization, taxesReportsChangeRoleAllowed);
 
 form200DeclarationAccessOrganization(Form200Declaration o) = form200Organization(o);
 form200DeclarationSecondaryContentChanged(Form200Declaration o) =
@@ -810,7 +812,7 @@ form200DeclarationSecondaryContentChanged(Form200Declaration o) =
     CHANGED(form200ReceiptNumber(o)) OR
     CHANGED(form200RejectionReason(o)) OR
     CHANGED(form20005GeneratedAt(o));
-@protectSecondaryOrganizationObject(form200Declaration, Form200Declaration, form200DeclarationAccessOrganization);
+@protectSecondaryOrganizationObject(form200Declaration, Form200Declaration, form200DeclarationAccessOrganization, taxesReportsChangeRoleAllowed);
 
 form200MonthLineAccessOrganization(Form200MonthLine o) = form200Organization(form200LineDeclaration(o));
 form200MonthLineSecondaryContentChanged(Form200MonthLine o) =
@@ -835,7 +837,7 @@ form200MonthLineSecondaryContentChanged(Form200MonthLine o) =
     CHANGED(form200LineOosms(o)) OR
     CHANGED(form200LineVosms(o)) OR
     CHANGED(form200LineOpvr(o));
-@protectSecondaryOrganizationObject(form200MonthLine, Form200MonthLine, form200MonthLineAccessOrganization);
+@protectSecondaryOrganizationObject(form200MonthLine, Form200MonthLine, form200MonthLineAccessOrganization, taxesReportsChangeRoleAllowed);
 
 form20005LineAccessOrganization(Form20005Line o) = form200Organization(form20005LineDeclaration(o));
 form20005LineSecondaryContentChanged(Form20005Line o) =
@@ -868,4 +870,4 @@ form20005LineSecondaryContentChanged(Form20005Line o) =
     CHANGED(form20005LineOosms(o)) OR
     CHANGED(form20005LineOpvr(o)) OR
     CHANGED(form20005LineCountryCode(o));
-@protectSecondaryOrganizationObject(form20005Line, Form20005Line, form20005LineAccessOrganization);
+@protectSecondaryOrganizationObject(form20005Line, Form20005Line, form20005LineAccessOrganization, taxesReportsChangeRoleAllowed);

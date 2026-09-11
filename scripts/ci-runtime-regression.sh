@@ -142,6 +142,22 @@ request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperMasterData
     same-organization-timekeeper-master-data-attack-result.json
 request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollMasterDataAttackTest \
     same-organization-payroll-master-data-attack-result.json
+request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperPayrollAttackTest \
+    same-organization-timekeeper-payroll-attack-result.json
+request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollWorkingTimeAttackTest \
+    same-organization-payroll-working-time-attack-result.json
+request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollPersonnelAttackTest \
+    same-organization-payroll-personnel-attack-result.json
+request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollTaxesAttackTest \
+    same-organization-payroll-taxes-attack-result.json
+request_as zup-access-time:zup-ui-test-only sameOrganizationTimekeeperAllowedTest \
+    same-organization-timekeeper-allowed-result.json
+request_as zup-access-payroll:zup-ui-test-only sameOrganizationPayrollAllowedTest \
+    same-organization-payroll-allowed-result.json
+request_as zup-access-hr:zup-ui-test-only sameOrganizationHrAllowedTest \
+    same-organization-hr-allowed-result.json
+request_as zup-access-chief:zup-ui-test-only sameOrganizationChiefTaxAllowedTest \
+    same-organization-chief-tax-allowed-result.json
 request paymentAccountOverlapGuardTest payment-account-overlap-guard-result.json
 request paymentAccountSecurityVerificationTest payment-account-security-verification-result.json
 for action in employeeIinFormatGuardTest organizationBinFormatGuardTest bankDetailsFormatGuardTest; do
